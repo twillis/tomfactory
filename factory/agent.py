@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from factory import proc
 
 PROGRAM = "claude"
+SPEC_KIT_INTEGRATION = "claude"         # the name spec kit knows this agent program by
+COMMANDS_DIR = pathlib.Path(".claude") / "skills"    # where a codebase keeps this program's commands
 
 # The factory speaks of capabilities; only this table knows the program's tool names.
 # No capability includes a shell.
@@ -170,3 +172,11 @@ def get_adapter():
         return run_agent
     module, function = named.split(":")
     return getattr(importlib.import_module(module), function)
+
+
+def command_instructions(root, name) -> str:
+    """The instruction text of one of a codebase's own commands for this agent program."""
+    text = (pathlib.Path(root) / COMMANDS_DIR / name / "SKILL.md").read_text()
+    if text.startswith("---"):          # drop the front matter; keep the instructions
+        text = text.split("---", 2)[2]
+    return text.strip()

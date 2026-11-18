@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 import os
 
-from factory import config, proc, workspace
+from factory import config, proc, speckit, workspace
 
 REGISTRY: dict = {}
 
@@ -68,7 +68,7 @@ def factory_untouched(ctx) -> CheckResult:
 def changes_allowed(ctx) -> CheckResult:
     """Every file the step changed is within what its entry lets it change (FR-032)."""
     offending = sorted(name for name in ctx.changed
-                       if not _allowed(ctx.step.may_change, name, ctx.target_config))
+                       if not _allowed(ctx.step.may_change, name, ctx.target_config, ctx.checkout))
     note = (f"this step may change {ctx.step.may_change.replace('_', ' ')} only; it changed: "
             + ", ".join(offending)) if offending else ""
     return CheckResult("changes_allowed", not offending, note)
@@ -79,7 +79,10 @@ def under(name, paths) -> bool:
     return any(name == p.rstrip("/") or name.startswith(p.rstrip("/") + "/") for p in paths)
 
 
-def _allowed(scope, name, settings) -> bool:
+def _allowed(scope, name, settings, checkout=None) -> bool:
+    if scope == "spec":     # spec kit's documents, and only where the target uses spec kit
+        return (checkout is not None and speckit.available(checkout.path)
+                and (under(name, ("specs/",)) or name == speckit.FEATURE_FILE))
     if scope == "tests":
         return under(name, settings.test_paths)
     if scope == "not_tests":

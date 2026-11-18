@@ -12,13 +12,14 @@ Every step is one entry with these fields. Defaults are closed: an entry that sa
 | `kind` | `agent` or `code` | required |
 | `persona` | Agent steps: the name of a file in `personas/` | required for agent steps; constructing an agent step without one raises |
 | `capabilities` | Agent steps: `read`, or `read+edit`. Neutral names; only the adapter knows which tools they mean | `read` |
-| `may_change` | What the step may change in the checkout: `nothing`, `tests`, `not_tests`, or `docs` (defined below) | `nothing` |
+| `may_change` | What the step may change in the checkout: `nothing`, `tests`, `not_tests`, `docs` or `spec` (defined below) | `nothing` |
 | `inputs` | Agent steps: the names of the inputs its prompt receives, from the list below | `()` |
 | `envelope` | Agent steps: required keys and their types (`text`, `list`, `verdict`) | `{}` |
 | `checks` | Names of step-specific checks, run in order after the always-applied ones | `()` |
 | `on_pass` | The next step's name, or `WAIT`, or `END_ACCEPTED` | required |
 | `on_fail` | What a failed step-specific check leads to: `Rework(step)` or `End(outcome)` | `End("needs-me")` |
 | `commit_after` | Commit the checkout to the run's branch when the step passes | no |
+| `speckit` | Spec kit commands this step follows where the target uses spec kit, for example `("specify", "plan")`. The factory's code runs their scripts; the agent is given their instructions. | none |
 | `advisory` | The step's failure is recorded but does not stop the run, and whatever it changed before failing is put back, so a half-written file cannot be committed by the next step. A change it may not make is still undone and still stops the run. | no |
 | `timeout` | Seconds; overrides the target's `step_timeout_seconds` | none |
 | `model` | Agent steps: passed to the adapter; unused in this stage | none |
@@ -29,7 +30,7 @@ A code step has no persona, capabilities, inputs or envelope. Its work is its ch
 
 | # | `name` | `kind` | `persona` | `capabilities` | `may_change` | `checks` | `on_pass` | `on_fail` | `commit_after` |
 |---|--------|--------|-----------|----------------|--------------|----------|-----------|-----------|----------------|
-| 1 | `plan` | agent | `planner` | read | nothing | — | `WAIT` | — | no |
+| 1 | `plan` | agent | `planner` | read+edit | spec | — | `WAIT` | — | yes |
 | 2 | `baseline` | code | — | — | nothing | `baseline` | `write_tests` | `End("needs-me")` | no |
 | 3 | `write_tests` | agent | `test_writer` | read+edit | tests | `tests_added`, `edge_cases_stated` | `red` | `Rework("write_tests")` | no |
 | 4 | `red` | code | — | — | nothing | `tests_fail_first` | `build` | `Rework("write_tests")` | yes |
@@ -89,6 +90,7 @@ A check is a named function in `factory/checks.py`, registered by name, with the
 | `tests` | it is under one of the target's `test_paths` |
 | `not_tests` | it is **not** under any `test_paths`, and it is not `.factory.toml` or `.gitignore` |
 | `docs` | it is under one of the target's `docs_paths` |
+| `spec` | the target uses spec kit, **and** the file is under `specs/` or is `.specify/feature.json`. In a target without spec kit this scope allows nothing. |
 
 `not_tests` is what keeps the cycle honestly test-first: the code writer cannot edit, delete or add anything under the test paths, including the tests written in this run, the target's older tests, and shared test set-up files.
 
@@ -133,12 +135,14 @@ An agent step's prompt is `prompts/<step name>.md` with placeholders written `{{
 | `docs_paths` | The target's documentation paths |
 | `test_files` | The test files this run's `write_tests` step changed |
 | `failure` | On a rework: the failed check and its note |
+| `speckit_instructions` | Where the target uses spec kit and the step names commands: the instruction text of those commands, from the target's own copy |
+| `speckit_context` | What spec kit's scripts set up for this step: the feature directory and the paths of its documents |
 | `diff` | The run's whole change so far, as a diff |
 | `test_output` | The output of the most recent test command run |
 
 | Step | `inputs` |
 |------|----------|
-| `plan` | `request`, `ideals`, `previous_plan`, `comment`, `failure` |
+| `plan` | `request`, `ideals`, `previous_plan`, `comment`, `failure`, `speckit_instructions`, `speckit_context` |
 | `write_tests` | `request`, `plan`, `test_paths`, `failure` |
 | `build` | `request`, `plan`, `ideals`, `test_files`, `failure` |
 | `architecture_review` | `request`, `plan`, `ideals`, `diff`, `docs_paths` |

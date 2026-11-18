@@ -228,6 +228,12 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 - **FR-049**: The architect's suggestions and warnings MUST be recorded as a backlog in the target codebase's documentation and on the run's record. They MUST NOT, by themselves, fail the run.
 - **FR-050**: A step MAY be marked advisory. When an advisory step fails — its reply is malformed, it times out, the agent program fails — the run MUST carry on and the failure MUST be recorded. An advisory step that changes what it may not is still undone and still stops the run.
 
+**Spec kit, where the target uses it**
+
+- **FR-051**: When the target codebase has spec kit set up, the planner MUST produce the plan as spec kit's specification and plan documents in the target, following the target's own spec kit instructions. The factory's code, not the agent, MUST run spec kit's scripts; no agent is given a shell for it.
+- **FR-052**: A target codebase without spec kit MUST run exactly as it did before: the planner changes nothing, and the plan is the text it returns.
+- **FR-053**: When spec kit is in use the planner MAY write only under the target's specification folder. Sending a plan back MUST revise the same documents, not start new ones.
+
 ### Key Entities
 
 - **Persona**: who carries out an agent step. Has a name and a written description. One persona may serve more than one step.

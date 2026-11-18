@@ -106,7 +106,7 @@ def test_changes_allowed_holds_each_step_to_its_scope(scope, changed, offending)
     assert result.passed is (not offending)
     for name in offending:
         assert name in result.note
-    assert workflow.SCOPES == ("nothing", "tests", "not_tests", "docs")
+    assert workflow.SCOPES == ("nothing", "tests", "not_tests", "docs", "spec")
 
 
 @pytest.mark.fr("FR-030")

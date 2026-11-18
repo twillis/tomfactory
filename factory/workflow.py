@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 KINDS = ("agent", "code")
 CAPABILITIES = ("read", "read+edit")
-SCOPES = ("nothing", "tests", "not_tests", "docs")   # what a step may change in the checkout
+SCOPES = ("nothing", "tests", "not_tests", "docs", "spec")   # what a step may change in the checkout
 WAIT = "WAIT"                   # as an on_pass: stop and wait for the operator
 END_ACCEPTED = "END_ACCEPTED"   # as an on_pass: the run is finished and accepted
 
@@ -47,13 +47,14 @@ class Step:
     on_pass: str                        # the next step's name, or WAIT, or END_ACCEPTED
     persona: str | None = None          # agent steps: a file in personas/
     capabilities: str = "read"          # agent steps: read | read+edit
-    may_change: str = "nothing"         # nothing | tests | not_tests | docs
+    may_change: str = "nothing"         # nothing | tests | not_tests | docs | spec
     inputs: tuple = ()                  # agent steps: the names its prompt's {{placeholders}} may use
     envelope: dict = field(default_factory=dict)   # agent steps: required key -> text | list | verdict
     checks: tuple = ()                  # names of the step's own checks, run in order
     on_fail: Rework | End = End("needs-me")        # what a failed check of its own leads to
     commit_after: bool = False          # commit the checkout when the step passes
     advisory: bool = False              # its failure is recorded but does not stop the run
+    speckit: tuple = ()                 # spec kit commands this step follows, where the target uses spec kit
     timeout: int | None = None          # seconds; None means the target's step_timeout_seconds
     model: str | None = None            # agent steps; unused in this stage
 
@@ -82,8 +83,12 @@ class StepResult:
 # ---- the table: what the factory does, in order ----
 
 STEPS: list[Step] = [
-    Step("plan", "agent", persona="planner", on_pass=WAIT,
-         inputs=("request", "ideals", "previous_plan", "comment", "failure"),
+    # Where the target uses spec kit, the plan is spec kit's own documents, written under specs/.
+    # Elsewhere "spec" allows nothing, so the planner changes no file.
+    Step("plan", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass=WAIT,
+         commit_after=True, speckit=("specify", "plan"),
+         inputs=("request", "ideals", "previous_plan", "comment", "failure", "speckit_instructions",
+                 "speckit_context"),
          envelope={"plan": "text", "ideals_addressed": "list", "conflicts": "list"}),
 
     Step("baseline", "code", on_pass="write_tests", checks=("baseline",)),

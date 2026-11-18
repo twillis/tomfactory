@@ -23,7 +23,7 @@ import signal
 import time
 from dataclasses import asdict
 
-from factory import agent, checks, config, notify, proc, records, workflow, workspace
+from factory import agent, checks, config, notify, proc, records, speckit, workflow, workspace
 from factory.workflow import End, StepResult, Wait
 from factory.workspace import Workspace
 
@@ -74,7 +74,13 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     timeout = step.timeout or settings.step_timeout_seconds
     asked = ""
     if step.kind == "agent":
-        inputs = {name: gather(name, store, run, checkout, settings) for name in step.inputs}
+        kit = None      # where the target uses spec kit, run its scripts for the agent, who has no shell
+        if step.speckit and speckit.available(checkout.path):
+            kit = speckit.prepare(step.speckit, checkout, run.request)
+        given = {"speckit_instructions": kit["instructions"] if kit else "",
+                 "speckit_context": json.dumps(kit["context"], indent=2) if kit else ""}
+        inputs = {name: given[name] if name in given else gather(name, store, run, checkout, settings)
+                  for name in step.inputs}
         asked = fill((prompts_dir / f"{step.name}.md").read_text(), inputs)
     record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)       # 2
 

@@ -11,7 +11,7 @@ import shutil
 import sys
 from dataclasses import dataclass
 
-from factory import agent, config, driver, proc, records, workflow, workspace
+from factory import agent, config, driver, proc, records, speckit, workflow, workspace
 from factory.store import open_store
 from factory.workspace import Workspace
 
@@ -94,20 +94,33 @@ def get_run(run_id=None) -> dict:
     return _find(_open(), run_id)
 
 
-def init_target(path) -> pathlib.Path:
-    """Create a new target codebase: a git repository with the default settings committed."""
+def init_target(path, spec_kit=False) -> pathlib.Path:
+    """Create a new target codebase: a git repository with the default settings committed.
+
+    With `spec_kit`, spec kit is set up in it too, and the planner will write spec kit's
+    own specification and plan documents there.
+    """
     path = pathlib.Path(path)
     if path.exists() and any(path.iterdir()):
         raise Refused(f"{path} already has content; init-target only creates a new codebase")
     path.mkdir(parents=True, exist_ok=True)
-    (path / ".factory.toml").write_text(config.DEFAULT_FACTORY_TOML)
-    (path / ".gitignore").write_text(config.DEFAULT_GITIGNORE)
-    (path / "README.md").write_text(f"# {path.name}\n\nBuilt by the factory, one request at a time.\n")
-    for command in (["init", "-q", "-b", "main"], ["add", "-A"],
-                    [*workspace.AUTHOR, "commit", "-q", "-m", "factory: new target codebase"]):
+
+    def git(*command):
         code, _, err = proc.capture(["git", *command], cwd=path)
         if code != 0:
             raise Refused(f"git {command[0]} failed in {path}: {err.strip()}")
+
+    git("init", "-q", "-b", "main")
+    if spec_kit:
+        try:
+            speckit.install(path)
+        except speckit.SpecKitError as problem:
+            raise Refused(str(problem)) from None
+    (path / ".factory.toml").write_text(config.DEFAULT_FACTORY_TOML)
+    (path / ".gitignore").write_text(config.DEFAULT_GITIGNORE)
+    (path / "README.md").write_text(f"# {path.name}\n\nBuilt by the factory, one request at a time.\n")
+    git("add", "-A")
+    git(*workspace.AUTHOR, "commit", "-q", "-m", "factory: new target codebase")
     return path
 
 

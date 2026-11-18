@@ -26,7 +26,7 @@ def failed(check, note="it failed"):
 
 # name, kind, persona, capabilities, may_change, checks, on_pass, on_fail, commit_after
 TABLE = [
-    ("plan", "agent", "planner", "read", "nothing", (), WAIT, End("needs-me"), False),
+    ("plan", "agent", "planner", "read+edit", "spec", (), WAIT, End("needs-me"), True),
     ("baseline", "code", None, "read", "nothing", ("baseline",), "write_tests", End("needs-me"), False),
     ("write_tests", "agent", "test_writer", "read+edit", "tests", ("tests_added", "edge_cases_stated"),
      "red", Rework("write_tests"), False),
@@ -51,7 +51,8 @@ def test_the_step_table_matches_the_contract_row_for_row():
 @pytest.mark.fr("FR-006")
 def test_inputs_and_envelopes_match_the_contract():
     assert {s.name: s.inputs for s in workflow.STEPS if s.kind == "agent"} == {
-        "plan": ("request", "ideals", "previous_plan", "comment", "failure"),
+        "plan": ("request", "ideals", "previous_plan", "comment", "failure", "speckit_instructions",
+                 "speckit_context"),
         "write_tests": ("request", "plan", "test_paths", "failure"),
         "build": ("request", "plan", "ideals", "test_files", "failure"),
         "review": ("request", "plan", "ideals", "diff", "test_output"),
@@ -235,3 +236,9 @@ def test_an_advisory_step_that_changes_what_it_may_not_still_stops_the_run():
     guard = StepResult(False, "guard", CheckResult("changes_allowed", False, "it changed: viewer.py"))
     ended = next_step(step("architecture_review"), guard, {"architecture_review": 1}, LIMIT)
     assert ended.outcome == "needs-me" and "viewer.py" in ended.reason
+
+
+@pytest.mark.fr("FR-051")
+def test_only_the_planner_is_given_spec_kit_commands_so_far():
+    assert {s.name: s.speckit for s in workflow.STEPS if s.speckit} == {"plan": ("specify", "plan")}
+    assert Step("x", "code", on_pass="y").speckit == ()

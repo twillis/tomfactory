@@ -72,7 +72,7 @@ The constitution is version 1.3.0: copied from `bttr_rs` (1.2.1) on 2026-11-18 a
 | Control: execution | `driver.py` | Carrying one run forward; the single end-of-run routine |
 | Control: verification | `checks.py` | The named checks applied to a step's result |
 | Control: record-keeping | `records.py` | The rules about what a run's record must say: branch naming, state history, a run ending once, plan and attempt numbering |
-| Control: effects | `agent.py`, `workspace.py`, `notify.py`, `proc.py` | One discrete action each on the outside world — run an agent, change the checkout, notify, run a child process. They decide nothing. |
+| Control: effects | `agent.py`, `workspace.py`, `notify.py`, `proc.py`, `speckit.py` | One discrete action each on the outside world — run an agent, change the checkout, notify, run a child process. They decide nothing. |
 | Data | `store.py`, `config.py` | Everything kept, behind one gateway; and reading the target's configuration and the ideals |
 
 ### S7: what is derived, where it is overridden, what cannot be dropped

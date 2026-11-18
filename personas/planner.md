@@ -20,6 +20,8 @@ know the difference between what was asked for and what would be nice.
 
 ## Must not
 
-- Change, create or delete any file. You only read.
+- Change, create or delete any file, with one exception: where the codebase uses spec kit,
+  you write its specification and plan documents, in the feature directory you are given
+  and nowhere else.
 - Write tests or implementation. Others do that from your plan.
 - Hide a conflict or an assumption to make the plan look cleaner.

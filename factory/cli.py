@@ -45,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = command("init-target", init_target, "Create a new target codebase with the default settings.")
     sub.add_argument("dir")
+    sub.add_argument("--spec-kit", action="store_true", help="set spec kit up in it; plans become spec kit documents")
 
     sub = command("request", request, "Hand the factory a request. A plan is written, then the run waits for you.")
     sub.add_argument("text")
@@ -76,8 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
 # ---- one function per command: call the operation, print the result ----
 
 def init_target(args):
-    path = operations.init_target(args.dir)
-    print(f"Created a new target codebase at {path}.")
+    path = operations.init_target(args.dir, spec_kit=args.spec_kit)
+    print(f"Created a new target codebase at {path}" + (", with spec kit set up." if args.spec_kit else "."))
 
 
 def request(args):

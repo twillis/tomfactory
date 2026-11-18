@@ -29,6 +29,27 @@ What was wrong with it, if anything:
 
 {{failure}}
 
+## If this codebase uses spec kit
+
+Spec kit's instructions for this step, if the codebase uses spec kit:
+
+{{speckit_instructions}}
+
+What the factory has already set up for you:
+
+{{speckit_context}}
+
+If instructions are given above, follow them, with these differences. The scripts they
+mention have already been run by the factory, and their results are what is listed above;
+do not try to run anything. Write the specification and the plan, and the other documents
+the plan instructions call for, at the paths given, inside the feature directory. You
+cannot ask the operator questions: where the instructions say to ask, make an informed
+assumption and record it in the document. Skip any step about hooks or branches. In your
+envelope's `plan`, give a short summary and name the files you wrote, so those who build
+from the plan can find them.
+
+If nothing is given above, ignore this section and change no file.
+
 ## What to produce
 
 A plan that a builder can follow without asking questions: which files to add or change,

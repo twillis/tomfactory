@@ -89,7 +89,8 @@ def test_after_the_plan_step_the_run_waits_and_nothing_has_changed(home, target,
     assert tree(target) == before                                    # the operator's working copy
     assert git(run.workspace, "status", "--porcelain") == ""         # the run's checkout
     assert git(run.workspace, "rev-parse", "HEAD") == run.base_commit
-    assert fake.calls[0]["capabilities"] == "read" and fake.calls[0]["cwd"] == run.workspace
+    assert fake.calls[0]["capabilities"] == "read+edit" and fake.calls[0]["cwd"] == run.workspace
+    assert "(none)" in fake.calls[0]["prompt"]          # no spec kit in this target: nothing extra is asked
 
 
 @pytest.mark.fr("FR-047")

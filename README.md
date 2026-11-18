@@ -17,7 +17,7 @@ by an agent, each with its own persona. Four are done by plain code.
 
 | # | Step | Done by | What it does | What it may change |
 |---|------|---------|--------------|--------------------|
-| 1 | `plan` | agent: planner | Reads the request, your ideals and the codebase; writes a plan | nothing |
+| 1 | `plan` | agent: planner | Reads the request, your ideals and the codebase; writes a plan | nothing — or, where the target uses spec kit, its specification and plan documents |
 | — | *wait* | you | Approve, send back with a comment, or abandon | — |
 | 2 | `baseline` | code | Runs the existing tests before anything changes | nothing |
 | 3 | `write_tests` | agent: test writer | Writes tests that describe the change, edge cases first | test files only |
@@ -125,6 +125,22 @@ cd ../my-app
 git log --oneline factory/7-add-a-page-that-says   # what the run did
 git merge factory/7-add-a-page-that-says           # take it, if you want it
 ```
+
+### Spec kit, if the codebase uses it
+
+Create a codebase with `factory init-target --spec-kit ../my-app` and spec kit is set up in
+it. From then on the planner follows that codebase's own `/speckit-specify` and
+`/speckit-plan` instructions, and the plan you approve is real spec kit documents on the
+run's branch: `specs/<NNN-name>/spec.md` and `plan.md`. `factory plan` gives a summary and
+names them. Sending a plan back revises the same documents.
+
+No agent runs anything to do this. Spec kit's scripts are run by the factory's own code,
+and the planner is handed the instructions and what the scripts set up. The planner may
+write under `specs/` and nowhere else. A codebase without spec kit runs exactly as before.
+
+So far only the planner uses spec kit. The reviewer with `/speckit-analyze`, and the test
+writer and code writer with `/speckit-implement`, are designed but not built
+(`specs/001-near-loop-factory/changes/2026-11-18-speckit-steps.md`).
 
 ### The architect and the backlog
 
@@ -263,6 +279,7 @@ The rest of the code carries those decisions out and decides nothing:
 | `workspace.py` | effect | Git: the run's checkout, commits, undo |
 | `proc.py` | effect | Runs a child process with a time limit; stops process groups |
 | `notify.py` | effect | The desktop notification |
+| `speckit.py` | effect | The only code that knows spec kit's scripts |
 | `store.py` | data | Everything the factory keeps, behind one gateway: insert, get, query, update, delete on any table |
 | `config.py` | data | Where things are; the target's settings; your ideals |
 

@@ -1,6 +1,6 @@
 # Design: personas use their spec kit step (2026-11-18)
 
-**Status**: designed, not built. Written outside spec kit with the operator's agreement, for spec kit to review later.
+**Status**: slice 1 built and tested (the planner with specify and plan; FR-051 to FR-053). Slices 2 to 4 designed, not built. Written outside spec kit with the operator's agreement, for spec kit to review later.
 
 ## What the operator asked for
 
@@ -68,6 +68,18 @@ One slice at a time, each usable on its own:
 2. **Planner adds tasks**, and the test writer and code writer are given `tasks.md`.
 3. **Reviewer with analyze.**
 4. **Test writer and code writer follow implement**, marking tasks done.
+
+## Slice 1 as built
+
+- `factory/speckit.py` runs `resolve-template.sh` and `setup-plan.sh`, numbers the feature folder, and returns the target's own `speckit-specify` and `speckit-plan` instructions. Where those instructions live is the agent program's business, so `agent.py` supplies that path.
+- The `plan` entry has `speckit=("specify", "plan")`, `may_change="spec"`, and commits its documents before the wait.
+- The scope `spec` allows nothing in a target without spec kit, so the planner there still changes no file (FR-052).
+- A plan sent back reuses the same feature folder; a later run gets the next number.
+- `factory init-target --spec-kit` runs `specify init`.
+- Spec kit's own `.gitignore` excludes `.specify/feature.json`, so "has this run made its feature yet" is decided from the spec document, which git does see.
+- The agent is given both the operator's ideals and, through spec kit's instructions, the target's constitution. They are not merged.
+
+**Size**: the factory's code is 1,901 non-blank lines against a limit of 2,000. Slices 2 to 4 will not fit without raising the limit or trimming elsewhere.
 
 ## Open questions
 
