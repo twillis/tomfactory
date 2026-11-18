@@ -13,6 +13,7 @@ The factory's home directory is `~/.tomfactory` unless `TOMFACTORY_HOME` is set.
 | `factory plan [<run>]` | Prints the current plan, how it addresses the ideals, and any conflicts. | At once |
 | `factory approve [<run>]` | Approves the waiting plan and starts the unattended cycle in the background. Refuses unless the run is awaiting approval. | At once |
 | `factory revise [<run>] "<comment>"` | Sends the plan back with a comment and starts a new plan step in the background. | At once |
+| `factory answer [<run>] "<text>"` | Answers the question a run is waiting on; the step that asked runs again with the answer, in the background. Refuses if no question is waiting. | At once |
 | `factory abandon [<run>]` | Ends a run that is awaiting approval as rejected, reason "abandoned by operator", and removes its checkout. | At once |
 | `factory stop [<run>]` | Stops a run that is `planning` or `working`: ends every process it started, ends the run as needs-me, reason "stopped by operator". | When everything has stopped |
 

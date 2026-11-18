@@ -34,7 +34,8 @@ def test_all_six_personas_exist_with_the_three_headings():
     assert with_spec_kit == named | {"analyst"}             # spec kit's specify and clarify have their own persona
     for name in with_spec_kit:
         sections(name)
-    assert {f.stem for f in config.PERSONAS_DIR.glob("*.md")} == with_spec_kit
+    assert {f.stem for f in config.PERSONAS_DIR.glob("*.md")} == with_spec_kit | {"lead"}   # the lead answers questions
+    assert "answer" in sections("lead")["expertise"].lower()
 
 
 @pytest.mark.fr("FR-043")

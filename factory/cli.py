@@ -60,6 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub = command("revise", revise, "Send the waiting plan back with a comment.")
     sub.add_argument("words", nargs="+", metavar="[run] comment")
 
+    sub = command("answer", answer, "Answer the question a run is waiting on.")
+    sub.add_argument("words", nargs="+", metavar="[run] answer")
+
     command("status", status, "What each recent run is doing, one line per run.").add_argument("--json", action="store_true")
     sub = with_run(command("show", show, "A whole run: every step, what it was asked and what it produced."))
     sub.add_argument("--step", type=int, metavar="id", help="show one step record in full")
@@ -111,6 +114,13 @@ def revise(args):
     print(f"Run {run.id}: the plan was sent back. You will be notified when the new version is ready.")
 
 
+def answer(args):
+    words = list(args.words)
+    run_id = int(words.pop(0)) if len(words) > 1 and words[0].isdigit() else None
+    run = operations.answer(run_id, " ".join(words))
+    print(f"Run {run.id}: answered. It carries on; you will be notified when it next needs you or has finished.")
+
+
 def abandon(args):
     run = operations.abandon(args.run_id)
     print(f"Run {run.id} ended: {run.outcome} — {run.reason}")
@@ -127,7 +137,10 @@ def status(args):
         return print_json(views)
     for view in views:
         run, last = view.run, (view.steps[-1] if view.steps else None)
-        if run.state == "ended":
+        waiting = [q.question for q in view.questions if q.answer is None]
+        if waiting:
+            doing = "a question for you"
+        elif run.state == "ended":
             doing = run.outcome
         elif last and last.ended_at is None:
             doing = f"{run.state}: {last.name}, {elapsed(last.started_at)}"
@@ -163,6 +176,9 @@ def show(args):
             mark = "ok" if check["passed"] else "FAILED"
             note = "" if check["passed"] else f": {first_line(check['note'])}"
             print(f"          {mark:6} {check['name']}{note}")
+    for asked in view.questions:
+        print(f"\n  {asked.asked_by} asked, at {asked.step}: {asked.question}")
+        print(f"    {asked.answered_by + ' answered: ' + asked.answer if asked.answer else 'not yet answered'}")
     print(f"\nOne step in full:  {PROG} show --step <id>")
 
 

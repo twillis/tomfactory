@@ -103,6 +103,7 @@ factory plan                        # read the plan
 factory approve                     # go ahead: the rest is unattended
 factory revise "Also show the time."    # or: send it back with a comment
 factory abandon                     # or: give up on the request
+factory answer "..."                # if it stopped to ask you something
 ```
 
 After `factory approve` you are not needed until the notification that the run has ended.
@@ -165,6 +166,26 @@ is still spec kit's blank template is treated as having none, so your ideals are
 No agent runs anything to do this. Spec kit's scripts are run by the factory's own code,
 and each persona is handed its stage's instructions and what the scripts set up. A codebase
 without spec kit runs the plain cycle, exactly as before.
+
+### When an agent has a question
+
+An agent that cannot go on without an answer may ask one question instead of finishing. It
+does not come straight to you:
+
+1. The question goes to the **lead**, a persona that answers from what is written: the
+   request, the plan and other documents, the codebase's constitution, your ideals. If
+   those settle it, the step that asked runs again with the answer and you are not involved.
+2. If the lead cannot answer, the run waits and you are notified with the question.
+
+```bash
+factory status                      # shows "a question for you"
+factory show                        # the question, and who asked it
+factory answer "Use spaces."        # the step that asked runs again with your answer
+```
+
+A run cannot be approved past a question that is still waiting. Every question, who asked
+it, the answer and who answered are kept with the run and shown by `factory show`. An agent
+that keeps asking uses up its attempts like any other step.
 
 ### The architect and the backlog
 

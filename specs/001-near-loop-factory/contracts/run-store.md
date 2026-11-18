@@ -59,7 +59,7 @@ CREATE TABLE plans (
     created_at        TEXT    NOT NULL,
     PRIMARY KEY (run_id, version)
 );
-CREATE UNIQUE INDEX one_approved_plan ON plans (run_id) WHERE decision = 'approved';
+DROP INDEX IF EXISTS one_approved_plan;     -- a run may now be approved more than once: spec, then plan
 CREATE TABLE steps (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id         INTEGER NOT NULL REFERENCES runs(id),
@@ -85,6 +85,17 @@ CREATE TABLE events (
     kind      TEXT    NOT NULL,
     summary   TEXT    NOT NULL,
     payload   JSON TEXT NOT NULL
+);
+CREATE TABLE questions (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       INTEGER NOT NULL REFERENCES runs(id),
+    step         TEXT    NOT NULL,
+    asked_by     TEXT,
+    question     TEXT    NOT NULL,
+    answer       TEXT,
+    answered_by  TEXT    CHECK (answered_by IN ('lead','operator')),
+    asked_at     TEXT    NOT NULL,
+    answered_at  TEXT
 );
 CREATE INDEX events_by_run ON events (run_id, id);
 CREATE INDEX steps_by_run  ON steps  (run_id, id);
@@ -148,6 +159,8 @@ A live view runs it every second or so with the last id it saw. A history view r
 | `denied` | The agent program refused something the agent tried; the payload has the action and path | the driver, from the adapter |
 | `guard` | A forbidden change was found and undone; the payload lists the files | the driver |
 | `commit` | The factory committed to the run's branch | the driver |
+| `question`, `answer` | A step asked a question; the lead or the operator answered it | `records.ask`, `records.answer` |
+| `approved`, `set_aside` | The operator approved at a wait (the payload carries the commit); a build was set aside on a side branch | `operations.approve`, the driver |
 | `notify` | A notification was sent, or failed to send | the end-of-run and wait routines |
 | `error` | Something went wrong in the factory itself | the driver |
 

@@ -24,7 +24,7 @@ import time
 from dataclasses import asdict
 
 from factory import agent, checks, config, notify, proc, records, speckit, workflow, workspace
-from factory.workflow import End, Replan, StepResult, Wait
+from factory.workflow import Ask, End, Replan, StepResult, Wait
 from factory.workspace import Workspace
 
 NO_IDEALS = "No ideals have been stated."
@@ -50,6 +50,9 @@ def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_
                 return
             step = workflow.get(run.current_step, steps)
             result, envelope = run_step(store, run, step, checkout, settings, adapter, personas_dir, prompts_dir)
+            asked = None
+            if result.failure == "question":    # on record the moment it is asked, whatever happens next
+                asked = records.ask(store, run_id, step.name, step.persona, result.failed_check.note)
             attempts = {entry.name: records.attempts(store, run_id, entry.name) for entry in steps}
             then = workflow.next_step(step, result, attempts, run.attempt_limit)
             if isinstance(then, End):
@@ -60,6 +63,16 @@ def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_
                 return
             if isinstance(then, Replan):        # the requirement changed: back to planning, build set aside
                 set_aside(store, run, checkout)
+            if isinstance(then, Ask):           # the lead answers if it can; otherwise the operator is asked
+                answered, said = run_step(store, run, workflow.LEAD, checkout, settings, adapter,
+                                          personas_dir, prompts_dir)
+                if answered.passed and (said or {}).get("confident") == "yes":
+                    records.answer(store, asked.id, said["answer"], "lead")
+                    continue                    # the step that asked runs again, with the answer
+                records.set_state(store, run_id, "awaiting_approval", driver_pid=None, driver_started=None,
+                                  child_pgid=None)
+                tell(store, run_id, f"Run {run_id}: a question for you", then.question)
+                return
             records.move(store, run_id, current_step=then.step)
     except Stopped:
         end_run(store, run_id, "needs-me", "stopped by operator")
@@ -84,6 +97,11 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
         inputs = {name: given[name] if name in given else gather(name, store, run, checkout, settings)
                   for name in step.inputs}
         asked = fill((prompts_dir / f"{step.name}.md").read_text(), inputs)
+        if step is not workflow.LEAD:           # every agent is told how to ask, and what it was answered
+            earlier = store.query("questions", {"run_id": run.id, "step": step.name})
+            answers = "\n\n".join(f"You asked: {q.question}\nThe {q.answered_by} answered: {q.answer}"
+                                   for q in earlier if q.answer is not None)
+            asked += "\n" + fill((prompts_dir / "asking.md").read_text(), {"answers": answers})
     record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)       # 2
 
     def emit(kind, summary, payload=None):
@@ -139,6 +157,12 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
                 emit("guard", f"undone: {outcome.note}", {"check": outcome.name, "files": sorted(context.changed)})
                 if result.passed:
                     result = StepResult(False, "guard", outcome)
+        question = reply.envelope.get("question") if reply and isinstance(reply.envelope, dict) else None
+        if result.passed and question and set(reply.envelope) == {"question"} and step is not workflow.LEAD:
+            outcome = checks.CheckResult("question", False, str(question))      # it asked instead of finishing
+            done.append(outcome)
+            emit("check", "question: asked", asdict(outcome))
+            result = StepResult(False, "question", outcome)
         if result.passed:
             own = ((["envelope_valid"] if step.kind == "agent" else []) + list(step.checks)
                    + (["verdict"] if step.routes else []))
@@ -166,7 +190,8 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     else:
         produced = {"output": done[-1].note} if step.checks and done else {}
     records.finish_step(store, record.id, produced, [asdict(outcome) for outcome in done], result.passed,   # 7
-                       result.failure, reply.tokens if reply else None,
+                       "check" if result.failure == "question" else result.failure,
+                       reply.tokens if reply else None,
                        reply.cost_estimate if reply else None)
     emit("step_end", f"{step.name}: {'passed' if result.passed else result.failure}",
          {"passed": result.passed, "failure": result.failure})
@@ -206,6 +231,9 @@ def gather(name, store, run, checkout, settings) -> str:
             return ""
         failed = next((c for c in finished[-1].checks or [] if not c["passed"]), None)
         return f"{failed['name']}: {failed['note']}" if failed else str(finished[-1].failure)
+    if name == "question":
+        waiting = records.pending_question(store, run.id)
+        return waiting.question if waiting else ""
     if name == "diff":
         return checkout.diff_since_base()
     if name == "test_output":

@@ -96,6 +96,7 @@ def made_up(monkeypatch, tmp_path, home, target, fake_notify):
     for name in ("draft", "design", "make", "judge"):
         (prompts / f"{name}.md").write_text(f"# {name}\n\n{{{{request}}}}\n\nEarlier problem: "
                                             + ("{{diff}}" if name == "judge" else "{{failure}}") + "\n")
+    (prompts / "asking.md").write_text((config.PROMPTS_DIR / "asking.md").read_text())   # every agent gets this
     monkeypatch.setattr(config, "PROMPTS_DIR", prompts)
     return target
 

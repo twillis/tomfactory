@@ -90,6 +90,17 @@ CREATE TABLE IF NOT EXISTS events (
     summary   TEXT    NOT NULL,
     payload   JSON TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS questions (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       INTEGER NOT NULL REFERENCES runs(id),
+    step         TEXT    NOT NULL,
+    asked_by     TEXT,
+    question     TEXT    NOT NULL,
+    answer       TEXT,
+    answered_by  TEXT    CHECK (answered_by IN ('lead','operator')),
+    asked_at     TEXT    NOT NULL,
+    answered_at  TEXT
+);
 CREATE INDEX IF NOT EXISTS events_by_run ON events (run_id, id);
 CREATE INDEX IF NOT EXISTS steps_by_run  ON steps  (run_id, id);
 """

@@ -1,6 +1,6 @@
 # Design: a cycle that follows spec kit's stages (2026-11-18)
 
-**Status**: built and tested on the fake agent, except agents asking questions mid-step (decision 2). FR-055 to FR-060. Written outside spec kit with the operator's agreement, for spec kit to review later. It builds on `2026-11-18-speckit-steps.md`, whose first slice (the planner with specify and plan) is built.
+**Status**: built and tested on the fake agent, including agents asking questions mid-step. FR-055 to FR-064. Written outside spec kit with the operator's agreement, for spec kit to review later. It builds on `2026-11-18-speckit-steps.md`, whose first slice (the planner with specify and plan) is built.
 
 ## The two rulings this answers
 
@@ -71,7 +71,7 @@ Proposed, for a codebase that uses spec kit:
 ## The operator's answers (2026-11-18)
 
 1. The table: "I have no idea you tell me." The proposed table was built as it stands.
-2. Clarify: "an agent should be able to ask midstep and if between the agent and the controlling agent can't figure it out it should be bubbled up to me. Regardless all of the stuff should be recorded." Not yet built; until it is, the analyst records its assumptions.
+2. Clarify: "an agent should be able to ask midstep and if between the agent and the controlling agent can't figure it out it should be bubbled up to me. Regardless all of the stuff should be recorded." Built (FR-061 to FR-064): any agent may ask; the "controlling agent" is a persona called the lead; what it cannot answer comes to the operator; every question and answer is in a `questions` table and on `factory show`. It applies to every step and to the plain cycle too, not only to clarify.
 3. "approvals of two is appropriate." Built: the specification, then the plan and tasks.
 4. "for simple changes that do not change the requirements they shouldn't need to be bubbled up back to the planning stage." Built: converge records an implementation detail and the run carries on.
 

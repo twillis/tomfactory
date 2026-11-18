@@ -41,6 +41,12 @@ class Run:
 
 
 @dataclass(frozen=True)
+class Ask:
+    """A step asked a question instead of finishing. The lead answers, or the operator does."""
+    question: str
+
+
+@dataclass(frozen=True)
 class Wait:
     """Stop and wait for the operator's decision."""
 
@@ -83,7 +89,7 @@ class Step:
 class StepResult:
     """How one execution of a step went."""
     passed: bool
-    failure: str | None = None      # timeout | error | guard | malformed | check
+    failure: str | None = None      # timeout | error | guard | malformed | check | question
     failed_check: object = None     # the CheckResult that failed, if a check did
     message: str = ""               # the agent program's message, for "error"
     verdict: str | None = None      # what a judging step decided
@@ -140,6 +146,12 @@ STEPS: list[Step] = [
 ]
 
 
+# Not part of any table: the lead is called on whenever a step asks a question.
+LEAD = Step("answer_question", "agent", persona="lead", on_pass="",
+            inputs=("request", "constitution", "ideals", "plan", "question"),
+            envelope={"answer": "text", "confident": ("yes", "no")})
+
+
 def get(name, steps=None) -> Step:
     """The entry with this name."""
     for entry in steps or STEPS:
@@ -150,7 +162,7 @@ def get(name, steps=None) -> Step:
 
 # ---- what happens next ----
 
-def next_step(step, result, attempts, limit) -> Run | Wait | Replan | End:
+def next_step(step, result, attempts, limit) -> Run | Wait | Ask | Replan | End:
     """Given how a step went, what the run does now. The whole decision logic, in order.
 
     `attempts` maps a step's name to how many times it has run in this run. An attempt is
@@ -161,6 +173,10 @@ def next_step(step, result, attempts, limit) -> Run | Wait | Replan | End:
         return End("needs-me", f"the {step.name} step changed what it may not, and the change was undone: {note}")
     if step.advisory and result.failure:    # an advisory step's failure is on the record; the run goes on
         return Run(step.on_pass)
+    if result.failure == "question":
+        if attempts.get(step.name, 0) >= limit:
+            return End("needs-me", f"the {step.name} step has run {limit} times and is still asking: {note}")
+        return Ask(note)
     if result.failure == "timeout":
         return End("needs-me", f"the {step.name} step was stopped at its time limit of {result.message}")
     if result.failure == "error":

@@ -9,7 +9,7 @@ import os
 import pathlib
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from factory import agent, config, driver, proc, records, speckit, workflow, workspace
 from factory.store import open_store
@@ -27,6 +27,7 @@ class RunView:
     plans: list
     steps: list
     events: list
+    questions: list = field(default_factory=list)      # every question asked in the run, and its answer
 
 
 @dataclass
@@ -72,11 +73,16 @@ def _find(store, run_id) -> dict:
         raise Refused(f"there is no run {run_id}") from None
 
 
-def _waiting(store, run_id) -> dict:
+def _waiting(store, run_id, with_question=False) -> dict:
+    """The run, if it is waiting for the operator's decision; refused otherwise."""
     run = _find(store, run_id)
     if run.state != "awaiting_approval":
         described = run.outcome or run.state.replace("_", " ")
         raise Refused(f"run {run.id} is not waiting for a decision; it is {described}")
+    asked = records.pending_question(store, run.id)
+    if asked and not with_question:     # a run is not approved past a question that is still waiting
+        raise Refused(f"run {run.id} is waiting for the answer to a question, not for approval: "
+                      f"{asked.question}  Answer it with:  factory answer \"...\"")
     return run
 
 
@@ -202,8 +208,9 @@ def revise(run_id=None, comment="", launcher=None) -> dict:
 def abandon(run_id=None) -> dict:
     """Give up on a request whose plan is waiting. Nothing in the target was changed."""
     store = _open()
-    run = _waiting(store, run_id)
-    records.decide(store, run.id, "abandoned")
+    run = _waiting(store, run_id, with_question=True)
+    if records.current_plan(store, run.id):
+        records.decide(store, run.id, "abandoned")
     table = _table(run)
     then = workflow.after_wait("abandon", workflow.get(run.current_step, table), table)
     Workspace(run.workspace, run.target, run.branch, run.base_commit).remove()
@@ -221,10 +228,27 @@ def stop(run_id=None) -> dict:
     proc.stop_group(store.get("runs", run.id).child_pgid)      # in case the driver could not
     return driver.end_run(store, run.id, "needs-me", "stopped by operator")
 
+def answer(run_id=None, text="", launcher=None) -> dict:
+    """Answer the question a run is waiting on. The step that asked runs again with the answer."""
+    store = _open()
+    run = _find(store, run_id)
+    asked = records.pending_question(store, run.id)
+    if asked is None:
+        raise Refused(f"run {run.id} has no question waiting for an answer")
+    if not text.strip():
+        raise Refused(f"give an answer to: {asked.question}")
+    records.answer(store, asked.id, text.strip(), "operator")
+    state = "planning" if workflow.is_planning(run.current_step, _table(run)) else "working"
+    (launcher or launch)(store, run, state, run.current_step)
+    return store.get("runs", run.id)
+
+
 def status(limit=10) -> list[RunView]:
     """The most recent runs, newest first, each with its steps so far."""
     store = _open()
-    return [RunView(run, [], store.query("steps", {"run_id": run.id}), []) for run in store.query("runs", order="-id", limit=limit)]
+    return [RunView(run, [], store.query("steps", {"run_id": run.id}), [],
+                    store.query("questions", {"run_id": run.id}))
+            for run in store.query("runs", order="-id", limit=limit)]
 
 
 def show(run_id=None, step=None) -> RunView:
@@ -232,12 +256,13 @@ def show(run_id=None, step=None) -> RunView:
     store = _open()
     run = _find(store, run_id)
     steps = store.query("steps", {"run_id": run.id})
+    questions = store.query("questions", {"run_id": run.id})
     if step is None:
-        return RunView(run, store.query("plans", {"run_id": run.id}), steps, [])
+        return RunView(run, store.query("plans", {"run_id": run.id}), steps, [], questions)
     chosen = [record for record in steps if record.id == step]
     if not chosen:
         raise Refused(f"run {run.id} has no step {step}")
-    return RunView(run, [], chosen, store.query("events", {"step_id": step}))
+    return RunView(run, [], chosen, store.query("events", {"step_id": step}), questions)
 
 
 def follow(run_id=None, after=0) -> list:

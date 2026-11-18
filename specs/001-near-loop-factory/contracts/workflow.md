@@ -198,6 +198,21 @@ Every step that is given the operator's ideals is also given the target codebase
 
 Where two disagree, the earlier wins, and the agent is told to say so. The steps are `plan`, `build`, `architecture_review` and `review`.
 
+## Questions (FR-061 to FR-064)
+
+Any agent step may end its reply with only `{"question": "..."}` instead of its envelope. Every agent prompt is given a standard footer (`prompts/asking.md`) saying how, together with the questions that step asked earlier in the run and their answers.
+
+| What happens | Where |
+|--------------|-------|
+| The question is recorded at once, with the step and persona that asked | `records.ask` |
+| `next_step` returns `Ask(question)`; or, if the step has used its attempts, `End("needs-me")` | `workflow.py` |
+| The lead (`workflow.LEAD`: persona `lead`, read-only, envelope `answer` and `confident`) is run. It is a step like any other: recorded, checked, and unable to change anything | the driver |
+| `confident` is `yes`: the answer is recorded as the lead's, and the step that asked runs again | the driver |
+| Otherwise, or if the lead fails: the run is set to `awaiting_approval` at the step that asked, and the operator is notified | the driver |
+| The operator answers: recorded as the operator's, and a driver is launched at the step that asked | `operations.answer` |
+
+A step that asks is recorded as failed, with a check named `question` carrying the question. An advisory step that asks is simply carried past. `approve` and `revise` are refused while a question is waiting; `abandon` is not.
+
 ## Envelopes
 
 Each agent step must end its reply with one JSON object. Required keys and types:

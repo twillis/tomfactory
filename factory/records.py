@@ -14,7 +14,7 @@ Everything here is done through the gateway's five plain operations.
 """
 import re
 
-from factory.store import gt, ne, now
+from factory.store import gt, is_null, ne, now
 
 MOVING = ("current_step", "driver_pid", "driver_started", "child_pgid")    # what changes as a run is carried on
 
@@ -137,3 +137,29 @@ def event(gw, run_id, kind, summary, payload=None, step_id=None):
 def events_after(gw, run_id, last_seen=0, limit=500):
     """The one query for following a run: live view and history are the same query."""
     return gw.query("events", [{"run_id": run_id}, gt("id", last_seen)], limit=limit)
+
+
+# ---- questions ----
+
+def ask(gw, run_id, step, asked_by, question):
+    """Put a question on record as it is asked."""
+    with gw.transaction():
+        asked = gw.insert("questions", {"run_id": run_id, "step": step, "asked_by": asked_by,
+                                        "question": question, "asked_at": now()})
+        event(gw, run_id, "question", f"{asked_by} asks: {question}", {"question_id": asked.id, "step": step})
+    return asked
+
+
+def pending_question(gw, run_id):
+    """The question still waiting for an answer, if there is one."""
+    waiting = gw.query("questions", [{"run_id": run_id}, is_null("answer")])
+    return waiting[-1] if waiting else None
+
+
+def answer(gw, question_id, text, answered_by):
+    """Record the answer to a question, and who gave it."""
+    with gw.transaction():
+        answered = gw.update("questions", {"id": question_id},
+                             {"answer": text, "answered_by": answered_by, "answered_at": now()})[0]
+        event(gw, answered.run_id, "answer", f"{answered_by} answers: {text}", {"question_id": question_id})
+    return answered

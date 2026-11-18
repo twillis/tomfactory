@@ -67,8 +67,9 @@ PREFACE = """Follow the spec kit instructions below as part of this step, with t
   under "What the factory has set up". Do not try to run anything: you have no shell.
 - Write only inside the feature directory, at the paths given, and only if this step may write.
   If it may not, put what you would have written in your reply instead.
-- Where the instructions say to ask the user, make an informed assumption instead and record it
-  in the document, clearly marked as an assumption.
+- Where the instructions say to ask the user: for anything small, make an informed assumption and
+  record it in the document, clearly marked as an assumption. For something that matters, you may
+  ask one question, in the way described at the end of this prompt.
 - Skip any step about hooks, extensions or branches."""
 
 

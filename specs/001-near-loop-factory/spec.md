@@ -245,6 +245,13 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 - **FR-059**: Unbuilt work MUST return the run to the build, within the attempt limit. An implementation detail MUST be recorded and MUST NOT stop or return the run. A change to the requirement MUST return the run to the planning stage and to the operator's approval.
 - **FR-060**: When a run returns to planning, what it had built MUST be set aside where the operator can find it, and the build MUST start again from the newly approved documents, so that tests are again written and seen to fail before the code.
 
+**Questions**
+
+- **FR-061**: An agent step MUST be able to ask a question instead of finishing, when it cannot proceed without an answer that the documents do not give.
+- **FR-062**: A question MUST go first to a lead persona, which answers from the request, the approved documents, the codebase's constitution and the operator's ideals. When the lead answers, the step that asked MUST run again with the answer.
+- **FR-063**: When the lead cannot answer, the run MUST wait for the operator, who MUST be notified of the question. When the operator answers, the step that asked MUST run again with that answer. A run MUST NOT be approved past a question that is still waiting.
+- **FR-064**: Every question, who asked it, the answer, and who answered MUST be recorded and shown with the run.
+
 ### Key Entities
 
 - **Persona**: who carries out an agent step. Has a name and a written description. One persona may serve more than one step.
