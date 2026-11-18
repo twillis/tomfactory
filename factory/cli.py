@@ -2,7 +2,7 @@
 
 Each command parses its arguments, calls one operation, and prints what comes back.
 There are no rules here: whether something is allowed, and what happens next, is decided
-in operations.py and workflow.py. This file only turns typed records into text or JSON.
+in operations.py and workflow.py. This file only turns the rows it is handed into text or JSON.
 """
 import argparse
 import dataclasses
@@ -256,5 +256,8 @@ def print_list(heading, items):
 
 
 def print_json(record):
-    data = [dataclasses.asdict(r) for r in record] if isinstance(record, list) else dataclasses.asdict(record)
+    def plain(item):
+        return dataclasses.asdict(item) if dataclasses.is_dataclass(item) else item
+
+    data = [plain(item) for item in record] if isinstance(record, list) else plain(record)
     print(json.dumps(data, indent=2))

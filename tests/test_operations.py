@@ -3,9 +3,9 @@ import dataclasses
 
 import pytest
 
-from factory import operations
+from factory import operations, records
 from factory.operations import Refused
-from factory.store import Plan, Run, open_store
+from factory.store import open_store
 from tests.conftest import PLAN, git, in_process
 from tests.fake_agent import FakeAgent
 from tests.test_workspace import tree
@@ -45,7 +45,7 @@ def test_a_request_is_refused_with_a_reason_when_it_cannot_start(home, target, t
     git(target, "commit", "-q", "-m", "remove settings")
     with pytest.raises(Refused, match=".factory.toml"):
         operations.request("Do something", target, launcher=launcher)
-    assert open_store(home).runs.all() == []  # nothing was recorded for any of them
+    assert open_store(home).query("runs", order="-id", limit=20) == []  # nothing was recorded for any of them
 
 
 @pytest.mark.fr("FR-033")
@@ -54,8 +54,8 @@ def test_a_second_request_is_declined_while_a_run_is_open(home, target, fake_not
     with pytest.raises(Refused, match=f"run {first.id}"):
         operations.request("Another thing", target, launcher=in_process(FakeAgent([])))
     store = open_store(home)
-    assert [r.id for r in store.runs.all()] == [first.id]
-    assert store.runs.get(first.id) == first  # untouched
+    assert [r.id for r in store.query("runs", order="-id", limit=20)] == [first.id]
+    assert store.get("runs", first.id) == first  # untouched
 
 
 @pytest.mark.fr("FR-010")
@@ -70,7 +70,7 @@ def test_the_attempt_limit_can_be_set_when_making_the_request(home, target, fake
 def test_after_the_plan_step_the_run_waits_and_nothing_has_changed(home, target, fake_notify):
     before = tree(target)
     run, fake = planned(target, fake_notify)
-    assert isinstance(run, Run) and dataclasses.is_dataclass(run)
+    assert isinstance(run, dict) and run["request"] == "Create a hello page"      # a plain row
     assert run.state == "awaiting_approval" and run.current_step == "plan"
     assert (run.driver_pid, run.driver_started, run.child_pgid) == (None, None, None)
     assert run.base_commit == git(target, "rev-parse", "HEAD")
@@ -78,12 +78,12 @@ def test_after_the_plan_step_the_run_waits_and_nothing_has_changed(home, target,
 
     store = open_store(home)
     plan = operations.plan(run.id)
-    assert isinstance(plan, Plan) and (plan.version, plan.decision) == (1, "pending")
+    assert isinstance(plan, dict) and (plan.version, plan.decision) == (1, "pending")
     assert plan.text == PLAN["plan"] and plan.ideals_addressed == PLAN["ideals_addressed"]
     assert operations.plan().version == 1  # without a run id: the most recent run
 
     assert fake_notify == [(f"Run {run.id}: plan ready — waiting for you", "Create a hello page")]
-    kinds = [e.kind for e in store.events.after(run.id)]
+    kinds = [e.kind for e in records.events_after(store, run.id)]
     assert "notify" in kinds and kinds.count("step_start") == 1 and kinds.count("step_end") == 1
 
     assert tree(target) == before                                    # the operator's working copy
@@ -95,7 +95,7 @@ def test_after_the_plan_step_the_run_waits_and_nothing_has_changed(home, target,
 @pytest.mark.fr("FR-047")
 def test_the_plan_step_is_recorded_with_its_persona_and_checks(home, target, fake_notify):
     run, fake = planned(target, fake_notify)
-    step = open_store(home).steps.list(run.id)[0]
+    step = open_store(home).query("steps", {"run_id": run.id})[0]
     assert (step.name, step.kind, step.persona, step.attempt, step.passed) == ("plan", "agent", "planner", 1, True)
     assert step.produced == PLAN and step.failure is None
     assert [c["name"] for c in step.checks] == ["factory_untouched", "changes_allowed", "envelope_valid"]
@@ -122,11 +122,11 @@ def test_a_plan_sent_back_is_revised_with_the_comment_and_both_are_kept(home, ta
     operations.revise(run.id, "Shorter.", launcher=launcher)
 
     store = open_store(home)
-    assert [(p.version, p.decision, p.comment) for p in store.plans.list(run.id)] == [
+    assert [(p.version, p.decision, p.comment) for p in store.query("plans", {"run_id": run.id})] == [
         (1, "revised", "Also show when the run ended."), (2, "revised", "Shorter."), (3, "pending", None)]
     assert operations.plan(run.id).text == "Third version."
-    assert [s.attempt for s in store.steps.list(run.id)] == [1, 2, 3]
-    assert store.runs.get(run.id).state == "awaiting_approval"      # revisions are not limited
+    assert [s.attempt for s in store.query("steps", {"run_id": run.id})] == [1, 2, 3]
+    assert store.get("runs", run.id).state == "awaiting_approval"      # revisions are not limited
     assert len(fake_notify) == 3
     with pytest.raises(Refused, match="comment"):
         operations.revise(run.id, "  ", launcher=launcher)
@@ -138,9 +138,9 @@ def test_approve_moves_the_run_on_and_is_refused_unless_a_plan_is_waiting(home, 
     launched = []
     approved = operations.approve(run.id, launcher=lambda store, r, state, step: launched.append((state, step)))
     assert launched == [("working", "baseline")]
-    assert open_store(home).plans.current(run.id).decision == "approved"
+    assert records.current_plan(open_store(home), run.id).decision == "approved"
     assert approved.id == run.id
-    open_store(home).runs.set_state(run.id, "working", current_step="baseline")
+    records.set_state(open_store(home), run.id, "working", current_step="baseline")
     for operation in (operations.approve, operations.abandon):
         with pytest.raises(Refused, match="not waiting"):
             operation(run.id)
@@ -159,7 +159,7 @@ def test_abandon_ends_the_run_rejected_and_removes_its_checkout(home, target, fa
     assert (ended.state, ended.outcome, ended.reason) == ("ended", "rejected", "abandoned by operator")
     assert not pathlib.Path(run.workspace).exists()
     assert run.branch not in git(target, "branch", "--list", "factory/*")
-    assert open_store(home).plans.current(run.id).decision == "abandoned"
+    assert records.current_plan(open_store(home), run.id).decision == "abandoned"
     assert fake_notify[-1] == (f"Run {run.id}: rejected", "abandoned by operator")
     assert operations.request("Next thing", target, launcher=in_process(FakeAgent([{"envelope": PLAN}]))).id == run.id + 1
 
@@ -171,7 +171,7 @@ def test_a_plan_that_is_malformed_every_time_ends_needs_me_at_the_limit(home, ta
                                                     {"envelope": {"plan": "x"}}])
     assert (run.state, run.outcome) == ("ended", "needs-me")
     assert "plan" in run.reason and "3 times" in run.reason
-    steps = open_store(home).steps.list(run.id)
+    steps = open_store(home).query("steps", {"run_id": run.id})
     assert [(s.attempt, s.passed, s.failure) for s in steps] == [(1, False, "malformed")] * 0 + [
         (1, False, "malformed"), (2, False, "malformed"), (3, False, "malformed")]
     assert "did not end with a JSON object" in fake.calls[1]["prompt"]   # told what was wrong
@@ -182,7 +182,7 @@ def test_a_plan_that_is_malformed_every_time_ends_needs_me_at_the_limit(home, ta
 def test_an_agent_error_during_planning_ends_needs_me_with_the_message(home, target, fake_notify):
     run, _ = planned(target, fake_notify, script=[{"error": "usage limit reached"}])
     assert run.outcome == "needs-me" and "usage limit reached" in run.reason
-    step = open_store(home).steps.list(run.id)[0]
+    step = open_store(home).query("steps", {"run_id": run.id})[0]
     assert step.failure == "error" and step.passed is False
 
 
@@ -192,8 +192,8 @@ def test_a_planner_that_changes_a_file_is_undone_and_the_run_stops(home, target,
     assert run.outcome == "needs-me" and "sneaky.py" in run.reason
     assert git(run.workspace, "status", "--porcelain") == ""
     store = open_store(home)
-    assert store.steps.list(run.id)[0].failure == "guard"
-    assert "guard" in [e.kind for e in store.events.after(run.id)]
+    assert store.query("steps", {"run_id": run.id})[0].failure == "guard"
+    assert "guard" in [e.kind for e in records.events_after(store, run.id)]
 
 
 # ---- Story 3: seeing what a run is doing, and reading back what it did ----
@@ -269,7 +269,7 @@ def test_a_run_whose_driver_id_now_belongs_to_another_process_is_interrupted(hom
     import os
     run, _ = planned(target, fake_notify)
     store = open_store(home)
-    store.runs.set_state(run.id, "working", current_step="build", driver_pid=os.getpid(),
+    records.set_state(store, run.id, "working", current_step="build", driver_pid=os.getpid(),
                          driver_started="not-this-process")   # same id, different start time
     seen = operations.status()[0].run
     assert (seen.state, seen.outcome, seen.reason) == ("ended", "needs-me", "interrupted")
@@ -294,3 +294,16 @@ def test_the_operators_comments_travel_with_the_request_to_every_later_step(home
         assert "Add a greeting" in prompt, name
         assert "Also greet in French." in prompt, f"the {name} step never saw the operator's comment"
     assert "Also greet in French." not in fake.calls[0]["prompt"]       # the first plan was written before it
+
+
+@pytest.mark.fr("FR-016")
+def test_a_home_made_by_an_earlier_version_is_refused_in_words(home, target):
+    import sqlite3
+    old = sqlite3.connect(home / "factory.db")
+    old.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY, request TEXT)")     # no version stamp
+    old.commit()
+    old.close()
+    with pytest.raises(Refused, match="earlier version"):
+        operations.status()
+    with pytest.raises(Refused, match="earlier version"):
+        operations.request("Do something", target)

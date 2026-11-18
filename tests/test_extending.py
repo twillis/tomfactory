@@ -48,10 +48,10 @@ def test_a_new_code_step_is_one_check_and_one_entry(cycle, monkeypatch):
     run, _, store, _ = cycle(script())
 
     assert run.outcome == "accepted"
-    names = [s.name for s in store.steps.list(run.id)]
+    names = [s.name for s in store.query("steps", {"run_id": run.id})]
     assert names == ["plan", "baseline", "write_tests", "red", "build", "test", "count_files",
                      "architecture_review", "document", "review", "finish"]
-    added = store.steps.list(run.id)[6]
+    added = store.query("steps", {"run_id": run.id})[6]
     assert [c["name"] for c in added.checks] == ["factory_untouched", "changes_allowed", "count_files"]
     assert added.checks[-1]["note"] == "2 python files" and added.passed
     assert workspace.fingerprint([config.PACKAGE_DIR]) == source_before, "no source file was edited"
@@ -70,7 +70,7 @@ def test_a_new_persona_is_one_file_named_on_an_entry(cycle, monkeypatch):
     install()
     run, fake, store, _ = cycle(script())
     assert run.outcome == "accepted"
-    build = [s for s in store.steps.list(run.id) if s.name == "build"][0]
+    build = [s for s in store.query("steps", {"run_id": run.id}) if s.name == "build"][0]
     assert build.persona == "careful_coder"
     assert "CAREFUL-CODER-MARKER" in fake.calls[2]["persona"]
 
@@ -85,7 +85,7 @@ def test_a_new_agent_step_that_says_nothing_may_read_and_change_nothing(cycle, m
     run, fake, store, _ = cycle(script() + [meddling])
     assert fake.calls[-1]["capabilities"] == "read"                      # the closed default
     assert run.outcome == "needs-me" and "second_opinion" in run.reason and "hello.py" in run.reason
-    added = store.steps.list(run.id)[-1]
+    added = store.query("steps", {"run_id": run.id})[-1]
     assert (added.name, added.failure) == ("second_opinion", "guard")
     assert [c["name"] for c in added.checks][:2] == ["factory_untouched", "changes_allowed"]
 

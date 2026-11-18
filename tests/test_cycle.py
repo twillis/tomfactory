@@ -6,7 +6,7 @@ import shutil
 
 import pytest
 
-from factory import config, operations, workspace
+from factory import config, operations, records, workspace
 from factory.store import open_store
 from tests.conftest import PLAN, git, in_process
 from tests.fake_agent import FakeAgent
@@ -76,11 +76,11 @@ def cycle(home, tmp_path, fake_notify, monkeypatch):
 
 
 def names(store, run):
-    return [s.name for s in store.steps.list(run.id)]
+    return [s.name for s in store.query("steps", {"run_id": run.id})]
 
 
 def record(store, run, name, attempt=-1):
-    return [s for s in store.steps.list(run.id) if s.name == name][attempt]
+    return [s for s in store.query("steps", {"run_id": run.id}) if s.name == name][attempt]
 
 
 @pytest.mark.fr("FR-034")
@@ -113,11 +113,11 @@ def test_the_happy_path_from_an_empty_target(cycle):
 
     assert len(fake.calls) == 6, "tests are run by code; no agent is asked whether they passed"
     assert cycle.notify[-1] == (f"Run {run.id}: accepted", run.reason)
-    assert store.runs.get(run.id).outcome == "accepted"                          # still there afterwards
-    kinds = [e.kind for e in store.events.after(run.id, limit=5000)]
+    assert store.get("runs", run.id).outcome == "accepted"                          # still there afterwards
+    kinds = [e.kind for e in records.events_after(store, run.id, limit=5000)]
     assert kinds.count("step_start") == 10 and kinds.count("step_end") == 10
     assert kinds.count("commit") == 4 and kinds.count("check") >= 10 * 2
-    assert [e.kind for e in store.events.after(run.id, limit=5000)][-1] == "notify"
+    assert [e.kind for e in records.events_after(store, run.id, limit=5000)][-1] == "notify"
 
 
 @pytest.mark.fr("FR-035")
@@ -144,7 +144,7 @@ def test_a_failed_build_is_sent_back_with_the_failure(cycle):
     assert run.outcome == "accepted"
     assert names(store, run) == ["plan", "baseline", "write_tests", "red", "build", "test", "build", "test",
                                  "architecture_review", "document", "review", "finish"]
-    builds = [s for s in store.steps.list(run.id) if s.name == "build"]
+    builds = [s for s in store.query("steps", {"run_id": run.id}) if s.name == "build"]
     assert [b.attempt for b in builds] == [1, 2]
     retry = fake.calls[3]["prompt"]
     assert "tests_pass" in retry and "assert 'goodbye' == 'hello'" in retry      # the failing output, passed back
@@ -160,7 +160,7 @@ def test_a_build_that_fails_three_times_ends_needs_me(cycle):
     run, _, store, target = cycle(script(build=[wrong, wrong, wrong]))
     assert run.outcome == "needs-me"
     assert "build" in run.reason and "3 times" in run.reason and "goodbye" in run.reason
-    assert [s.attempt for s in store.steps.list(run.id) if s.name == "build"] == [1, 2, 3]
+    assert [s.attempt for s in store.query("steps", {"run_id": run.id}) if s.name == "build"] == [1, 2, 3]
     assert "test_greets" in record(store, run, "test").checks[-1]["note"]
     assert "review" not in names(store, run)
     assert cycle.notify[-1][0] == f"Run {run.id}: needs-me"
@@ -220,7 +220,7 @@ def test_a_code_writer_that_touches_the_tests_is_undone_and_the_run_stops(cycle,
     assert record(store, run, "build").failure == "guard"
     assert git(run.workspace, "status", "--porcelain") == ""                 # undone
     assert git(run.workspace, "show", "HEAD:tests/test_hello.py") == TEST.strip()
-    guard = [e for e in store.events.after(run.id, limit=5000) if e.kind == "guard"]
+    guard = [e for e in records.events_after(store, run.id, limit=5000) if e.kind == "guard"]
     assert guard and named in guard[0].payload["files"]
 
 
@@ -247,7 +247,7 @@ def test_a_test_writer_that_never_states_edge_cases_ends_needs_me(cycle):
     silent = dict(WRITE_TESTS, envelope=dict(WRITE_TESTS["envelope"], edge_cases=[]))
     run, fake, store, _ = cycle(script(write_tests=[silent, silent, silent])[:4])
     assert run.outcome == "needs-me" and "write_tests" in run.reason and "3 times" in run.reason
-    assert [s.failure for s in store.steps.list(run.id) if s.name == "write_tests"] == ["check"] * 3
+    assert [s.failure for s in store.query("steps", {"run_id": run.id}) if s.name == "write_tests"] == ["check"] * 3
     assert "edge_cases_stated" in fake.calls[2]["prompt"]
 
 
@@ -264,7 +264,7 @@ def test_an_agent_error_ends_needs_me_and_keeps_the_work_so_far(cycle):
 @pytest.mark.fr("FR-047")
 def test_each_step_has_its_persona_and_the_reviewer_sees_only_the_result(cycle):
     run, fake, store, _ = cycle(script())
-    personas = {s.name: s.persona for s in store.steps.list(run.id)}
+    personas = {s.name: s.persona for s in store.query("steps", {"run_id": run.id})}
     assert personas == {"plan": "planner", "baseline": None, "write_tests": "test_writer", "red": None,
                         "build": "code_writer", "test": None, "architecture_review": "architect",
                         "document": "documenter", "review": "reviewer", "finish": None}
@@ -308,7 +308,7 @@ def test_a_notification_that_fails_is_recorded_and_changes_nothing(cycle, monkey
     monkeypatch.setattr("factory.notify.send", lambda title, body: False)
     run, _, store, _ = cycle(script())
     assert run.outcome == "accepted"
-    sent = [e for e in store.events.after(run.id, limit=5000) if e.kind == "notify"]
+    sent = [e for e in records.events_after(store, run.id, limit=5000) if e.kind == "notify"]
     assert len(sent) == 2 and all(e.payload["sent"] is False for e in sent)
 
 
@@ -323,7 +323,7 @@ def test_an_edit_the_agent_program_refuses_inside_the_checkout_stops_the_run_at_
     run, fake, store, _ = cycle(script(write_tests=refused)[:2])
     assert run.outcome == "needs-me"
     assert "refused" in run.reason and "tests/test_hello.py" in run.reason
-    assert [s.name for s in store.steps.list(run.id)].count("write_tests") == 1, "it must not retry"
+    assert [s.name for s in store.query("steps", {"run_id": run.id})].count("write_tests") == 1, "it must not retry"
     assert record(store, run, "write_tests").failure == "error"
 
 
@@ -332,7 +332,7 @@ def test_a_refused_edit_outside_the_checkout_is_the_guard_working_not_an_error(c
     outside = dict(BUILD, denials=[{"action": "write", "path": "/etc/passwd"}])
     run, _, store, _ = cycle(script(build=outside))
     assert run.outcome == "accepted"
-    denied = [e for e in store.events.after(run.id, limit=5000) if e.kind == "denied"]
+    denied = [e for e in records.events_after(store, run.id, limit=5000) if e.kind == "denied"]
     assert denied and denied[0].payload["path"] == "/etc/passwd"
 
 

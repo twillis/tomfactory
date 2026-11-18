@@ -23,7 +23,7 @@ import signal
 import time
 from dataclasses import asdict
 
-from factory import agent, checks, config, notify, proc, workflow, workspace
+from factory import agent, checks, config, notify, proc, records, workflow, workspace
 from factory.workflow import End, StepResult, Wait
 from factory.workspace import Workspace
 
@@ -40,17 +40,17 @@ def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_
     steps = steps or workflow.STEPS
     personas_dir = pathlib.Path(personas_dir or config.PERSONAS_DIR)
     prompts_dir = pathlib.Path(prompts_dir or config.PROMPTS_DIR)
-    run = store.runs.get(run_id)
+    run = store.get("runs", run_id)
     checkout = Workspace(run.workspace, run.target, run.branch, run.base_commit)
     settings = config.read_target_config(run.target, run.base_commit)
     try:
         while True:
-            run = store.runs.get(run_id)
+            run = store.get("runs", run_id)
             if run.state == "ended":        # ended from outside while we were working
                 return
             step = workflow.get(run.current_step, steps)
             result, envelope = run_step(store, run, step, checkout, settings, adapter, personas_dir, prompts_dir)
-            attempts = {entry.name: store.steps.count(run_id, entry.name) for entry in steps}
+            attempts = {entry.name: records.attempts(store, run_id, entry.name) for entry in steps}
             then = workflow.next_step(step, result, attempts, run.attempt_limit)
             if isinstance(then, End):
                 end_run(store, run_id, then.outcome, then.reason)
@@ -58,11 +58,11 @@ def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_
             if isinstance(then, Wait):
                 wait_for_operator(store, run, step, envelope or {})
                 return
-            store.runs.update(run_id, current_step=then.step)
+            records.move(store, run_id, current_step=then.step)
     except Stopped:
         end_run(store, run_id, "needs-me", "stopped by operator")
     except Exception as problem:            # a bug in the factory itself: record it, then let it show
-        store.events.add(run_id, "error", f"{type(problem).__name__}: {problem}")
+        records.event(store, run_id, "error", f"{type(problem).__name__}: {problem}")
         end_run(store, run_id, "needs-me", f"the factory itself failed: {type(problem).__name__}: {problem}")
         raise
 
@@ -76,13 +76,13 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     if step.kind == "agent":
         inputs = {name: gather(name, store, run, checkout, settings) for name in step.inputs}
         asked = fill((prompts_dir / f"{step.name}.md").read_text(), inputs)
-    record = store.steps.start(run.id, step.name, step.kind, step.persona, asked)       # 2
+    record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)       # 2
 
     def emit(kind, summary, payload=None):
-        store.events.add(run.id, kind, summary, payload, step_id=record.id)
+        records.event(store, run.id, kind, summary, payload, step_id=record.id)
 
     def on_child(group):
-        store.runs.update(run.id, child_pgid=group)
+        records.move(store, run.id, child_pgid=group)
 
     emit("step_start", step.name, {"attempt": record.attempt, "persona": step.persona})
     result, reply = StepResult(passed=True), None
@@ -151,7 +151,7 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
         produced = reply.envelope if reply.envelope is not None else {"text": reply.text[:2000]}
     else:
         produced = {"output": done[-1].note} if step.checks and done else {}
-    store.steps.finish(record.id, produced, [asdict(outcome) for outcome in done], result.passed,   # 7
+    records.finish_step(store, record.id, produced, [asdict(outcome) for outcome in done], result.passed,   # 7
                        result.failure, reply.tokens if reply else None,
                        reply.cost_estimate if reply else None)
     emit("step_end", f"{step.name}: {'passed' if result.passed else result.failure}",
@@ -161,8 +161,8 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
 
 def gather(name, store, run, checkout, settings) -> str:
     """The text for one named input of a prompt. See contracts/workflow.md, "Inputs and prompts"."""
-    plans = store.plans.list(run.id)
-    finished = [record for record in store.steps.list(run.id) if record.ended_at]
+    plans = store.query("plans", {"run_id": run.id})
+    finished = [record for record in store.query("steps", {"run_id": run.id}) if record.ended_at]
     if name == "request":       # the request as the operator has amended it when sending plans back
         comments = [plan.comment for plan in plans if plan.decision == "revised" and plan.comment]
         if not comments:
@@ -210,32 +210,32 @@ def fill(prompt_text, inputs) -> str:
 
 def wait_for_operator(store, run, step, envelope) -> None:
     """Store what the operator must decide on, mark the run as waiting, and say so."""
-    store.plans.add(run.id, envelope.get("plan") or json.dumps(envelope),
+    records.add_plan(store, run.id, envelope.get("plan") or json.dumps(envelope),
                     envelope.get("ideals_addressed") or [], envelope.get("conflicts") or [])
-    store.runs.set_state(run.id, "awaiting_approval", driver_pid=None, driver_started=None, child_pgid=None)
+    records.set_state(store, run.id, "awaiting_approval", driver_pid=None, driver_started=None, child_pgid=None)
     tell(store, run.id, f"Run {run.id}: {step.name} ready — waiting for you", " ".join(run.request.split()[:12]))
 
 
 def end_run(store, run_id, outcome, reason):
     """The one way a run ends: outcome and reason set, nothing left running, the operator told."""
-    run = store.runs.get(run_id)
+    run = store.get("runs", run_id)
     if run.state == "ended":
         return run
     proc.stop_group(run.child_pgid)
-    ended = store.runs.end(run_id, outcome, reason)
+    ended = records.end(store, run_id, outcome, reason)
     tell(store, run_id, f"Run {run_id}: {outcome}", reason)
     return ended
 
 
 def tell(store, run_id, title, body) -> None:
     sent = notify.send(title, body)
-    store.events.add(run_id, "notify", title, {"sent": sent, "body": body})
+    records.event(store, run_id, "notify", title, {"sent": sent, "body": body})
 
 
 def drive(store, run_id) -> None:
     """What the detached driver process runs: take over the run, and carry it forward."""
     deadline = time.monotonic() + 10
-    while store.runs.get(run_id).driver_pid != os.getpid():     # wait to be handed the run
+    while store.get("runs", run_id).driver_pid != os.getpid():     # wait to be handed the run
         if time.monotonic() > deadline:
             raise RuntimeError(f"run {run_id} was never handed to this driver")
         time.sleep(0.02)

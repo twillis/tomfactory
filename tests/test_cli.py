@@ -5,7 +5,7 @@ import pathlib
 
 import pytest
 
-from factory import cli, operations
+from factory import cli, operations, records
 from tests.conftest import PLAN, in_process
 from tests.fake_agent import FakeAgent
 
@@ -52,7 +52,7 @@ def test_approve_reports_that_the_run_is_now_unattended(capsys, tmp_path, fake, 
     target = tmp_path / "viewer"
     run_cli(capsys, "init-target", str(target))
     run_cli(capsys, "request", "Create a hello page", "--target", str(target))
-    monkeypatch.setattr(operations, "launch", lambda store, run, state, step: store.runs.set_state(run.id, state, current_step=step))
+    monkeypatch.setattr(operations, "launch", lambda store, run, state, step: records.set_state(store, run.id, state, current_step=step))
     code, out = run_cli(capsys, "approve")
     assert code == 0 and "Run 1" in out and "notified" in out
 
@@ -132,8 +132,8 @@ def test_status_answers_quickly_with_many_runs(capsys, home):
     from factory.store import open_store
     store = open_store(home)
     for number in range(50):
-        run = store.runs.create(f"request {number}", "/tmp/t", "abc")
-        store.runs.end(run.id, "accepted", "fine")
+        run = records.new_run(store, f"request {number}", "/tmp/t", "abc")
+        records.end(store, run.id, "accepted", "fine")
     started = time.monotonic()
     code, out = run_cli(capsys, "status")
     assert code == 0 and time.monotonic() - started < 1.0

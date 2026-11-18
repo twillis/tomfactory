@@ -1,241 +1,215 @@
-"""The store: five repos over one SQLite file and a folder of per-run files.
+"""The data layer: one gateway with five operations that take a table.
 
+    gw.insert(table, row)   gw.get(table, id)   gw.query(table, where, order, limit)
+    gw.update(table, where, changes)            gw.delete(table, where)
+
+It knows the tables from the database's own catalog, so a new table needs no code here.
+It holds no rules about runs, plans or steps: those live in factory/records.py.
 The schema is the contract with the observability app (contracts/run-store.md).
 """
-import dataclasses
+import json
 import sqlite3
-import threading
 
 import pytest
 
 from factory import store as store_module
-from factory.store import Event, Plan, Run, StepRecord, open_store
+from factory.store import Row, gt, is_null, ne, open_store
 
 
 @pytest.fixture
-def store(home):
+def gw(home):
     return open_store(home)
 
 
-def new_run(store, request="Create a hello page", **kw):
-    return store.runs.create(request=request, target="/tmp/target", base_commit="abc123", **kw)
+def a_run(gw, **changes):
+    row = {"request": "Create a hello page", "target": "/tmp/t", "base_commit": "abc", "state": "planning",
+           "created_at": store_module.now()}
+    return gw.insert("runs", {**row, **changes})
 
 
 @pytest.mark.fr("FR-025")
-def test_a_new_store_has_the_contract_schema_in_wal_mode(store, home):
+def test_a_new_store_has_the_contract_schema_in_wal_mode(gw, home):
     db = sqlite3.connect(home / "factory.db")
     names = {row[0] for row in db.execute("select name from sqlite_master")}
     assert {"runs", "plans", "steps", "events", "one_open_run", "one_approved_plan",
             "events_by_run", "steps_by_run"} <= names
     assert db.execute("pragma journal_mode").fetchone()[0] == "wal"
-    columns = {row[1] for row in db.execute("pragma table_info(runs)")}
-    assert columns == {"id", "request", "target", "base_commit", "branch", "workspace", "state",
-                       "current_step", "outcome", "reason", "ideals", "attempt_limit", "driver_pid",
-                       "driver_started", "child_pgid", "created_at", "ended_at"}
-    columns = {row[1] for row in db.execute("pragma table_info(steps)")}
-    assert columns == {"id", "run_id", "name", "kind", "persona", "attempt", "asked", "produced",
-                       "checks", "passed", "failure", "started_at", "ended_at", "tokens", "cost_estimate"}
-    columns = {row[1] for row in db.execute("pragma table_info(plans)")}
-    assert columns == {"run_id", "version", "text", "ideals_addressed", "conflicts", "comment",
-                       "decision", "created_at"}
-    columns = {row[1] for row in db.execute("pragma table_info(events)")}
-    assert columns == {"id", "run_id", "step_id", "at", "kind", "summary", "payload"}
+
+    def columns(table):
+        return {row[1] for row in db.execute(f"pragma table_info({table})")}
+
+    assert columns("runs") == {"id", "request", "target", "base_commit", "branch", "workspace", "state",
+                               "current_step", "outcome", "reason", "ideals", "attempt_limit", "driver_pid",
+                               "driver_started", "child_pgid", "created_at", "ended_at"}
+    assert columns("steps") == {"id", "run_id", "name", "kind", "persona", "attempt", "asked", "produced",
+                                "checks", "passed", "failure", "started_at", "ended_at", "tokens", "cost_estimate"}
+    assert columns("plans") == {"run_id", "version", "text", "ideals_addressed", "conflicts", "comment",
+                                "decision", "created_at"}
+    assert columns("events") == {"id", "run_id", "step_id", "at", "kind", "summary", "payload"}
 
 
-@pytest.mark.fr("FR-001")
-def test_creating_a_run_sets_its_branch_and_workspace(store, home):
-    run = new_run(store, "Create a hello-world app, please!")
-    assert isinstance(run, Run)
-    assert run.state == "planning" and run.outcome is None and run.attempt_limit == 3
-    assert run.branch == f"factory/{run.id}-create-a-hello-world-app-please"
-    assert run.workspace == str(home / "workspaces" / str(run.id))
-    assert run.workspace == str(store.files.workspace_path(run.id))
-    assert run.created_at.endswith("Z")
+@pytest.mark.fr("FR-026")
+def test_insert_returns_the_stored_row_as_a_plain_mapping(gw):
+    run = a_run(gw)
+    assert isinstance(run, dict) and isinstance(run, Row)
+    assert run["id"] == 1 and run["state"] == "planning" and run["attempt_limit"] == 3   # the schema's default
+    assert run.id == 1 and run.state == "planning"          # the same values, by name
+    assert run["outcome"] is None and run["ideals"] == ""
+    assert json.loads(json.dumps(run)) == run                # it is JSON, nothing more
+    with pytest.raises(AttributeError):
+        run.no_such_column
 
 
-@pytest.mark.fr("FR-001")
-@pytest.mark.parametrize("request_text, slug", [
-    ("!!!", "run"),
-    ("Fix   the\tBUG now", "fix-the-bug-now"),
-    ("one two three four five six seven", "one-two-three-four-five"),
-    ("x" * 200, "x" * 40),
-])
-def test_the_branch_slug_follows_the_rule(store, request_text, slug):
-    run = new_run(store, request_text)
-    assert run.branch == f"factory/{run.id}-{slug}"
-    store.runs.end(run.id, "rejected", "test")
+@pytest.mark.fr("FR-026")
+def test_get_and_query_read_rows_back(gw):
+    first = a_run(gw)
+    gw.update("runs", {"id": first.id}, {"state": "ended", "outcome": "rejected", "reason": "x"})
+    second = a_run(gw, request="Another")
+    assert gw.get("runs", second.id) == second
+    with pytest.raises(LookupError, match="no row 99 in runs"):
+        gw.get("runs", 99)
+    assert [r.id for r in gw.query("runs")] == [1, 2]                              # by primary key
+    assert [r.id for r in gw.query("runs", order="-id")] == [2, 1]
+    assert [r.id for r in gw.query("runs", order="-id", limit=1)] == [2]
+    assert [r.id for r in gw.query("runs", {"state": "ended"})] == [1]
+    assert [r.id for r in gw.query("runs", {"outcome": None})] == [2]              # None means "is empty"
+    assert gw.query("runs", {"state": "working"}) == []
 
 
-@pytest.mark.fr("FR-033")
-def test_a_second_open_run_is_refused_by_the_database(store):
-    new_run(store)
-    with pytest.raises(sqlite3.IntegrityError):
-        new_run(store, "another")
+@pytest.mark.fr("FR-025")
+def test_conditions_are_values_that_compose(gw):
+    run = a_run(gw)
+    for number in range(5):
+        gw.insert("events", {"run_id": run.id, "at": store_module.now(), "kind": "agent_text" if number % 2 else "check",
+                             "summary": f"event {number}", "payload": {"n": number}})
+    after_two = gw.query("events", [{"run_id": run.id}, gt("id", 2)])
+    assert [e.payload["n"] for e in after_two] == [2, 3, 4]
+    assert [e.payload["n"] for e in gw.query("events", [gt("id", 1), ne("kind", "check")])] == [1, 3]
+    assert [e.payload["n"] for e in gw.query("events", [gt("id", 0)], order="-id", limit=2)] == [4, 3]
+    assert len(gw.query("events", [is_null("step_id")])) == 5
+    assert len(gw.query("events", {"run_id": run.id, "kind": "check"})) == 3       # a dict is "all of these"
 
 
-@pytest.mark.fr("FR-001")
-def test_run_ids_are_never_reused(store):
-    first = new_run(store)
-    store.runs.end(first.id, "rejected", "abandoned by operator")
-    second = new_run(store)
-    assert second.id == first.id + 1
-    assert store.runs.latest().id == second.id
-    assert [r.id for r in store.runs.all()] == [second.id, first.id]
-    assert store.runs.open().id == second.id
+@pytest.mark.fr("FR-026")
+def test_update_and_delete_take_conditions_and_say_what_they_did(gw):
+    run = a_run(gw)
+    changed = gw.update("runs", {"id": run.id}, {"current_step": "plan", "driver_pid": 42})
+    assert [(r.id, r.current_step, r.driver_pid) for r in changed] == [(run.id, "plan", 42)]
+    assert gw.update("runs", {"id": 99}, {"current_step": "x"}) == []
+    assert gw.get("runs", run.id).current_step == "plan"
+    for kind in ("a", "b", "a"):
+        gw.insert("events", {"run_id": run.id, "at": store_module.now(), "kind": kind, "summary": "", "payload": {}})
+    assert gw.delete("events", {"kind": "a"}) == 2
+    assert [e.kind for e in gw.query("events")] == ["b"]
+    with pytest.raises(ValueError, match="conditions"):
+        gw.delete("events", {})                 # deleting everything must be asked for on purpose
+    with pytest.raises(ValueError, match="conditions"):
+        gw.update("runs", [], {"current_step": "x"})
+
+
+@pytest.mark.fr("FR-026")
+def test_json_and_yes_no_columns_come_back_as_what_they_are(gw):
+    run = a_run(gw)
+    step = gw.insert("steps", {"run_id": run.id, "name": "build", "kind": "agent", "attempt": 1, "asked": "p",
+                               "started_at": store_module.now()})
+    assert step.produced is None and step.checks is None and step.passed is None
+    checks = [{"name": "tests_pass", "passed": False, "note": "1 failed"}]
+    done = gw.update("steps", {"id": step.id}, {"produced": {"summary": "x"}, "checks": checks, "passed": False,
+                                                 "tokens": {"input": 1}})[0]
+    assert done.produced == {"summary": "x"} and done.checks == checks and done.tokens == {"input": 1}
+    assert done.passed is False
+    assert gw.update("steps", {"id": step.id}, {"passed": True})[0].passed is True
+    raw = sqlite3.connect(gw.home / "factory.db").execute("select produced, passed from steps").fetchone()
+    assert raw == ('{"summary": "x"}', 1)       # on disk: text and a number, as any reader expects
+
+
+@pytest.mark.fr("FR-037")
+def test_a_new_table_needs_no_code_in_the_data_layer(gw):
+    """The point of the gateway: inventing a table means writing its DDL and nothing else."""
+    gw.db.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER, body TEXT NOT NULL,"
+                  " tags JSON TEXT, urgent BOOLEAN)")
+    note = gw.insert("notes", {"run_id": 7, "body": "remember this", "tags": ["later"], "urgent": True})
+    assert (note.id, note.body, note.tags, note.urgent) == (1, "remember this", ["later"], True)
+    assert gw.query("notes", {"run_id": 7}) == [note] and gw.get("notes", 1) == note
+    assert gw.update("notes", {"id": 1}, {"urgent": False})[0].urgent is False
+    assert gw.delete("notes", {"id": 1}) == 1 and gw.query("notes") == []
+
+
+@pytest.mark.fr("FR-026")
+def test_names_come_from_the_catalog_never_from_the_caller(gw):
+    with pytest.raises(ValueError, match="no table named"):
+        gw.query("runs; drop table runs")
+    with pytest.raises(ValueError, match="no column named"):
+        gw.insert("runs", {"request": "x", "not a column": 1})
+    with pytest.raises(ValueError, match="no column named"):
+        gw.query("runs", {"state = 'x' or 1=1 --": 1})
+    with pytest.raises(ValueError, match="no column named"):
+        gw.query("runs", order="id; drop table runs")
+    with pytest.raises(ValueError, match="no column named"):
+        gw.update("runs", {"id": 1}, {"nope": 1})
+    assert gw.query("runs") == []                 # and nothing was harmed
 
 
 @pytest.mark.fr("FR-015")
-@pytest.mark.fr("FR-016")
-def test_state_changes_write_their_own_history_and_ending_is_once(store):
-    run = new_run(store)
-    before = len(store.events.after(run.id))
-    updated = store.runs.set_state(run.id, "awaiting_approval", current_step="plan")
-    assert updated.state == "awaiting_approval" and updated.current_step == "plan"
-    added = store.events.after(run.id)[before:]
-    assert [e.kind for e in added] == ["run_state"]
-    assert added[0].payload["state"] == "awaiting_approval"
-
-    store.runs.update(run.id, driver_pid=4321, driver_started="99", child_pgid=4322)
-    ended = store.runs.end(run.id, "needs-me", "stopped by operator")
-    assert (ended.state, ended.outcome, ended.reason) == ("ended", "needs-me", "stopped by operator")
-    assert ended.ended_at and ended.ended_at.endswith("Z")
-    assert (ended.driver_pid, ended.driver_started, ended.child_pgid) == (None, None, None)
-    assert store.events.after(run.id)[-1].kind == "run_state"
-    with pytest.raises(ValueError):
-        store.runs.end(run.id, "accepted", "again")
-    with pytest.raises(LookupError):
-        store.runs.get(999)
-
-
-@pytest.mark.fr("FR-004")
-def test_plan_versions_are_kept_and_only_one_is_approved(store):
-    run = new_run(store)
-    first = store.plans.add(run.id, "plan one", ["follows layers"], [])
-    assert isinstance(first, Plan) and first.version == 1 and first.decision == "pending"
-    store.plans.decide(run.id, 1, "revised", comment="also show the end time")
-    second = store.plans.add(run.id, "plan two", [], ["conflicts with ideal X"])
-    assert second.version == 2
-    plans = store.plans.list(run.id)
-    assert [(p.version, p.decision, p.comment) for p in plans] == [
-        (1, "revised", "also show the end time"), (2, "pending", None)]
-    assert plans[0].text == "plan one" and plans[0].ideals_addressed == ["follows layers"]
-    assert plans[1].conflicts == ["conflicts with ideal X"]
-    assert store.plans.current(run.id).version == 2
-    store.plans.decide(run.id, 2, "approved")
+def test_the_database_itself_refuses_values_outside_their_sets(gw):
     with pytest.raises(sqlite3.IntegrityError):
-        store.plans.decide(run.id, 1, "approved")
+        a_run(gw, state="paused")
+    run = a_run(gw)
+    with pytest.raises(sqlite3.IntegrityError):
+        gw.update("runs", {"id": run.id}, {"outcome": "great", "state": "ended"})
+    with pytest.raises(sqlite3.IntegrityError):
+        gw.update("runs", {"id": run.id}, {"outcome": "accepted"})          # an outcome without being ended
+    with pytest.raises(sqlite3.IntegrityError):
+        gw.insert("steps", {"run_id": run.id, "name": "x", "kind": "robot", "attempt": 1, "asked": "",
+                            "started_at": store_module.now()})
 
 
-@pytest.mark.fr("FR-026")
-@pytest.mark.fr("FR-027")
-@pytest.mark.fr("FR-028")
-@pytest.mark.fr("FR-047")
-def test_step_records_exist_from_the_start_and_count_attempts(store):
-    run = new_run(store)
-    step = store.steps.start(run.id, "build", "agent", "code_writer", "the full prompt")
-    assert isinstance(step, StepRecord)
-    assert (step.attempt, step.persona, step.asked) == (1, "code_writer", "the full prompt")
-    assert step.ended_at is None and step.passed is None and step.checks is None
-    assert store.steps.list(run.id)[0].ended_at is None  # visible while running
-
-    checks = [{"name": "envelope_valid", "passed": True, "note": ""},
-              {"name": "tests_pass", "passed": False, "note": "1 failed"}]
-    done = store.steps.finish(step.id, produced={"summary": "did it"}, checks=checks, passed=False,
-                              failure="check", tokens={"input": 10, "output": 5}, cost_estimate=0.01)
-    assert done.ended_at and done.passed is False and done.failure == "check"
-    assert done.produced == {"summary": "did it"} and done.checks == checks
-    assert done.tokens == {"input": 10, "output": 5} and done.cost_estimate == 0.01
-    with pytest.raises(ValueError):
-        store.steps.finish(step.id, produced=None, checks=[], passed=True)
-
-    again = store.steps.start(run.id, "build", "agent", "code_writer", "second prompt")
-    other = store.steps.start(run.id, "test", "code", None, "pytest")
-    assert (again.attempt, other.attempt, other.persona) == (2, 1, None)
-    assert store.steps.count(run.id, "build") == 2
-    assert [s.name for s in store.steps.list(run.id)] == ["build", "build", "test"]
-    assert store.steps.get(other.id).name == "test"
+@pytest.mark.fr("FR-033")
+def test_a_second_open_run_is_refused_by_the_database(gw):
+    a_run(gw)
+    with pytest.raises(sqlite3.IntegrityError):
+        a_run(gw, request="another")
 
 
 @pytest.mark.fr("FR-025")
-def test_the_follow_query_never_misses_or_repeats_while_another_connection_writes(store, home):
-    run = new_run(store)
-    start = store.events.after(run.id)[-1].id
-    writer = open_store(home)
-
-    def write():
-        for i in range(200):
-            writer.events.add(run.id, "agent_text", f"line {i}", {"n": i})
-
-    thread = threading.Thread(target=write)
-    thread.start()
-    seen, cursor = [], start
-    while thread.is_alive() or len(seen) < 200:
-        batch = store.events.after(run.id, cursor, limit=7)
-        if batch:
-            assert all(isinstance(e, Event) for e in batch)
-            seen += [e.payload["n"] for e in batch]
-            cursor = batch[-1].id
-    thread.join()
-    assert seen == list(range(200))
-    ids = [e.id for e in store.events.after(run.id)]
-    assert ids == sorted(ids) and len(set(ids)) == len(ids)
-    step = store.steps.start(run.id, "plan", "agent", "planner", "p")
-    store.events.add(run.id, "tool_call", "edit: a.py", {"ok": True}, step_id=step.id)
-    assert [e.summary for e in store.events.for_step(step.id)] == ["edit: a.py"]
+def test_a_transaction_happens_together_or_not_at_all(gw):
+    with pytest.raises(sqlite3.IntegrityError):
+        with gw.transaction():
+            run = a_run(gw)
+            gw.insert("events", {"run_id": run.id, "at": store_module.now(), "kind": "x", "summary": "", "payload": {}})
+            a_run(gw, request="a second open run")      # refused: everything above is undone
+    assert gw.query("runs") == [] and gw.query("events") == []
 
 
 @pytest.mark.fr("FR-025")
-def test_a_read_only_reader_is_not_blocked_by_an_open_write(store, home):
-    run = new_run(store)
-    store.db.execute("begin immediate")
-    store.db.execute("insert into events(run_id, at, kind, summary, payload) values (?,?,?,?,?)",
-                     (run.id, "now", "agent_text", "uncommitted", "{}"))
+def test_a_read_only_reader_is_not_blocked_by_an_open_write(gw, home):
+    run = a_run(gw)
+    gw.db.execute("begin immediate")
+    gw.db.execute("insert into events(run_id, at, kind, summary, payload) values (?,?,?,?,?)",
+                  (run.id, "now", "agent_text", "uncommitted", "{}"))
     reader = sqlite3.connect(f"file:{home / 'factory.db'}?mode=ro", uri=True, timeout=0.5)
-    rows = reader.execute("select summary from events where run_id = ?", (run.id,)).fetchall()
-    assert ("uncommitted",) not in rows and rows  # sees committed rows, does not wait
-    store.db.execute("rollback")
-
-
-@pytest.mark.fr("FR-026")
-def test_records_are_typed_and_refuse_values_outside_their_sets(store):
-    run = new_run(store)
-    assert dataclasses.is_dataclass(run)
-    assert dataclasses.asdict(run)["request"] == "Create a hello page"
-    with pytest.raises(ValueError):
-        dataclasses.replace(run, state="paused")
-    with pytest.raises(ValueError):
-        dataclasses.replace(run, outcome="great")
-    with pytest.raises(ValueError):
-        store.plans.decide(run.id, 1, "maybe")
-    with pytest.raises(ValueError):
-        store.steps.start(run.id, "plan", "robot", None, "x")
-    step = store.steps.start(run.id, "plan", "agent", "planner", "x")
-    with pytest.raises(ValueError):
-        store.steps.finish(step.id, produced=None, checks=[], passed=False, failure="bored")
-    with pytest.raises(ValueError):
-        store.runs.update(run.id, request="rewritten")  # not a field that may change
-    assert set(store_module.STATES) == {"planning", "awaiting_approval", "working", "ended"}
-    assert set(store_module.OUTCOMES) == {"accepted", "rejected", "needs-me"}
+    rows = reader.execute("select summary from events").fetchall()
+    assert ("uncommitted",) not in rows         # sees only committed rows, and does not wait
+    assert reader.execute("select count(*) from runs").fetchone() == (1,)
+    gw.db.execute("rollback")
 
 
 @pytest.mark.fr("FR-025")
 @pytest.mark.fr("FR-029")
-def test_the_files_repo_owns_every_per_run_file(store, home):
-    sink = store.files.raw_sink(7, 3)
+def test_per_run_files_are_reached_only_through_the_store(gw, home):
+    sink = gw.files.raw_sink(7, 3)
     sink('{"type":"assistant"}')
     sink('{"type":"result"}')
     raw = home / "runs" / "7" / "steps" / "3.jsonl"
-    assert raw.read_text() == '{"type":"assistant"}\n{"type":"result"}\n'  # on disk as it happens
-
-    with store.files.stderr_file(7, 3) as err:
+    assert raw.read_text() == '{"type":"assistant"}\n{"type":"result"}\n'      # on disk as it happens
+    with gw.files.stderr_file(7, 3) as err:
         err.write("warning\n")
     assert (home / "runs" / "7" / "steps" / "3.stderr").read_text() == "warning\n"
-
-    with store.files.driver_log(7) as log:
+    with gw.files.driver_log(7) as log:
         log.write("started\n")
-    with store.files.driver_log(7) as log:
+    with gw.files.driver_log(7) as log:
         log.write("again\n")
     assert (home / "runs" / "7" / "driver.log").read_text() == "started\nagain\n"
-
-    assert store.files.snapshot_dir(7) == home / "runs" / "7" / "snapshot"
-    assert store.files.workspace_path(7) == home / "workspaces" / "7"
+    assert gw.files.snapshot_dir(7) == home / "runs" / "7" / "snapshot"
+    assert gw.files.displaced_dir(7) == home / "runs" / "7" / "displaced"
+    assert gw.files.workspace_path(7) == home / "workspaces" / "7"

@@ -68,7 +68,7 @@ def test_a_real_hello_world_request_runs_to_accepted(tmp_path, monkeypatch):
     operations.approve(run.id)                 # the test plays the operator, once
     run = wait(("ended",), 900)
 
-    steps = open_store(home).steps.list(run.id)
+    steps = open_store(home).query("steps", {"run_id": run.id})
     assert run.outcome == "accepted", f"{run.outcome}: {run.reason}"
     assert [s.name for s in steps] == ["plan", "baseline", "write_tests", "red", "build", "test",
                                        "architecture_review", "document", "review", "finish"]

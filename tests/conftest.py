@@ -1,6 +1,7 @@
 """Shared fixtures, and the rule that every test names the requirement it covers (constitution S8)."""
 import subprocess
 
+from factory import records
 import pytest
 
 
@@ -74,7 +75,7 @@ def in_process(fake):
     from factory import driver
 
     def launcher(store, run, state, step):
-        store.runs.set_state(run.id, state, current_step=step)
+        records.set_state(store, run.id, state, current_step=step)
         driver.advance(store, run.id, adapter=fake)
 
     return launcher

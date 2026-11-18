@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from factory import operations, proc
+from factory import operations, proc, records
 from factory.store import open_store
 from tests.conftest import PLAN
 
@@ -31,7 +31,7 @@ def detached(tmp_path, monkeypatch, home, target):
     use.notifications = tmp_path / "notifications.txt"
     use.home, use.target = home, target
     yield use
-    for run in open_store(home).runs.all():   # leave nothing behind, whatever the test did
+    for run in open_store(home).query("runs", order="-id", limit=20):   # leave nothing behind, whatever the test did
         proc.stop_group(run.child_pgid, grace=0.5)
         if run.driver_pid:
             proc.stop_group(run.driver_pid, grace=0.5)
@@ -48,7 +48,7 @@ def wait_for(condition, seconds=15.0, what="the condition"):
 
 
 def current(home, run_id):
-    return open_store(home).runs.get(run_id)
+    return open_store(home).get("runs", run_id)
 
 
 @pytest.mark.fr("FR-005")
@@ -69,7 +69,7 @@ def test_request_returns_at_once_and_the_plan_arrives_without_the_operator(detac
                    what="the run to wait for approval")
     assert (run.driver_pid, run.driver_started, run.child_pgid) == (None, None, None)
     assert (detached.home / "runs" / str(run.id) / "driver.log").exists()
-    assert open_store(detached.home).plans.current(run.id).text == PLAN["plan"]
+    assert records.current_plan(open_store(detached.home), run.id).text == PLAN["plan"]
     wait_for(lambda: proc.started_at(driver_pid) is None, what="the driver process to exit")
     assert not proc._signal_group(child_group, 0), "the plan step's process group is still alive"
     assert "plan ready" in detached.notifications.read_text()
@@ -92,7 +92,7 @@ def test_stop_ends_everything_the_run_started_and_keeps_its_record(detached):
     run = approved_and_blocked(detached, [{"envelope": PLAN}, {"block": True}])
     assert run.state == "working" and run.current_step == "write_tests"
     driver_pid, started, child_group = run.driver_pid, run.driver_started, run.child_pgid
-    recorded = len(open_store(detached.home).events.after(run.id, limit=5000))
+    recorded = len(records.events_after(open_store(detached.home), run.id, limit=5000))
 
     stopped = operations.stop(run.id)
 
@@ -100,8 +100,8 @@ def test_stop_ends_everything_the_run_started_and_keeps_its_record(detached):
     assert not proc.is_alive(driver_pid, started), "the driver is still running"
     assert not proc._signal_group(child_group, 0), "the step's process group is still running"
     store = open_store(detached.home)
-    assert [s.name for s in store.steps.list(run.id)] == ["plan", "baseline", "write_tests"]
-    assert len(store.events.after(run.id, limit=5000)) >= recorded
+    assert [s.name for s in store.query("steps", {"run_id": run.id})] == ["plan", "baseline", "write_tests"]
+    assert len(records.events_after(store, run.id, limit=5000)) >= recorded
     assert f"Run {run.id}: needs-me|stopped by operator" in detached.notifications.read_text()
     with pytest.raises(operations.Refused, match="not running"):
         operations.stop(run.id)
@@ -158,7 +158,7 @@ def test_a_killed_driver_is_noticed_and_its_orphaned_step_is_stopped(detached):
     import signal
     run = approved_and_blocked(detached, [{"envelope": PLAN}, {"block": True}])
     driver_pid, started, child_group = run.driver_pid, run.driver_started, run.child_pgid
-    recorded = len(open_store(detached.home).events.after(run.id, limit=5000))
+    recorded = len(records.events_after(open_store(detached.home), run.id, limit=5000))
 
     os.kill(driver_pid, signal.SIGKILL)                       # no chance to clean up
     wait_for(lambda: not proc.is_alive(driver_pid, started), what="the driver to die")
@@ -169,7 +169,7 @@ def test_a_killed_driver_is_noticed_and_its_orphaned_step_is_stopped(detached):
     assert (seen.state, seen.outcome, seen.reason) == ("ended", "needs-me", "interrupted")
     assert not proc._signal_group(child_group, 0), "the orphaned step is still running"
     store = open_store(detached.home)
-    assert len(store.events.after(run.id, limit=5000)) >= recorded
-    assert [s.name for s in store.steps.list(run.id)] == ["plan", "baseline", "write_tests"]
+    assert len(records.events_after(store, run.id, limit=5000)) >= recorded
+    assert [s.name for s in store.query("steps", {"run_id": run.id})] == ["plan", "baseline", "write_tests"]
     assert f"Run {run.id}: needs-me|interrupted" in detached.notifications.read_text()
     assert operations.status()[0].run.state == "ended"

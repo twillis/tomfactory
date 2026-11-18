@@ -1,7 +1,7 @@
 """Ideals: stated once by the operator, and every run is held to them (Story 4)."""
 import pytest
 
-from factory import cli, config, operations
+from factory import cli, config, operations, records
 from factory.store import open_store
 from tests.conftest import PLAN
 from tests.test_cycle import REVIEW, cycle, script  # noqa: F401  (cycle is a fixture)
@@ -26,7 +26,7 @@ def test_stated_ideals_reach_the_plan_the_build_and_the_review_and_are_kept_on_t
         assert IDEAL in sent[step] and NONE_STATED not in sent[step], f"the {step} prompt lacks the ideals"
     assert run.ideals == IDEAL + "\n"
     assert operations.show(run.id).run.ideals == IDEAL + "\n"
-    assert store.plans.current(run.id).ideals_addressed == PLAN["ideals_addressed"]
+    assert records.current_plan(store, run.id).ideals_addressed == PLAN["ideals_addressed"]
 
 
 @pytest.mark.fr("FR-023")
@@ -69,8 +69,8 @@ def test_a_broken_ideal_can_never_be_accepted(cycle, home):
                                   "ideals_broken": ["layers are mixed"]}}
     run, fake, store, _ = cycle(script(review=[contradictory] * 3))
     assert run.outcome == "needs-me" and "review" in run.reason and "layers are mixed" in run.reason
-    assert [s.failure for s in store.steps.list(run.id) if s.name == "review"] == ["malformed"] * 3
-    assert "finish" not in [s.name for s in store.steps.list(run.id)]
+    assert [s.failure for s in store.query("steps", {"run_id": run.id}) if s.name == "review"] == ["malformed"] * 3
+    assert "finish" not in [s.name for s in store.query("steps", {"run_id": run.id})]
 
 
 @pytest.mark.fr("FR-021")
