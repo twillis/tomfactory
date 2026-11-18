@@ -2,14 +2,27 @@
 
 The run store is everything the factory keeps: one SQLite file, `factory.db`, and a folder of per-run files, both in the factory's home directory (`~/.tomfactory` or `TOMFACTORY_HOME`). The factory is the only writer. The observability app and any other reader open the database read-only.
 
-Inside the factory, **all persistence goes through `factory/store.py`** (constitution S3). It exposes five repos: `runs`, `plans`, `steps`, `events` — one per table below — and `files`, which owns every per-run file. No other module issues SQL or opens a file under the home directory.
+Inside the factory, **all persistence goes through one gateway** in `factory/store.py` (constitution S3). The gateway has five operations, and each takes a table:
 
-The database schema is the contract between the factory and the observability app. Changing it is a breaking change to the app. `tests/test_store.py` exercises it round trip, including the follow query.
+| Operation | Returns |
+|-----------|---------|
+| `insert(table, row)` | the stored row |
+| `get(table, key)` | one row, by its primary key |
+| `query(table, where, order, limit)` | rows |
+| `update(table, where, changes)` | the rows it changed |
+| `delete(table, where)` | how many it removed |
+
+It learns each table's columns from the database's own catalog, so a new table needs its DDL and nothing else: no class and no methods. `gateway.files` owns every per-run file. No other module issues SQL or opens a file under the home directory.
+
+The database schema is the contract between the factory and the observability app. Changing it is a breaking change to the app. `tests/test_store.py` exercises it.
+
+*Revised 2026-11-18: the first version had a repo class and a data class per table. The operator asked for a gateway like bttr's; see `changes/2026-11-18-store-gateway.md` and research.md R19.*
 
 ## Opening it
 
 - The factory opens the database in WAL mode, so readers never block the writer and the writer never blocks readers.
 - Readers must open it read-only and must not hold long transactions.
+- The schema carries a version stamp (`PRAGMA user_version`, currently 2). The factory refuses a home made by an earlier version, with a message, instead of misreading it.
 
 ## Tables
 
@@ -19,61 +32,51 @@ CREATE TABLE runs (
     request         TEXT    NOT NULL,
     target          TEXT    NOT NULL,
     base_commit     TEXT    NOT NULL,
-    branch          TEXT,                 -- set in the creating transaction
-    workspace       TEXT,                 -- set in the creating transaction
-    state           TEXT    NOT NULL CHECK (state IN
-                      ('planning','awaiting_approval','working','ended')),
-    current_step    TEXT,                 -- the step being run, or to run next
+    branch          TEXT,
+    workspace       TEXT,
+    state           TEXT    NOT NULL CHECK (state IN ('planning','awaiting_approval','working','ended')),
+    current_step    TEXT,
     outcome         TEXT    CHECK (outcome IN ('accepted','rejected','needs-me')),
     reason          TEXT,
     ideals          TEXT    NOT NULL DEFAULT '',
     attempt_limit   INTEGER NOT NULL DEFAULT 3,
-    driver_pid      INTEGER,              -- the driver process, while one is running
-    driver_started  TEXT,                 -- that process's start time, to tell it from a reused pid
-    child_pgid      INTEGER,              -- the process group of the step's child, while one is running
+    driver_pid      INTEGER,
+    driver_started  TEXT,
+    child_pgid      INTEGER,
     created_at      TEXT    NOT NULL,
     ended_at        TEXT,
     CHECK ((state = 'ended') = (outcome IS NOT NULL))
 );
-
--- At most one run that has not ended (FR-033).
 CREATE UNIQUE INDEX one_open_run ON runs ((state != 'ended')) WHERE state != 'ended';
-
 CREATE TABLE plans (
     run_id            INTEGER NOT NULL REFERENCES runs(id),
     version           INTEGER NOT NULL,
     text              TEXT    NOT NULL,
-    ideals_addressed  TEXT    NOT NULL,   -- JSON list
-    conflicts         TEXT    NOT NULL,   -- JSON list
+    ideals_addressed  JSON TEXT NOT NULL,
+    conflicts         JSON TEXT NOT NULL,
     comment           TEXT,
-    decision          TEXT    NOT NULL CHECK (decision IN
-                        ('pending','approved','revised','abandoned')),
+    decision          TEXT    NOT NULL CHECK (decision IN ('pending','approved','revised','abandoned')),
     created_at        TEXT    NOT NULL,
     PRIMARY KEY (run_id, version)
 );
-
--- At most one approved plan per run.
 CREATE UNIQUE INDEX one_approved_plan ON plans (run_id) WHERE decision = 'approved';
-
 CREATE TABLE steps (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id         INTEGER NOT NULL REFERENCES runs(id),
     name           TEXT    NOT NULL,
     kind           TEXT    NOT NULL CHECK (kind IN ('agent','code')),
-    persona        TEXT,                 -- name of the persona, for agent steps
-    attempt        INTEGER NOT NULL,     -- 1, 2, 3 … for this step name in this run
-    asked          TEXT    NOT NULL,     -- the full prompt, or the command, or '' for a step with nothing to ask
-    produced       TEXT,                 -- JSON: the envelope, or a code step's output summary
-    checks         TEXT,                 -- JSON list of {"name","passed","note"}, in the order run
-    passed         INTEGER,              -- 1, 0, or NULL while running
-    failure        TEXT    CHECK (failure IN
-                     ('timeout','error','guard','malformed','check')),
+    persona        TEXT,
+    attempt        INTEGER NOT NULL,
+    asked          TEXT    NOT NULL,
+    produced       JSON TEXT,
+    checks         JSON TEXT,
+    passed         BOOLEAN,
+    failure        TEXT    CHECK (failure IN ('timeout','error','guard','malformed','check')),
     started_at     TEXT    NOT NULL,
     ended_at       TEXT,
-    tokens         TEXT,                 -- JSON object
+    tokens         JSON TEXT,
     cost_estimate  REAL
 );
-
 CREATE TABLE events (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id    INTEGER NOT NULL REFERENCES runs(id),
@@ -81,31 +84,45 @@ CREATE TABLE events (
     at        TEXT    NOT NULL,
     kind      TEXT    NOT NULL,
     summary   TEXT    NOT NULL,
-    payload   TEXT    NOT NULL           -- JSON object
+    payload   JSON TEXT NOT NULL
 );
-
 CREATE INDEX events_by_run ON events (run_id, id);
 CREATE INDEX steps_by_run  ON steps  (run_id, id);
 ```
 
+A column typed `JSON TEXT` holds JSON text; the gateway hands it back parsed. A column typed `BOOLEAN` holds 1 or 0; the gateway hands it back as true or false. To any other reader they are text and a number.
+
 All timestamps are UTC in ISO 8601 form, for example `2026-11-18T21:04:05Z`.
 
-## What the repos return
+## Rows
 
-Each repo returns typed records, not bare dictionaries (constitution S5). They are dataclasses defined in `factory/store.py` — `Run`, `Plan`, `StepRecord`, `Event` — with one field per column, the field's type, and the allowed values spelled out for `state`, `outcome`, `decision`, `kind` and `failure`. JSON columns arrive already parsed. `dataclasses.asdict` gives the plain form the command line prints as JSON.
+The gateway returns rows as plain mappings from column name to value (constitution S5: data, with its types and constraints coming from the catalog and the schema's own `CHECK`s, not from a class per table). `row["state"]` and `row.state` are the same thing. A row is JSON as it stands.
 
-## Rules the repos keep
+## Conditions
 
-| Rule | Kept by |
-|------|---------|
-| Creating a run inserts the row and sets `branch` and `workspace`, which contain the new id, in one transaction | `runs.create` |
-| Branch name: `factory/<id>-<slug>`. The slug is the request's first five words, lower-cased, every run of characters other than `a–z` and `0–9` replaced by `-`, trimmed of `-`, cut to 40 characters; `run` if that leaves nothing | `runs.create` |
-| Changing a run's state writes a `run_state` event. The caller sets the state; the repo keeps the history | `runs.set_state`, `runs.end` |
-| Ending a run sets `state`, `outcome`, `reason` and `ended_at` together and clears `driver_pid`, `driver_started` and `child_pgid` | `runs.end` |
-| A step's attempt number is one more than the number of earlier records with the same run and name | `steps.start` |
-| An event's `id` only increases | `events.add` |
+Which rows an operation applies to is said with values, never with SQL text:
 
-The two unique indexes are a backstop. The rules "one open run" and "one approved plan" are decided in `factory/operations.py`, where the operator sees a readable refusal.
+- a mapping means "all of these are equal": `{"run_id": 7, "kind": "check"}`; a value of `None` means "is empty"
+- `eq`, `ne`, `gt`, `lt`, `is_null`, `not_null` make single conditions
+- a list combines several: `[{"run_id": 7}, gt("id", 120)]`
+
+Table and column names are checked against the catalog before anything is run. `update` and `delete` refuse to run with no conditions.
+
+## Where the rules are
+
+The gateway holds no rules about runs, plans or steps. Those are business rules and live in the control layer, in `factory/records.py`, each stated once and done through the five operations:
+
+| Rule | Function |
+|------|----------|
+| A run's branch is `factory/<id>-<slug>`. The slug is the request's first five words, lower-cased, every run of characters other than `a–z` and `0–9` replaced by `-`, trimmed of `-`, cut to 40 characters; `run` if that leaves nothing | `new_run`, `slug` |
+| Changing a run's state writes a `run_state` event | `set_state`, `end` |
+| A run ends once: `state`, `outcome`, `reason` and `ended_at` together, and `driver_pid`, `driver_started` and `child_pgid` cleared | `end` |
+| Only the fields that move as a run is carried on may be changed afterwards | `move` |
+| Plans are numbered 1, 2, 3 …; a decision is made on the current one | `add_plan`, `decide`, `current_plan` |
+| A step's attempt number is one more than the earlier records with the same run and name; a step finishes once | `start_step`, `finish_step`, `attempts` |
+| The follow query | `events_after` |
+
+Two rules are also held by the database itself, as a backstop: at most one run that has not ended, and at most one approved plan per run. Whether to refuse a second request is decided in `factory/operations.py`, where the operator sees a readable reason.
 
 ## The one query for following a run
 
@@ -123,7 +140,7 @@ A live view runs it every second or so with the last id it saw. A history view r
 
 | Kind | When | Written by |
 |------|------|------------|
-| `run_state` | The run changed state | the runs repo |
+| `run_state` | The run changed state | `records.set_state`, `records.end` |
 | `step_start`, `step_end` | A step began or finished | the driver |
 | `agent_text` | The agent wrote text | the driver, from the adapter |
 | `tool_call` | The agent used a tool; one event per use | the driver, from the adapter |
@@ -143,7 +160,7 @@ A live view runs it every second or so with the last id it saw. A history view r
 5. **A run that is `ended` never changes again.**
 6. **A run can be dead without yet being marked ended.** If the driver was killed, the row stays `planning` or `working` until the next `factory` command notices and ends it as needs-me, "interrupted". A reader that wants to be exact must treat a `planning` or `working` run as stopped when no process with `driver_pid` and `driver_started` exists. The observability app's first versions may simply show the state as stored.
 
-## Per-run files (the `files` repo)
+## Per-run files (`gateway.files`)
 
 | Path under the home directory | What it is | Written through |
 |-------------------------------|------------|-----------------|

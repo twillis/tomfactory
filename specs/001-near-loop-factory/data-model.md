@@ -2,7 +2,7 @@
 
 **Date**: 2026-11-18 | **Spec**: [spec.md](spec.md) | **Research**: [research.md](research.md)
 
-Everything the factory keeps lives in its home directory: one SQLite file, `factory.db`, and a folder of per-run files. Every read and write goes through one of five repos in `factory/store.py` — runs, plans, steps, events, files — and no other module issues SQL or opens a file there (constitution S3). The exact table definitions are in [contracts/run-store.md](contracts/run-store.md); this document explains what each record means and the rules it obeys.
+Everything the factory keeps lives in its home directory: one SQLite file, `factory.db`, and a folder of per-run files. Every read and write goes through one gateway in `factory/store.py`, which has five operations that take a table and no knowledge of any particular table. The rules about what a record must say live in `factory/records.py`. The exact table definitions are in [contracts/run-store.md](contracts/run-store.md); this document explains what each record means and the rules it obeys.
 
 ## Run
 
@@ -30,7 +30,7 @@ One attempt to carry out one request.
 
 - Only one run may be un-ended at a time (FR-033). `operations.request` refuses with a readable reason; a unique index is the backstop.
 - `outcome`, `reason` and `ended_at` are set together, exactly once, by the single end-of-run routine (FR-015).
-- Changing a run's state through the runs repo also writes a `run_state` event. The caller sets the state; the repo keeps the history (constitution S3's status-history case).
+- Changing a run's state writes a `run_state` event. This is a rule of the control layer (`records.set_state`), not of the data layer.
 - A run in `planning` or `working` has a live driver. The process fields are written in the same update that sets the state, and cleared in the same update that sets `awaiting_approval` or `ended`. A run whose state says a driver is running, but for which no process with that id and start time exists, is ended as `needs-me`, reason "interrupted", and its recorded child process group is stopped (FR-029).
 
 ### Run states

@@ -27,10 +27,12 @@ spec kit to review later. His reasons are quoted in research.md, R19.
 Written first and seen to fail: `tests/test_store.py` (the gateway, including "a new table
 needs no code") and `tests/test_records.py` (the moved rules). 224 tests pass.
 
-## Still to bring into line (not done: the usage limit was reached)
+## Documents brought into line (same day)
 
-- `contracts/run-store.md` still describes five repos and typed records.
-- `plan.md` (S3 and S5 evidence, layer table), `data-model.md` and `README.md` (file
-  table) do not yet mention `records.py` or the gateway.
-- Constitution S5 was read during the build as "typed records"; this change follows the
-  bttr answer instead (types come from the catalog). That reading should be confirmed.
+`contracts/run-store.md` (regenerated from the code's own DDL), `plan.md` (S3 and S5 evidence, the layer table, the file list), `data-model.md` and `README.md`.
+
+## For spec kit to review
+
+- Constitution S5 was read during the build as "typed records". This change follows the bttr answer instead: types and constraints come from the catalog and the schema. The operator agreed ("typed recs not necessary json is fine"). If S5's wording should say so, that is a constitution amendment.
+- Constitution S3 says a repo is matched "by archetype or table". There are no archetypes here: one gateway serves every table, and the one archetype-like behaviour (a status change writing history) is a control-layer rule. The operator's stated reason: table-specific repo operations are "business logic hiding in there".
+- Rows allow access by name (`run.state`) as well as by key. It is a plain mapping underneath.

@@ -258,11 +258,12 @@ The rest of the code carries those decisions out and decides nothing:
 | `workflow.py` | control | **The rules** |
 | `driver.py` | control | Carries one run forward, a step at a time |
 | `checks.py` | control | The checks applied to each step's result |
+| `records.py` | control | The rules about what a run's record must say |
 | `agent.py` | effect | The only code that knows which agent program is used |
 | `workspace.py` | effect | Git: the run's checkout, commits, undo |
 | `proc.py` | effect | Runs a child process with a time limit; stops process groups |
 | `notify.py` | effect | The desktop notification |
-| `store.py` | data | Everything the factory keeps |
+| `store.py` | data | Everything the factory keeps, behind one gateway: insert, get, query, update, delete on any table |
 | `config.py` | data | Where things are; the target's settings; your ideals |
 
 Read them in this order: `workflow.py`, `driver.py`, `checks.py`, `operations.py`, then the

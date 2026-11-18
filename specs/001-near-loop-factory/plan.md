@@ -20,7 +20,7 @@ The factory's own cycle does not use spec kit. Spec kit is the method being used
 
 **Primary Dependencies**: None at run time (standard library only). The official `claude` command (Claude Code 2.1.x) is the agent program, started as a child process. `git` and `notify-send` are used as external commands.
 
-**Storage**: One SQLite file (`factory.db`, WAL mode) plus per-run files, all under the factory's home directory (`~/.tomfactory`, or `TOMFACTORY_HOME`). All of it goes through five repos in `store.py`.
+**Storage**: One SQLite file (`factory.db`, WAL mode) plus per-run files, all under the factory's home directory (`~/.tomfactory`, or `TOMFACTORY_HOME`). All of it goes through one gateway in `store.py`.
 
 **Testing**: `pytest`, run with `uv`. The workflow is tested end to end against a fake agent adapter, in-process and with a real detached driver, so the tests need no subscription usage. Tests marked `live` use the real agent program and desktop and run on request.
 
@@ -32,7 +32,7 @@ The factory's own cycle does not use spec kit. Spec kit is the method being used
 
 **Constraints**: The factory's own Python, excluding tests, personas and prompts, stays under 2,000 non-blank lines, enforced by a test (SC-007); tests, personas and prompts are not counted. No agent step has a shell. Every child process runs in its own process group with a time limit, and that group is recorded on the run so it can be stopped from outside. Only `factory/agent.py` may refer to the agent program or its tool names (FR-041). No Microsoft tools (constitution III).
 
-**Scale/Scope**: One operator, one machine, one run at a time, tens of runs. Ten steps, six personas, eleven modules.
+**Scale/Scope**: One operator, one machine, one run at a time, tens of runs. Ten steps, six personas, twelve modules.
 
 ## Constitution Check
 
@@ -55,9 +55,9 @@ The constitution is version 1.3.0: copied from `bttr_rs` (1.2.1) on 2026-11-18 a
 |------|--------|----------|
 | S1. Three layers; only the differentiating logic is left to read | Pass | Every module has a named layer and responsibility; see "Layers" below. The control layer is divided into five named parts, not one place. Adding a step requires no change to the data or presentation layers, and a test asserts it. |
 | S2. Discrete under fuzzy | Pass for writes; reads to be established | Agents are the fuzzy layer. They act only through two declared capabilities, `read` and `read+edit`, on the run's checkout. They have no shell and cannot write to the store, git, the test command or the factory. Whether the agent program can be stopped from *reading* outside its checkout is the spike's first question (T001 b). If it cannot, an agent can read the store file, and this row becomes a stated limit for the operator to rule on, recorded in research.md and the README. When an agent's outcome is unreliable, the remedy in this design is always a code check. |
-| S3. Data access through a repo, matched by archetype or table | Pass | `store.py` exposes five repos: runs (an entity with a status), plans (versioned children of a run), steps (attempt records), events (an append-only log), and files (every per-run file). The runs repo is the status-history case: the caller sets a state and the repo writes the `run_state` event. No other module issues SQL or opens a file under the home directory; the adapter and the process runner are handed sinks and open files. |
+| S3. Data access through a repo, matched by archetype or table | Pass | `store.py` is one gateway with five operations that take a table (insert, get, query, update, delete), reading each table's columns from the database catalog. No per-table class exists. `gateway.files` owns every per-run file. No other module issues SQL or opens a file under the home directory. The rules that were once inside per-table repos — including the status-history rule, that a state change writes its own event — are in the control layer (`records.py`), by the operator's ruling that table-specific repo operations are business logic. *Revised 2026-11-18; see `changes/2026-11-18-store-gateway.md`.* |
 | S4. The resource coordinates | Pass, with one limit the operator accepted | The Run is the resource. `operations.py` holds one function per operation on it; each reads top to bottom as resolve the run, check its state, perform the repo operations. Domain rules live there and in `workflow.py`, never in `store.py` or `cli.py`. **Limit**: S4 says a resource is resolved from a path; a command-line tool with one resource type resolves a run from its id. The operator was shown this limit and said to proceed (2026-11-18). The driver, which carries an operation forward after the command returns, performs repo operations too; it is part of the control layer and names them in line. |
-| S5. Presentation is described, not bound to a medium | Pass | Every operation returns typed records — `Run`, `Plan`, `StepRecord`, `Event` — whose fields carry their types and allowed values. `cli.py` is one mediator that turns them into text or JSON; the observability app is a second, over the same schema. No function below `cli.py` returns formatted text. |
+| S5. Presentation is described, not bound to a medium | Pass | Every operation returns plain data: rows as mappings, whose types and allowed values come from the catalog and the schema's own constraints, not from a class per table. `cli.py` is one mediator that turns them into text or JSON; the observability app is a second, over the same schema. No function below `cli.py` returns formatted text. *Revised 2026-11-18: the first version used a data class per table, which the operator did not want.* |
 | S6. Any language the operator and robot can align on | Pass | Python, chosen by the operator for this stage. |
 | S7. Always leave room to extend and specialise | Pass | Every derived behaviour names where it is overridden, and safety checks are applied by the driver whatever an entry says. See the table below. |
 | S8. Every functional requirement has tests that fail first | Pass | Every test names the requirement it covers, and collection refuses an unmarked test. `scripts/traceability.py` fails while any requirement is named by no test. tasks.md places each requirement's tests, seen to fail, ahead of its code, including the live ones. See "How each requirement is tested". |
@@ -66,13 +66,14 @@ The constitution is version 1.3.0: copied from `bttr_rs` (1.2.1) on 2026-11-18 a
 
 | Layer | Module | Responsible for |
 |-------|--------|-----------------|
-| Presentation | `cli.py` | Parsing commands; rendering typed records as text or JSON |
+| Presentation | `cli.py` | Parsing commands; rendering the rows it is handed as text or JSON |
 | Control: operations | `operations.py` | What the operator can do to a run, and when it is refused |
 | Control: rules | `workflow.py` | The step table, and what happens after each step |
 | Control: execution | `driver.py` | Carrying one run forward; the single end-of-run routine |
 | Control: verification | `checks.py` | The named checks applied to a step's result |
+| Control: record-keeping | `records.py` | The rules about what a run's record must say: branch naming, state history, a run ending once, plan and attempt numbering |
 | Control: effects | `agent.py`, `workspace.py`, `notify.py`, `proc.py` | One discrete action each on the outside world — run an agent, change the checkout, notify, run a child process. They decide nothing. |
-| Data | `store.py`, `config.py` | Everything kept (five repos); and reading the target's configuration and the ideals |
+| Data | `store.py`, `config.py` | Everything kept, behind one gateway; and reading the target's configuration and the ideals |
 
 ### S7: what is derived, where it is overridden, what cannot be dropped
 
@@ -138,7 +139,8 @@ factory/
 ├── workspace.py         # Effect: git — the checkout, commits, undo, fingerprint, snapshot
 ├── notify.py            # Effect: desktop notification
 ├── proc.py              # Effect: run a child process; stop a process group; liveness
-├── store.py             # Data: five repos and the typed records
+├── records.py           # Control: the rules about what a run's record must say
+├── store.py             # Data: one gateway with five operations; the DDL
 └── config.py            # Data: home directory, target configuration, ideals
 
 personas/                # Who carries out each agent step (three headings each)
@@ -240,7 +242,7 @@ Every test carries `@pytest.mark.fr("FR-nnn")`; collection refuses a test withou
 | FR-001 to FR-005 | `operations.py`; `WAIT` and `after_wait` in `workflow.py`; the detached launcher |
 | FR-006 to FR-013 | The step table in `workflow.py`; `checks.py` |
 | FR-014 | `proc.py`; the child process group recorded on the run; `end_run` |
-| FR-015 to FR-018 | `driver.end_run`, `notify.py`, the runs repo |
+| FR-015 to FR-018 | `driver.end_run`, `notify.py`, `records.end` |
 | FR-019 | `workspace.py` (worktree and branch per run) |
 | FR-020 to FR-024 | `config.py`, the `ideals` input in `driver.gather`, `envelope_valid`'s cross-field rule, the copy on the run |
 | FR-025 to FR-029 | `store.py`; `operations.reconcile` |
@@ -274,5 +276,5 @@ Every test carries `@pytest.mark.fr("FR-nnn")`; collection refuses a test withou
 | A `factory stop` command, not named in the spec | The spec's edge cases require that an operator can stop a run with nothing left running | Killing processes by hand leaves the run shown as in progress |
 | Transitions as data on the step entry | Adding a step must not mean editing a decision function, and the driver must name no step | A hand-written function per step was the first design; it made FR-037 false |
 | Five control parts instead of one | Constitution S1 forbids treating the control layer as one undivided place | A single engine module would mix rules, operations, execution, verification and effects |
-| Typed records and a files repo | Constitution S5 and S3, read strictly | Bare dictionaries and files opened where convenient were the first design |
+| A files owner on the gateway | Constitution S3, read strictly | Files opened wherever convenient were the first design |
 | The line limit raised from 1,000 to 1,500, then 2,000 | The four rows above add code, and so did reading and showing runs | The number is a stand-in for SC-007, which the operator measures by reading |
