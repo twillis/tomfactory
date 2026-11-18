@@ -20,6 +20,8 @@ Every step is one entry with these fields. Defaults are closed: an entry that sa
 | `on_fail` | What a failed step-specific check leads to: `Rework(step)` or `End(outcome)` | `End("needs-me")` |
 | `commit_after` | Commit the checkout to the run's branch when the step passes | no |
 | `speckit` | Spec kit commands this step follows where the target uses spec kit, for example `("specify", "plan")`. The factory's code runs their scripts; the agent is given their instructions. | none |
+| `routes` | For a step that judges: where each verdict other than `accept` leads — `Rework(step)`, `Replan(step)` or `End(outcome)` | none |
+| `revise_from` | For a step the run waits after: where "send it back" returns to. The start of the stage. | the step itself |
 | `advisory` | The step's failure is recorded but does not stop the run, and whatever it changed before failing is put back, so a half-written file cannot be committed by the next step. A change it may not make is still undone and still stops the run. | no |
 | `timeout` | Seconds; overrides the target's `step_timeout_seconds` | none |
 | `model` | Agent steps: passed to the adapter; unused in this stage | none |
@@ -54,6 +56,40 @@ The branch history of an accepted run therefore reads: tests, then the change, t
 | approve | continue at the waiting step's successor, here `baseline` |
 | revise, with a comment | run the waiting step again, here `plan` |
 | abandon | `End("rejected")`, reason "abandoned by operator" |
+
+## Two tables: the table is chosen by the codebase (FR-055)
+
+`workflow.table_for(spec_kit)` returns the plain table above for a codebase without spec kit, and the table below for one that has it. Both are data in `workflow.py`; the driver and the operations take whichever applies and name no step.
+
+| # | `name` | `persona` | spec kit stage | `may_change` | `on_pass` | notes |
+|---|--------|-----------|----------------|--------------|-----------|-------|
+| 1 | `specify` | `analyst` | specify | spec | `clarify` | commits |
+| 2 | `clarify` | `analyst` | clarify | spec | `WAIT` | commits; `revise_from="specify"`. First approval: the specification |
+| 3 | `plan` | `planner` | plan | spec | `tasks` | commits |
+| 4 | `tasks` | `planner` | tasks | spec | `analyze` | commits |
+| 5 | `analyze` | `reviewer` | analyze, checklist | nothing | `WAIT` | `revise_from="plan"`. Second approval: plan and tasks |
+| 6–10 | `baseline`, `write_tests`, `red`, `build`, `test` | as in the plain table | implement, for the two writers | as in the plain table | | |
+| 11–12 | `architecture_review`, `document` | as in the plain table | — | | `document` leads to `converge` | |
+| 13 | `converge` | `reviewer` | converge | nothing | `finish` | routes: `rework` → `Rework("build")`, `replan` → `Replan("specify")`, `reject` → `End("rejected")` |
+| 14 | `finish` | — | — | nothing | `END_ACCEPTED` | |
+
+### A step that judges (FR-058, FR-059)
+
+A step with `routes` gives a verdict in its envelope. The check `verdict` is applied to it automatically: it passes on `accept`, and otherwise fails with the reasons as its note. `next_step` then follows the route for that verdict:
+
+| Route | What happens |
+|-------|--------------|
+| `Rework(step)` | That step runs again, told what was found. Bounded by the attempt limit. |
+| `Replan(step)` | The driver sets the build aside, and the run returns to that step in the planning stage, told what was found. It reaches a wait again. Bounded by the attempt limit on that step. |
+| `End(outcome)` | The run ends. |
+
+### Setting a build aside (FR-060)
+
+On `Replan`, the driver commits whatever is in the checkout, puts a branch `<run's branch>-aside-<n>` on it, and returns the checkout to the commit recorded at the last approval (an `approved` event carries it). A `set_aside` event names the branch. The run then replans; after the operator approves again the cycle starts from `baseline` on the newly approved documents, so tests are again written and seen to fail before the code.
+
+### Waiting more than once (FR-057)
+
+Any step may have `on_pass=WAIT`. `after_wait("approve", …)` continues at the next entry in the table; `after_wait("revise", …)` returns to the step's `revise_from`. A run's state is `planning` up to and including the last waiting step, and `working` after it.
 
 ## Checks
 

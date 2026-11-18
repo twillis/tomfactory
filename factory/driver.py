@@ -24,7 +24,7 @@ import time
 from dataclasses import asdict
 
 from factory import agent, checks, config, notify, proc, records, speckit, workflow, workspace
-from factory.workflow import End, StepResult, Wait
+from factory.workflow import End, Replan, StepResult, Wait
 from factory.workspace import Workspace
 
 NO_IDEALS = "No ideals have been stated."
@@ -37,12 +37,12 @@ class Stopped(BaseException):
 def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_dir=None) -> None:
     """Carry a run forward from its current step until it waits or ends."""
     adapter = adapter or agent.get_adapter()
-    steps = steps or workflow.STEPS
     personas_dir = pathlib.Path(personas_dir or config.PERSONAS_DIR)
     prompts_dir = pathlib.Path(prompts_dir or config.PROMPTS_DIR)
     run = store.get("runs", run_id)
     checkout = Workspace(run.workspace, run.target, run.branch, run.base_commit)
     settings = config.read_target_config(run.target, run.base_commit)
+    steps = steps or workflow.table_for(speckit.available(checkout.path))
     try:
         while True:
             run = store.get("runs", run_id)
@@ -58,6 +58,8 @@ def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_
             if isinstance(then, Wait):
                 wait_for_operator(store, run, step, envelope or {})
                 return
+            if isinstance(then, Replan):        # the requirement changed: back to planning, build set aside
+                set_aside(store, run, checkout)
             records.move(store, run_id, current_step=then.step)
     except Stopped:
         end_run(store, run_id, "needs-me", "stopped by operator")
@@ -138,7 +140,8 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
                 if result.passed:
                     result = StepResult(False, "guard", outcome)
         if result.passed:
-            own = (["envelope_valid"] if step.kind == "agent" else []) + list(step.checks)
+            own = ((["envelope_valid"] if step.kind == "agent" else []) + list(step.checks)
+                   + (["verdict"] if step.routes else []))
             for name in own:
                 outcome = check(name)
                 if not outcome.passed:
@@ -147,6 +150,8 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
                     else:
                         result = StepResult(False, "malformed" if name == "envelope_valid" else "check", outcome)
                     break
+        if reply is not None and isinstance(reply.envelope, dict):
+            result.verdict = reply.envelope.get("verdict")
 
     if step.advisory and result.failure not in (None, "guard"):
         checkout.discard(context.changed)   # a failed advisory step leaves nothing behind for the next to commit
@@ -221,10 +226,19 @@ def fill(prompt_text, inputs) -> str:
 
 def wait_for_operator(store, run, step, envelope) -> None:
     """Store what the operator must decide on, mark the run as waiting, and say so."""
-    records.add_plan(store, run.id, envelope.get("plan") or json.dumps(envelope),
+    records.add_plan(store, run.id, envelope.get("plan") or envelope.get("summary") or json.dumps(envelope),
                     envelope.get("ideals_addressed") or [], envelope.get("conflicts") or [])
     records.set_state(store, run.id, "awaiting_approval", driver_pid=None, driver_started=None, child_pgid=None)
     tell(store, run.id, f"Run {run.id}: {step.name} ready — waiting for you", " ".join(run.request.split()[:12]))
+
+
+def set_aside(store, run, checkout) -> None:
+    """Keep what this run built on a side branch, and put its checkout back to what was last approved."""
+    approvals = [event for event in store.query("events", {"run_id": run.id, "kind": "approved"})]
+    back_to = approvals[-1].payload["commit"] if approvals else run.base_commit
+    aside = checkout.set_aside(back_to)
+    records.event(store, run.id, "set_aside", f"the build so far is kept on {aside}",
+                  {"branch": aside, "back_to": back_to})
 
 
 def end_run(store, run_id, outcome, reason):

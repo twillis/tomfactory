@@ -39,6 +39,19 @@ What failed, if anything:
 
 {{failure}}
 
+## Spec kit, if this codebase uses it
+
+{{speckit_instructions}}
+
+### What the factory has set up
+
+{{speckit_context}}
+
+If both of those say (none), this codebase does not use spec kit: ignore this section.
+
+Where spec kit is in use, the task list in the feature directory says what to do and in what
+order; do the tasks that are yours, and do not mark tasks done.
+
 ## What to produce
 
 The code that makes the tests pass, following the plan and the ideals.

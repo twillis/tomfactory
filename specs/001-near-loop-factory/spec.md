@@ -236,6 +236,15 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 
 - **FR-054**: Where the target codebase has its own constitution, every agent step that is given the operator's ideals MUST also be given that constitution, and MUST be told the order of precedence: the target codebase's constitution first, then the operator's ideals, then spec kit's own instructions. An unfilled constitution template counts as none.
 
+**A cycle that follows spec kit's stages** (where the target uses spec kit)
+
+- **FR-055**: The steps a run goes through MUST be chosen by the target codebase: one that uses spec kit follows spec kit's stages, and one that does not runs the plain cycle unchanged.
+- **FR-056**: Each spec kit stage that is part of a run MUST be carried out by a persona following that stage's own instructions: specify and clarify by an analyst, plan and tasks by the planner, analyze and checklist by the reviewer, implement by the test writer and the code writer, converge by the reviewer.
+- **FR-057**: A run MUST be able to wait for the operator more than once. On a spec kit target it MUST wait for approval of the specification, and again for approval of the plan and tasks. Sending work back at either point MUST return the run to the start of that stage.
+- **FR-058**: After the build, the factory MUST assess every difference between what was built and the approved documents as one of: unbuilt work, an implementation detail, or a change to the requirement.
+- **FR-059**: Unbuilt work MUST return the run to the build, within the attempt limit. An implementation detail MUST be recorded and MUST NOT stop or return the run. A change to the requirement MUST return the run to the planning stage and to the operator's approval.
+- **FR-060**: When a run returns to planning, what it had built MUST be set aside where the operator can find it, and the build MUST start again from the newly approved documents, so that tests are again written and seen to fail before the code.
+
 ### Key Entities
 
 - **Persona**: who carries out an agent step. Has a name and a written description. One persona may serve more than one step.

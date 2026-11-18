@@ -53,8 +53,9 @@ def test_inputs_and_envelopes_match_the_contract():
     assert {s.name: s.inputs for s in workflow.STEPS if s.kind == "agent"} == {
         "plan": ("request", "constitution", "ideals", "previous_plan", "comment", "failure",
                  "speckit_instructions", "speckit_context"),
-        "write_tests": ("request", "plan", "test_paths", "failure"),
-        "build": ("request", "plan", "constitution", "ideals", "test_files", "failure"),
+        "write_tests": ("request", "plan", "test_paths", "failure", "speckit_instructions", "speckit_context"),
+        "build": ("request", "plan", "constitution", "ideals", "test_files", "failure", "speckit_instructions",
+                  "speckit_context"),
         "review": ("request", "plan", "constitution", "ideals", "diff", "test_output"),
         "architecture_review": ("request", "plan", "constitution", "ideals", "diff", "docs_paths"),
         "document": ("request", "plan", "diff", "docs_paths"),
@@ -239,6 +240,6 @@ def test_an_advisory_step_that_changes_what_it_may_not_still_stops_the_run():
 
 
 @pytest.mark.fr("FR-051")
-def test_only_the_planner_is_given_spec_kit_commands_so_far():
-    assert {s.name: s.speckit for s in workflow.STEPS if s.speckit} == {"plan": ("specify", "plan")}
+def test_the_plain_cycle_names_no_spec_kit_command():
+    assert {s.name: s.speckit for s in workflow.STEPS if s.speckit} == {}       # the plain cycle uses none
     assert Step("x", "code", on_pass="y").speckit == ()

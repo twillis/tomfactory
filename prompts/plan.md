@@ -41,26 +41,18 @@ What was wrong with it, if anything:
 
 {{failure}}
 
-## If this codebase uses spec kit
-
-Spec kit's instructions for this step, if the codebase uses spec kit:
+## Spec kit, if this codebase uses it
 
 {{speckit_instructions}}
 
-What the factory has already set up for you:
+### What the factory has set up
 
 {{speckit_context}}
 
-If instructions are given above, follow them, with these differences. The scripts they
-mention have already been run by the factory, and their results are what is listed above;
-do not try to run anything. Write the specification and the plan, and the other documents
-the plan instructions call for, at the paths given, inside the feature directory. You
-cannot ask the operator questions: where the instructions say to ask, make an informed
-assumption and record it in the document. Skip any step about hooks or branches. In your
-envelope's `plan`, give a short summary and name the files you wrote, so those who build
-from the plan can find them.
+If both of those say (none), this codebase does not use spec kit: ignore this section.
 
-If nothing is given above, ignore this section and change no file.
+Where spec kit is in use, your envelope's `plan` is a short summary that names the files you
+wrote, so those who build from the plan can find them. Where it is not, change no file.
 
 ## What to produce
 

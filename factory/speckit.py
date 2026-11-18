@@ -53,12 +53,23 @@ def prepare(commands, checkout, request) -> dict:
     Returns {"instructions": the commands' own instruction text, from the target,
              "context": what the scripts set up, as paths relative to the checkout}.
     """
-    context, instructions = {}, []
+    context, instructions = {}, [PREFACE]
     for command in commands:
         context.update(RUNNERS[command](checkout, request))
         instructions.append(f"### /speckit-{command}\n\n"
                             + agent.command_instructions(checkout.path, f"speckit-{command}"))
     return {"instructions": "\n\n".join(instructions), "context": context}
+
+
+PREFACE = """Follow the spec kit instructions below as part of this step, with these differences.
+
+- The scripts they mention have already been run by the factory. What they set up is listed
+  under "What the factory has set up". Do not try to run anything: you have no shell.
+- Write only inside the feature directory, at the paths given, and only if this step may write.
+  If it may not, put what you would have written in your reply instead.
+- Where the instructions say to ask the user, make an informed assumption instead and record it
+  in the document, clearly marked as an assumption.
+- Skip any step about hooks, extensions or branches."""
 
 
 def _script(checkout, name, *args) -> dict:
@@ -106,4 +117,40 @@ def _plan(checkout, request) -> dict:
             "constitution_file": constitution if (checkout.path / constitution).exists() else None}
 
 
-RUNNERS = {"specify": _specify, "plan": _plan}
+def _tasks(checkout, request) -> dict:
+    """What /speckit-tasks's script does: the task list template, placed beside the plan."""
+    feature = _feature_of_this_run(checkout)
+    report = _script(checkout, "setup-tasks.sh", "--json")
+    tasks = checkout.path / feature / "tasks.md"
+    if not tasks.exists():                                      # never overwrite tasks being revised
+        template = report.get("TASKS_TEMPLATE_CONTENT") or pathlib.Path(report["TASKS_TEMPLATE"]).read_text()
+        if template.startswith("---"):          # the template's own header is not part of the document
+            template = template.split("---", 2)[2].lstrip()
+        tasks.write_text(template)
+    return {"feature_directory": feature, "tasks_file": f"{feature}/tasks.md",
+            "available_docs": report.get("AVAILABLE_DOCS", [])}
+
+
+def _prerequisites(*flags):
+    """A runner for the commands whose script only checks what exists and reports it."""
+    def run(checkout, request) -> dict:
+        report = _script(checkout, "check-prerequisites.sh", "--json", *flags)
+        found = {"feature_directory": str(pathlib.Path(report["FEATURE_DIR"]).relative_to(checkout.path.resolve()))}
+        if "AVAILABLE_DOCS" in report:
+            found["available_docs"] = report["AVAILABLE_DOCS"]
+        if "TEMPLATE_CONTENT" in report:
+            found["template"] = report["TEMPLATE_CONTENT"]
+        return found
+    return run
+
+
+RUNNERS = {     # the script each spec kit command calls, as its own instructions give it
+    "specify": _specify,
+    "clarify": _prerequisites("--paths-only"),
+    "plan": _plan,
+    "tasks": _tasks,
+    "checklist": _prerequisites("--template", "checklist-template"),
+    "analyze": _prerequisites("--require-spec", "--require-tasks", "--include-tasks"),
+    "implement": _prerequisites("--require-tasks", "--include-tasks"),
+    "converge": _prerequisites("--require-spec", "--require-tasks", "--include-tasks"),
+}

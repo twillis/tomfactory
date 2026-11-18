@@ -30,9 +30,11 @@ def test_all_six_personas_exist_with_the_three_headings():
     from factory import workflow
     named = {step.persona for step in workflow.STEPS if step.kind == "agent"}
     assert named == {"planner", "test_writer", "code_writer", "architect", "reviewer", "documenter"}
-    for name in named:
+    with_spec_kit = {step.persona for step in workflow.table_for(True) if step.kind == "agent"}
+    assert with_spec_kit == named | {"analyst"}             # spec kit's specify and clarify have their own persona
+    for name in with_spec_kit:
         sections(name)
-    assert {f.stem for f in config.PERSONAS_DIR.glob("*.md")} == named
+    assert {f.stem for f in config.PERSONAS_DIR.glob("*.md")} == with_spec_kit
 
 
 @pytest.mark.fr("FR-043")

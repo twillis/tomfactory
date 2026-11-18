@@ -142,7 +142,7 @@ def request(text, target, attempts=3, launcher=None) -> dict:
         raise Refused(f"run {open_run.id} has not ended ({open_run.state.replace('_', ' ')});"
                       " let it finish, or stop or abandon it, before making another request")
 
-    first = workflow.STEPS[0].name
+    first = workflow.table_for(speckit.available(target))[0].name
     run = records.new_run(store, text.strip(), target, base, ideals=config.read_ideals(),
                             attempt_limit=attempts, current_step=first)
     try:
@@ -165,26 +165,38 @@ def plan(run_id=None) -> dict:
     return current
 
 
-def approve(run_id=None, launcher=None) -> dict:
-    """Approve the waiting plan. The rest of the run needs nothing more from the operator."""
-    store = _open()
-    run = _waiting(store, run_id)
-    records.decide(store, run.id, "approved")
-    then = workflow.after_wait("approve", workflow.get(run.current_step))
-    (launcher or launch)(store, run, "working", then.step)
+def _table(run) -> list:
+    """The steps this run goes through, chosen by its codebase."""
+    return workflow.table_for(speckit.available(run.workspace))
+
+
+def _carry_on(store, run, decision, launcher) -> dict:
+    """After a decision at a wait: launch a driver at whatever step that decision leads to."""
+    table = _table(run)
+    then = workflow.after_wait(decision, workflow.get(run.current_step, table), table)
+    state = "planning" if workflow.is_planning(then.step, table) else "working"
+    (launcher or launch)(store, run, state, then.step)
     return store.get("runs", run.id)
 
 
+def approve(run_id=None, launcher=None) -> dict:
+    """Approve what is waiting. The run carries on to its next wait, or to its end, unattended."""
+    store = _open()
+    run = _waiting(store, run_id)
+    records.decide(store, run.id, "approved")
+    approved = Workspace(run.workspace, run.target, run.branch, run.base_commit).head()
+    records.event(store, run.id, "approved", f"approved at {run.current_step}", {"commit": approved})
+    return _carry_on(store, run, "approve", launcher)
+
+
 def revise(run_id=None, comment="", launcher=None) -> dict:
-    """Send the waiting plan back with a comment. A new version is written in the background."""
+    """Send what is waiting back with a comment. Its stage is done again, in the background."""
     store = _open()
     run = _waiting(store, run_id)
     if not comment.strip():
         raise Refused("say what to change: a plan is sent back with a comment")
     records.decide(store, run.id, "revised", comment=comment.strip())
-    then = workflow.after_wait("revise", workflow.get(run.current_step))
-    (launcher or launch)(store, run, "planning", then.step)
-    return store.get("runs", run.id)
+    return _carry_on(store, run, "revise", launcher)
 
 
 def abandon(run_id=None) -> dict:
@@ -192,7 +204,8 @@ def abandon(run_id=None) -> dict:
     store = _open()
     run = _waiting(store, run_id)
     records.decide(store, run.id, "abandoned")
-    then = workflow.after_wait("abandon", workflow.get(run.current_step))
+    table = _table(run)
+    then = workflow.after_wait("abandon", workflow.get(run.current_step, table), table)
     Workspace(run.workspace, run.target, run.branch, run.base_commit).remove()
     return driver.end_run(store, run.id, then.outcome, then.reason)
 

@@ -129,10 +129,33 @@ git merge factory/7-add-a-page-that-says           # take it, if you want it
 ### Spec kit, if the codebase uses it
 
 Create a codebase with `factory init-target --spec-kit ../my-app` and spec kit is set up in
-it. From then on the planner follows that codebase's own `/speckit-specify` and
-`/speckit-plan` instructions, and the plan you approve is real spec kit documents on the
-run's branch: `specs/<NNN-name>/spec.md` and `plan.md`. `factory plan` gives a summary and
-names them. Sending a plan back revises the same documents.
+it. A run on that codebase follows spec kit's own stages, each carried out by a persona
+following that stage's instructions from the codebase itself:
+
+| Stage | Persona | What it produces |
+|-------|---------|------------------|
+| `specify`, `clarify` | analyst | `spec.md` |
+| *wait* | you | **First approval: the specification** |
+| `plan`, `tasks` | planner | `plan.md` and its companions, `tasks.md` |
+| `analyze` (with spec kit's checklist) | reviewer | A check that spec, plan and tasks agree; changes nothing |
+| *wait* | you | **Second approval: the plan and tasks** |
+| `write_tests`, `build` | test writer, code writer | Following spec kit's implement stage, tests first |
+| `architecture_review`, `document` | architect, documenter | As in the plain cycle |
+| `converge` | reviewer | Is what was built what you approved? |
+
+The documents are on the run's branch under `specs/<NNN-name>/`. `factory plan` gives a
+summary of whatever is waiting for you and names the files. Sending work back at either
+approval returns the run to the start of that stage: the analyst for the specification, the
+planner for the plan.
+
+**What converge does with a difference.** After the build, the reviewer sorts each
+difference between what was built and what you approved:
+
+- *Unbuilt work* goes back to the build.
+- *An implementation detail* is recorded, and the run carries on. It does not come back to you.
+- *A change to the requirement* goes back to planning, and waits for you again. What had
+  been built is kept on a side branch (`factory/<run>-…-aside-1`) and the build starts again
+  from the documents you approve, tests first.
 
 **Whose rules win.** Where they disagree, the order is: the codebase's own constitution
 (`.specify/memory/constitution.md` in it) first, then your ideals, then spec kit's generic
@@ -140,12 +163,8 @@ instructions. Agents are given all three and told that order. A codebase whose c
 is still spec kit's blank template is treated as having none, so your ideals are the rules.
 
 No agent runs anything to do this. Spec kit's scripts are run by the factory's own code,
-and the planner is handed the instructions and what the scripts set up. The planner may
-write under `specs/` and nowhere else. A codebase without spec kit runs exactly as before.
-
-So far only the planner uses spec kit. The reviewer with `/speckit-analyze`, and the test
-writer and code writer with `/speckit-implement`, are designed but not built
-(`specs/001-near-loop-factory/changes/2026-11-18-speckit-steps.md`).
+and each persona is handed its stage's instructions and what the scripts set up. A codebase
+without spec kit runs the plain cycle, exactly as before.
 
 ### The architect and the backlog
 

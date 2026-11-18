@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS plans (
     created_at        TEXT    NOT NULL,
     PRIMARY KEY (run_id, version)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS one_approved_plan ON plans (run_id) WHERE decision = 'approved';
+DROP INDEX IF EXISTS one_approved_plan;     -- a run may now be approved more than once: spec, then plan
 CREATE TABLE IF NOT EXISTS steps (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id         INTEGER NOT NULL REFERENCES runs(id),

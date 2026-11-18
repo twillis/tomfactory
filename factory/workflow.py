@@ -6,7 +6,7 @@ database, no processes. To change what the factory does, change the table.
 
 The specification for this file is specs/001-near-loop-factory/contracts/workflow.md.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 KINDS = ("agent", "code")
 CAPABILITIES = ("read", "read+edit")
@@ -18,6 +18,12 @@ END_ACCEPTED = "END_ACCEPTED"   # as an on_pass: the run is finished and accepte
 @dataclass(frozen=True)
 class Rework:
     """Run a step again (an earlier one, or the same one), telling it what failed."""
+    step: str
+
+
+@dataclass(frozen=True)
+class Replan:
+    """Go back to the planning stage at this step. What was built is set aside first."""
     step: str
 
 
@@ -55,6 +61,8 @@ class Step:
     commit_after: bool = False          # commit the checkout when the step passes
     advisory: bool = False              # its failure is recorded but does not stop the run
     speckit: tuple = ()                 # spec kit commands this step follows, where the target uses spec kit
+    routes: dict = field(default_factory=dict)     # verdict -> Rework | Replan | End, for a step that judges
+    revise_from: str | None = None      # a waiting step: where "send it back" returns to; None means itself
     timeout: int | None = None          # seconds; None means the target's step_timeout_seconds
     model: str | None = None            # agent steps; unused in this stage
 
@@ -78,15 +86,16 @@ class StepResult:
     failure: str | None = None      # timeout | error | guard | malformed | check
     failed_check: object = None     # the CheckResult that failed, if a check did
     message: str = ""               # the agent program's message, for "error"
+    verdict: str | None = None      # what a judging step decided
 
 
 # ---- the table: what the factory does, in order ----
 
 STEPS: list[Step] = [
-    # Where the target uses spec kit, the plan is spec kit's own documents, written under specs/.
-    # Elsewhere "spec" allows nothing, so the planner changes no file.
+    # "spec" allows spec kit's documents under specs/ where the target uses spec kit, and nothing
+    # elsewhere: so in this plain cycle the planner changes no file.
     Step("plan", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass=WAIT,
-         commit_after=True, speckit=("specify", "plan"),
+         commit_after=True,
          inputs=("request", "constitution", "ideals", "previous_plan", "comment", "failure",
                  "speckit_instructions", "speckit_context"),
          envelope={"plan": "text", "ideals_addressed": "list", "conflicts": "list"}),
@@ -95,7 +104,7 @@ STEPS: list[Step] = [
 
     Step("write_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
          on_pass="red", checks=("tests_added", "edge_cases_stated"), on_fail=Rework("write_tests"),
-         inputs=("request", "plan", "test_paths", "failure"),
+         inputs=("request", "plan", "test_paths", "failure", "speckit_instructions", "speckit_context"),
          envelope={"summary": "text", "test_files": "list", "edge_cases": "list"}),
 
     Step("red", "code", on_pass="build", checks=("tests_fail_first",), on_fail=Rework("write_tests"),
@@ -103,7 +112,8 @@ STEPS: list[Step] = [
 
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
          on_pass="test",
-         inputs=("request", "plan", "constitution", "ideals", "test_files", "failure"),
+         inputs=("request", "plan", "constitution", "ideals", "test_files", "failure", "speckit_instructions",
+                 "speckit_context"),
          envelope={"summary": "text", "files_changed": "list"}),
 
     Step("test", "code", on_pass="architecture_review", checks=("tests_pass",), on_fail=Rework("build"),
@@ -140,7 +150,7 @@ def get(name, steps=None) -> Step:
 
 # ---- what happens next ----
 
-def next_step(step, result, attempts, limit) -> Run | Wait | End:
+def next_step(step, result, attempts, limit) -> Run | Wait | Replan | End:
     """Given how a step went, what the run does now. The whole decision logic, in order.
 
     `attempts` maps a step's name to how many times it has run in this run. An attempt is
@@ -158,11 +168,18 @@ def next_step(step, result, attempts, limit) -> Run | Wait | End:
     if result.failure == "malformed":
         return _rework(step.name, step, note, attempts, limit)
     if result.failure == "check":
-        if isinstance(step.on_fail, Rework):
-            return _rework(step.on_fail.step, step, note, attempts, limit)
-        if step.on_fail.outcome == "rejected":
+        judged = getattr(result.failed_check, "name", "") == "verdict"      # a judging step said where to go
+        route = (step.routes.get(result.verdict) if judged else None) or step.on_fail
+        if isinstance(route, Rework):
+            return _rework(route.step, step, note, attempts, limit)
+        if isinstance(route, Replan):
+            if attempts.get(route.step, 0) >= limit:
+                return End("needs-me", f"planning has already restarted at {route.step} {limit} times;"
+                                       f" the last reason, from {step.name}: {note}")
+            return route
+        if route.outcome == "rejected":
             return End("rejected", note)
-        return End(step.on_fail.outcome, f"the {step.name} step failed: {note}")
+        return End(route.outcome, f"the {step.name} step failed: {note}")
     if step.on_pass == WAIT:
         return Wait()
     if step.on_pass == END_ACCEPTED:
@@ -185,7 +202,67 @@ def after_wait(decision, step, steps=None) -> Run | End:
     if decision == "approve":
         return Run(table[table.index(step) + 1].name)   # the waiting step's successor
     if decision == "revise":
-        return Run(step.name)
+        return Run(step.revise_from or step.name)       # back to the start of the stage that is waiting
     if decision == "abandon":
         return End("rejected", "abandoned by operator")
     raise ValueError(f"a waiting run can be approved, revised or abandoned; not {decision!r}")
+
+
+# ---- the table for a codebase that uses spec kit: a persona for each of spec kit's stages ----
+
+KIT_INPUTS = ("speckit_instructions", "speckit_context")
+VERDICTS = ("accept", "rework", "replan", "reject")
+_plain = {entry.name: entry for entry in STEPS}
+
+SPEC_KIT_STEPS: list[Step] = [
+    Step("specify", "agent", persona="analyst", capabilities="read+edit", may_change="spec", on_pass="clarify",
+         commit_after=True, speckit=("specify",),
+         inputs=("request", "constitution", "ideals", "comment", "failure", *KIT_INPUTS),
+         envelope={"summary": "text", "assumptions": "list"}),
+
+    Step("clarify", "agent", persona="analyst", capabilities="read+edit", may_change="spec", on_pass=WAIT,
+         commit_after=True, speckit=("clarify",), revise_from="specify",       # first approval: the specification
+         inputs=("request", "constitution", "ideals", "failure", *KIT_INPUTS),
+         envelope={"plan": "text", "clarified": "list"}),
+
+    replace(_plain["plan"], on_pass="tasks", speckit=("plan",)),
+
+    Step("tasks", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass="analyze",
+         commit_after=True, speckit=("tasks",),
+         inputs=("request", "constitution", "ideals", "failure", *KIT_INPUTS),
+         envelope={"summary": "text"}),
+
+    Step("analyze", "agent", persona="reviewer", on_pass=WAIT, speckit=("analyze", "checklist"),
+         revise_from="plan",                                                   # second approval: plan and tasks
+         inputs=("request", "constitution", "ideals", "failure", *KIT_INPUTS),
+         envelope={"plan": "text", "findings": "list"}),
+
+    _plain["baseline"],
+    replace(_plain["write_tests"], speckit=("implement",)),
+    _plain["red"],
+    replace(_plain["build"], speckit=("implement",)),
+    _plain["test"],
+    _plain["architecture_review"],
+    replace(_plain["document"], on_pass="converge"),
+
+    # The scope assessment: is what was built what was approved? (FR-058, FR-059)
+    Step("converge", "agent", persona="reviewer", on_pass="finish", speckit=("converge",),
+         inputs=("request", "constitution", "ideals", "diff", "test_output", *KIT_INPUTS),
+         envelope={"verdict": VERDICTS, "unbuilt": "list", "details": "list", "requirement_changes": "list",
+                   "reasons": "list", "ideals_broken": "list"},
+         routes={"rework": Rework("build"), "replan": Replan("specify"), "reject": End("rejected")}),
+
+    _plain["finish"],
+]
+
+
+def table_for(spec_kit) -> list[Step]:
+    """The steps a run goes through: chosen by whether its codebase uses spec kit."""
+    return SPEC_KIT_STEPS if spec_kit else STEPS
+
+
+def is_planning(name, steps) -> bool:
+    """Is this step at or before the last point where the run waits for the operator?"""
+    names = [entry.name for entry in steps]
+    last_wait = max((i for i, entry in enumerate(steps) if entry.on_pass == WAIT), default=-1)
+    return names.index(name) <= last_wait

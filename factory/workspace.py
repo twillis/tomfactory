@@ -65,6 +65,20 @@ class Workspace:
         _git(self.path, "reset", "-q", "--hard", "HEAD")
         _git(self.path, "clean", "-fdq")
 
+    def head(self) -> str:
+        return _git(self.path, "rev-parse", "HEAD")[1].strip()
+
+    def set_aside(self, back_to) -> str:
+        """Keep everything since `back_to` on a side branch, and return the checkout to `back_to`."""
+        _git(self.path, "add", "-A")
+        _git(self.path, *AUTHOR, "commit", "-q", "--allow-empty", "-m", "factory: set aside")
+        taken = _git(self.target, "branch", "--list", f"{self.branch}-aside-*")[1].split()
+        aside = f"{self.branch}-aside-{len([name for name in taken if name not in '*+']) + 1}"
+        _git(self.path, "branch", aside)
+        _git(self.path, "reset", "-q", "--hard", back_to)
+        _git(self.path, "clean", "-fdq")
+        return aside
+
     def discard(self, names) -> None:
         """Put back just these files: a changed one to its last commit, a new one removed."""
         for name in names:

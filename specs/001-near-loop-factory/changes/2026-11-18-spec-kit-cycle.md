@@ -1,6 +1,6 @@
 # Design: a cycle that follows spec kit's stages (2026-11-18)
 
-**Status**: proposed, not built. Written outside spec kit with the operator's agreement, for spec kit to review later. It builds on `2026-11-18-speckit-steps.md`, whose first slice (the planner with specify and plan) is built.
+**Status**: built and tested on the fake agent, except agents asking questions mid-step (decision 2). FR-055 to FR-060. Written outside spec kit with the operator's agreement, for spec kit to review later. It builds on `2026-11-18-speckit-steps.md`, whose first slice (the planner with specify and plan) is built.
 
 ## The two rulings this answers
 
@@ -67,6 +67,15 @@ Proposed, for a codebase that uses spec kit:
 2. **Clarify.** Its questions cannot be asked mid-step. Proposed: they are listed for the operator at the wait, who answers them by sending the plan back with a comment. Alternatively the analyst makes assumptions and records them, as the planner does today.
 3. **One wait or two.** Proposed: one, after analyze, covering spec, plan and tasks. Two would let the operator approve the spec before design starts.
 4. **How heavy.** A full run of these stages produces many documents before any code. For a small request it may be more ceremony than the change. Proposed: the operator chooses per codebase, by whether it uses spec kit.
+
+## The operator's answers (2026-11-18)
+
+1. The table: "I have no idea you tell me." The proposed table was built as it stands.
+2. Clarify: "an agent should be able to ask midstep and if between the agent and the controlling agent can't figure it out it should be bubbled up to me. Regardless all of the stuff should be recorded." Not yet built; until it is, the analyst records its assumptions.
+3. "approvals of two is appropriate." Built: the specification, then the plan and tasks.
+4. "for simple changes that do not change the requirements they shouldn't need to be bubbled up back to the planning stage." Built: converge records an implementation detail and the run carries on.
+
+One choice made without him, and put to him: on a requirement change the earlier build is set aside on a side branch and the build starts again from the newly approved documents, so that the tests-fail-first rule still holds. It costs a second build.
 
 ## What this does not cover
 

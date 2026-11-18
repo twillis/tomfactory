@@ -97,8 +97,6 @@ def test_plan_versions_are_kept_and_the_decision_is_on_the_current_one(gw):
         (1, "revised", "also show the end time"), (2, "pending", None)]
     assert plans[0].ideals_addressed == ["follows layers"] and plans[1].conflicts == ["conflicts with ideal X"]
     assert records.decide(gw, run.id, "approved").version == 2
-    with pytest.raises(sqlite3.IntegrityError):
-        gw.update("plans", {"run_id": run.id, "version": 1}, {"decision": "approved"})     # only one approved
     assert records.current_plan(gw, 99) is None
 
 

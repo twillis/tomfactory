@@ -109,8 +109,9 @@ def envelope_valid(ctx) -> CheckResult:
             return result(f"`{key}` must be text")
         if kind == "list" and not isinstance(value, list):
             return result(f"`{key}` must be a list")
-        if kind == "verdict" and value not in ("accept", "reject"):
-            return result(f"`{key}` must be accept or reject (the verdict)")
+        allowed = ("accept", "reject") if kind == "verdict" else kind if isinstance(kind, tuple) else None
+        if allowed and value not in allowed:
+            return result(f"`{key}` must be one of: {', '.join(allowed)}")
     if envelope.get("ideals_broken") and envelope.get("verdict") == "accept":
         broken = ", ".join(str(item) for item in envelope["ideals_broken"])
         return result(f"the review named broken ideals ({broken}) but gave the verdict accept")
@@ -205,3 +206,14 @@ def verdict_accept(ctx) -> CheckResult:
     broken = [str(ideal) for ideal in envelope.get("ideals_broken") or []]
     note = "; ".join(reasons) + (f" — ideals broken: {'; '.join(broken)}" if broken else "")
     return CheckResult("verdict_accept", False, note or "the review rejected the result without giving a reason")
+
+
+@register("verdict")
+def verdict(ctx) -> CheckResult:
+    """A judging step accepted the work. Otherwise the note says why, and the step's routes say where next."""
+    envelope = ctx.envelope or {}
+    if envelope.get("verdict") == "accept":
+        return CheckResult("verdict", True)
+    said = [str(item) for key in ("requirement_changes", "unbuilt", "reasons", "ideals_broken")
+            for item in envelope.get(key) or []]
+    return CheckResult("verdict", False, "; ".join(said) or f"the verdict was {envelope.get('verdict')}, with no reason given")

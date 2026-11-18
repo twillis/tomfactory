@@ -31,8 +31,8 @@ def a_run(gw, **changes):
 def test_a_new_store_has_the_contract_schema_in_wal_mode(gw, home):
     db = sqlite3.connect(home / "factory.db")
     names = {row[0] for row in db.execute("select name from sqlite_master")}
-    assert {"runs", "plans", "steps", "events", "one_open_run", "one_approved_plan",
-            "events_by_run", "steps_by_run"} <= names
+    assert {"runs", "plans", "steps", "events", "one_open_run", "events_by_run", "steps_by_run"} <= names
+    assert "one_approved_plan" not in names         # a run may be approved more than once: spec, then plan
     assert db.execute("pragma journal_mode").fetchone()[0] == "wal"
 
     def columns(table):
