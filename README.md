@@ -134,6 +134,11 @@ it. From then on the planner follows that codebase's own `/speckit-specify` and
 run's branch: `specs/<NNN-name>/spec.md` and `plan.md`. `factory plan` gives a summary and
 names them. Sending a plan back revises the same documents.
 
+**Whose rules win.** Where they disagree, the order is: the codebase's own constitution
+(`.specify/memory/constitution.md` in it) first, then your ideals, then spec kit's generic
+instructions. Agents are given all three and told that order. A codebase whose constitution
+is still spec kit's blank template is treated as having none, so your ideals are the rules.
+
 No agent runs anything to do this. Spec kit's scripts are run by the factory's own code,
 and the planner is handed the instructions and what the scripts set up. The planner may
 write under `specs/` and nowhere else. A codebase without spec kit runs exactly as before.
@@ -228,7 +233,7 @@ changed outside what the entry allows, the reply is well-formed — are applied 
 whatever its entry says. A new step cannot leave them out.
 
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `ideals`,
-`plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`, `test_files`, `failure`,
+`plan`, `constitution`, `previous_plan`, `comment`, `test_paths`, `docs_paths`, `test_files`, `failure`,
 `diff`, `test_output`.
 
 ## Adding a persona

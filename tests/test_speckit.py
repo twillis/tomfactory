@@ -121,3 +121,51 @@ def test_a_whole_run_on_a_spec_kit_target_is_accepted(home, kit_target, fake_not
     subjects = git(kit_target, "log", "--format=%s", f"{run.base_commit}..{run.branch}").splitlines()
     assert subjects[-1] == f"factory: plan (run {run.id})" and len(subjects) == 5
     assert FEATURE in fake.calls[2]["prompt"]           # the code writer is pointed at the documents
+
+
+LOCAL_RULE = "LOCAL-RULE: indent with tabs in this codebase."
+FACTORY_IDEAL = "FACTORY-IDEAL: well-defined layers with explicit interfaces."
+
+
+def with_constitution(target, text):
+    (target / ".specify" / "memory" / "constitution.md").write_text(text)
+    git(target, "add", "-A")
+    git(target, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "constitution")
+
+
+@pytest.mark.fr("FR-054")
+def test_a_constitution_is_the_targets_own_text_and_a_blank_template_is_none(kit_target, target):
+    assert "[PROJECT_NAME]" in (kit_target / ".specify" / "memory" / "constitution.md").read_text()
+    assert speckit.constitution(kit_target) == ""               # spec kit's unfilled template
+    assert speckit.constitution(target) == ""                   # no spec kit at all
+    with_constitution(kit_target, f"# Greeter Constitution\n\n{LOCAL_RULE}\n")
+    assert LOCAL_RULE in speckit.constitution(kit_target)
+
+
+@pytest.mark.fr("FR-054")
+def test_the_targets_constitution_comes_first_then_the_operators_ideals_then_spec_kit(home, kit_target, fake_notify):
+    with_constitution(kit_target, f"# Greeter Constitution\n\n{LOCAL_RULE}\n")
+    (home / "ideals.md").write_text(FACTORY_IDEAL + "\n")
+    fake = FakeAgent([planner()] + script()[1:])
+    run = operations.request(REQUEST, kit_target, launcher=in_process(fake))
+    run = operations.approve(run.id, launcher=in_process(fake))
+    assert run.outcome == "accepted", run.reason
+    by_step = dict(zip(["plan", "write_tests", "build", "architecture_review", "document", "review"],
+                       (call["prompt"] for call in fake.calls)))
+    for name in ("plan", "build", "architecture_review", "review"):
+        prompt = by_step[name]
+        assert LOCAL_RULE in prompt and FACTORY_IDEAL in prompt, f"the {name} step lacks one of them"
+        assert prompt.index(LOCAL_RULE) < prompt.index(FACTORY_IDEAL), f"{name}: the codebase's rules come first"
+        assert "order of precedence" in prompt
+    plan = by_step["plan"]
+    assert plan.index(FACTORY_IDEAL) < plan.index("Constitution Check"), "spec kit's instructions come last"
+    assert LOCAL_RULE not in by_step["write_tests"] and LOCAL_RULE not in by_step["document"]
+
+
+@pytest.mark.fr("FR-054")
+def test_with_no_constitution_the_ideals_stand_alone(home, target, fake_notify):
+    (home / "ideals.md").write_text(FACTORY_IDEAL + "\n")
+    fake = FakeAgent([{"envelope": PLAN}])
+    operations.request(REQUEST, target, launcher=in_process(fake))
+    prompt = fake.calls[0]["prompt"]
+    assert FACTORY_IDEAL in prompt and "This codebase has no constitution of its own." in prompt

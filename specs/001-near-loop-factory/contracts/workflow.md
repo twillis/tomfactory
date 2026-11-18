@@ -127,6 +127,7 @@ An agent step's prompt is `prompts/<step name>.md` with placeholders written `{{
 | Input | What it is |
 |-------|-----------|
 | `request` | The operator's request, followed by every comment the operator made when sending a plan back. Later steps, the reviewer above all, must judge against what the operator asked for in total. |
+| `constitution` | The target codebase's own constitution (`.specify/memory/constitution.md`), or "This codebase has no constitution of its own." An unfilled template counts as none. |
 | `ideals` | The ideals text stored on the run, or "No ideals have been stated." |
 | `plan` | The approved plan's text |
 | `previous_plan` | On a revision: the plan version that was sent back |
@@ -142,14 +143,24 @@ An agent step's prompt is `prompts/<step name>.md` with placeholders written `{{
 
 | Step | `inputs` |
 |------|----------|
-| `plan` | `request`, `ideals`, `previous_plan`, `comment`, `failure`, `speckit_instructions`, `speckit_context` |
+| `plan` | `request`, `constitution`, `ideals`, `previous_plan`, `comment`, `failure`, `speckit_instructions`, `speckit_context` |
 | `write_tests` | `request`, `plan`, `test_paths`, `failure` |
-| `build` | `request`, `plan`, `ideals`, `test_files`, `failure` |
-| `architecture_review` | `request`, `plan`, `ideals`, `diff`, `docs_paths` |
+| `build` | `request`, `plan`, `constitution`, `ideals`, `test_files`, `failure` |
+| `architecture_review` | `request`, `plan`, `constitution`, `ideals`, `diff`, `docs_paths` |
 | `document` | `request`, `plan`, `diff`, `docs_paths` |
-| `review` | `request`, `plan`, `ideals`, `diff`, `test_output` |
+| `review` | `request`, `plan`, `constitution`, `ideals`, `diff`, `test_output` |
 
 Each agent step starts fresh. Nothing is carried between steps except its inputs, so the reviewer never continues the code writer's conversation (FR-044).
+
+### Order of precedence (FR-054)
+
+Every step that is given the operator's ideals is also given the target codebase's constitution, and its prompt states the order, as the operator ruled on 2026-11-18:
+
+1. the target codebase's own constitution — local to the repository being worked on
+2. the operator's ideals — the factory's constitution
+3. spec kit's own instructions
+
+Where two disagree, the earlier wins, and the agent is told to say so. The steps are `plan`, `build`, `architecture_review` and `review`.
 
 ## Envelopes
 

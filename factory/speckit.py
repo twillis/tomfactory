@@ -26,6 +26,15 @@ def available(root) -> bool:
     return (pathlib.Path(root) / SCRIPTS / "setup-plan.sh").is_file()
 
 
+def constitution(root) -> str:
+    """The codebase's own constitution, or "" if it has none. An unfilled template is none."""
+    path = pathlib.Path(root) / ".specify" / "memory" / "constitution.md"
+    if not path.is_file():
+        return ""
+    text = path.read_text()
+    return "" if "[PROJECT_NAME]" in text or "[PRINCIPLE_1_NAME]" in text else text
+
+
 def install(root) -> None:
     """Set spec kit up in a new codebase, for the agent program the factory uses."""
     command = ["specify", "init", "--here", "--force", "--non-interactive",

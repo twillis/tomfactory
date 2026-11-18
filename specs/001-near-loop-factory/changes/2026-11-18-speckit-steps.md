@@ -77,7 +77,7 @@ One slice at a time, each usable on its own:
 - A plan sent back reuses the same feature folder; a later run gets the next number.
 - `factory init-target --spec-kit` runs `specify init`.
 - Spec kit's own `.gitignore` excludes `.specify/feature.json`, so "has this run made its feature yet" is decided from the spec document, which git does see.
-- The agent is given both the operator's ideals and, through spec kit's instructions, the target's constitution. They are not merged.
+- **Precedence**, as the operator ruled ("Local would mean the repository that this code is working on and then the constitution for the factory and then the Constitution for spec kit"): the target's own constitution, then the operator's ideals, then spec kit's instructions. The steps given the ideals are also given the constitution and told this order (FR-054). An unfilled constitution template counts as none.
 
 **Tried for real** (2026-11-18, a temporary home and a new spec kit target, planning only): a real planner, with no shell, produced in 77 seconds (estimated $0.81) `spec.md` (two user stories, FR-001 to FR-005, edge cases, success criteria), `plan.md` (technical context, constitution check, structure), `research.md`, `data-model.md`, `quickstart.md`, a contract and the requirements checklist, all under `specs/001-add-a-module-hello-py/`, committed as "factory: plan (run 1)" and waiting for approval. The three always-applied checks passed. The rest of the cycle was not run on that target.
 

@@ -87,8 +87,8 @@ STEPS: list[Step] = [
     # Elsewhere "spec" allows nothing, so the planner changes no file.
     Step("plan", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass=WAIT,
          commit_after=True, speckit=("specify", "plan"),
-         inputs=("request", "ideals", "previous_plan", "comment", "failure", "speckit_instructions",
-                 "speckit_context"),
+         inputs=("request", "constitution", "ideals", "previous_plan", "comment", "failure",
+                 "speckit_instructions", "speckit_context"),
          envelope={"plan": "text", "ideals_addressed": "list", "conflicts": "list"}),
 
     Step("baseline", "code", on_pass="write_tests", checks=("baseline",)),
@@ -103,7 +103,7 @@ STEPS: list[Step] = [
 
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
          on_pass="test",
-         inputs=("request", "plan", "ideals", "test_files", "failure"),
+         inputs=("request", "plan", "constitution", "ideals", "test_files", "failure"),
          envelope={"summary": "text", "files_changed": "list"}),
 
     Step("test", "code", on_pass="architecture_review", checks=("tests_pass",), on_fail=Rework("build"),
@@ -112,7 +112,7 @@ STEPS: list[Step] = [
     # Advice, not a gate: what the architect finds goes to a backlog, and the run carries on.
     Step("architecture_review", "agent", persona="architect", capabilities="read+edit", may_change="docs",
          on_pass="document", commit_after=True, advisory=True,
-         inputs=("request", "plan", "ideals", "diff", "docs_paths"),
+         inputs=("request", "plan", "constitution", "ideals", "diff", "docs_paths"),
          envelope={"summary": "text", "suggestions": "list", "warnings": "list"}),
 
     # Documented before it is reviewed, so the reviewer judges the whole change.
@@ -123,7 +123,7 @@ STEPS: list[Step] = [
 
     Step("review", "agent", persona="reviewer", on_pass="finish",
          checks=("verdict_accept",), on_fail=End("rejected"),
-         inputs=("request", "plan", "ideals", "diff", "test_output"),
+         inputs=("request", "plan", "constitution", "ideals", "diff", "test_output"),
          envelope={"verdict": "verdict", "reasons": "list", "ideals_broken": "list"}),
 
     Step("finish", "code", on_pass=END_ACCEPTED),

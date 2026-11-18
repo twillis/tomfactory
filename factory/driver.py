@@ -180,6 +180,8 @@ def gather(name, store, run, checkout, settings) -> str:
                 + "\n".join(f"- {comment}" for comment in comments))
     if name == "ideals":
         return run.ideals or NO_IDEALS
+    if name == "constitution":      # the codebase's own rules; they come before the operator's ideals
+        return speckit.constitution(checkout.path) or "This codebase has no constitution of its own."
     if name == "plan":
         approved = [plan for plan in plans if plan.decision == "approved"]
         return (approved or plans)[-1].text if plans else ""

@@ -51,12 +51,12 @@ def test_the_step_table_matches_the_contract_row_for_row():
 @pytest.mark.fr("FR-006")
 def test_inputs_and_envelopes_match_the_contract():
     assert {s.name: s.inputs for s in workflow.STEPS if s.kind == "agent"} == {
-        "plan": ("request", "ideals", "previous_plan", "comment", "failure", "speckit_instructions",
-                 "speckit_context"),
+        "plan": ("request", "constitution", "ideals", "previous_plan", "comment", "failure",
+                 "speckit_instructions", "speckit_context"),
         "write_tests": ("request", "plan", "test_paths", "failure"),
-        "build": ("request", "plan", "ideals", "test_files", "failure"),
-        "review": ("request", "plan", "ideals", "diff", "test_output"),
-        "architecture_review": ("request", "plan", "ideals", "diff", "docs_paths"),
+        "build": ("request", "plan", "constitution", "ideals", "test_files", "failure"),
+        "review": ("request", "plan", "constitution", "ideals", "diff", "test_output"),
+        "architecture_review": ("request", "plan", "constitution", "ideals", "diff", "docs_paths"),
         "document": ("request", "plan", "diff", "docs_paths"),
     }
     assert {s.name: s.envelope for s in workflow.STEPS if s.kind == "agent"} == {

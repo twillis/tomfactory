@@ -234,6 +234,8 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 - **FR-052**: A target codebase without spec kit MUST run exactly as it did before: the planner changes nothing, and the plan is the text it returns.
 - **FR-053**: When spec kit is in use the planner MAY write only under the target's specification folder. Sending a plan back MUST revise the same documents, not start new ones.
 
+- **FR-054**: Where the target codebase has its own constitution, every agent step that is given the operator's ideals MUST also be given that constitution, and MUST be told the order of precedence: the target codebase's constitution first, then the operator's ideals, then spec kit's own instructions. An unfilled constitution template counts as none.
+
 ### Key Entities
 
 - **Persona**: who carries out an agent step. Has a name and a written description. One persona may serve more than one step.
