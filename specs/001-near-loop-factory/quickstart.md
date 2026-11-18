@@ -176,3 +176,13 @@ Five things were found only by running the factory for real, and each was fixed 
 > The change does what the plan asked in a small, readable way; its maintenance costs are a duplicated database-access block, a positional tuple that carries a domain rule into the renderer, and two separate reads per request that can disagree.
 
 Three suggestions (one shared read-only query helper; a named type in place of a bare tuple; one test helper in place of two near-copies) and one warning (the count and the latest run are read over two connections and can disagree). Because of the adapter bug these did not reach `docs/backlog.md` on a branch; they are on the run's record: `factory show 3`, then `factory show 3 --step 26`.
+
+### After the store became a gateway — 2026-11-18
+
+| Run | Request | Outcome | Time | Est. cost | Notes |
+|-----|---------|---------|------|-----------|-------|
+| 5 | Show the latest run's outcome and reason | **accepted** | 5m 18s | $3.14 | First real run on the gateway, with the architect and an ideal stated. 118 tests passed. Four commits on the branch: tests, change, backlog, documentation. Merged into the viewer's main line. |
+
+The architect wrote `docs/backlog.md` in the viewer: two warnings and three suggestions, each naming the file, the change, and the ideal it touches. The reviewer accepted, citing the request, the plan and the layering ideal.
+
+Real runs so far: 1 accepted, 2 rejected, 3 and 4 wrongly failed (bug since fixed), 5 accepted. SC-011, three consecutive real requests through the same cycle, is still not met as written.
