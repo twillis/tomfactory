@@ -83,6 +83,10 @@ One slice at a time, each usable on its own:
 
 **Size**: the factory's code is 1,901 non-blank lines against a limit of 2,000. Slices 2 to 4 will not fit without raising the limit or trimming elsewhere.
 
+## Superseded in part (same day)
+
+The operator then ruled that **every** spec kit stage should have a persona that uses it: "there is a spec kit implement which is what the builder should use and there's a spec kit plan that is what the planner should use so whatever stages are in spec kit there needs to be a corresponding persona that will utilize it." That replaces the "some personas" table and the four slices above with a cycle shaped by spec kit's stages. See `2026-11-18-spec-kit-cycle.md`.
+
 ## Open questions
 
 - **Ideals and the constitution.** A spec kit target has a constitution; the factory has the operator's ideals. They overlap. Are the ideals the constitution, is one copied into the other, or are both given to the agent?

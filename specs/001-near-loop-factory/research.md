@@ -296,6 +296,19 @@ My recommendation is option 2, as closer to what he said. Nothing was changed pe
 
 **A gap his point exposes**: there is no way to note "I also want this, later" while a run is under way. The architect's backlog file would be a natural home for it.
 
+### Resolved in principle (same day)
+
+The operator's ruling: "For scope I think the plan needs to be aligned with whatever artifacts are produced. So if something is introduced midstream it needs to be assessed on whether it actually changes the requirement or is simply an implementation detail. If it changes the requirement then it needs to go back to the planning stage."
+
+So the scope of a run is the approved plan, and the test is alignment between plan and artifacts:
+
+- a difference that is an implementation detail is acceptable;
+- a difference that changes the requirement sends the run back to planning, which means back to the operator's approval.
+
+This is neither of the two options first offered. It is not yet built. The comments-travel change stays in place until it is replaced. The design is in `changes/2026-11-18-spec-kit-cycle.md`, because spec kit's converge stage is this same assessment.
+
+**Also ruled the same day**: size "is not a thing that matters necessarily" at this point. The line-count limit was raised to 3,500 and kept only as a tripwire.
+
 ## R23. Idea: an expert panel before the plan, and a factory per project (operator, 2026-11-18)
 
 The operator said, after the first real runs: "Initially I was thinking we need to put in a optional first step in the planning stage which is assembling an expert panel via persona descriptions or something and they have to all align and iterate on the requirements so for example if the project is just starting as in there is no code just an idea then maybe there needs to be a validation step as far as the likelihood of making money if that is a goal then what features should be made a priority first things like that it could almost mean that the factory is per project and can have its own custom conditions and steps."
