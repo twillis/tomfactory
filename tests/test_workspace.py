@@ -160,3 +160,14 @@ def test_remove_deletes_the_checkout_and_an_empty_branch_only(target, tmp_path):
     worked.remove()
     assert not worked.path.exists()
     assert "factory/2-worked" in git(target, "branch", "--list", "factory/*")  # the work is kept
+
+
+@pytest.mark.fr("FR-050")
+def test_discard_puts_back_only_the_named_files(ws):
+    (ws.path / "kept.py").write_text("stays\n")                    # someone else's uncommitted work
+    (ws.path / ".factory.toml").write_text("tampered\n")           # a tracked file, changed
+    (ws.path / "docs").mkdir()
+    (ws.path / "docs" / "backlog.md").write_text("half written")   # a new file
+    ws.discard({".factory.toml", "docs/backlog.md", "never-existed.txt"})
+    assert set(ws.dirty()) == {"kept.py"}
+    assert "test_command" in (ws.path / ".factory.toml").read_text()

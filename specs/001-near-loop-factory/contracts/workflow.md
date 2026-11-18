@@ -19,7 +19,7 @@ Every step is one entry with these fields. Defaults are closed: an entry that sa
 | `on_pass` | The next step's name, or `WAIT`, or `END_ACCEPTED` | required |
 | `on_fail` | What a failed step-specific check leads to: `Rework(step)` or `End(outcome)` | `End("needs-me")` |
 | `commit_after` | Commit the checkout to the run's branch when the step passes | no |
-| `advisory` | The step's failure is recorded but does not stop the run. A change it may not make is still undone and still stops the run. | no |
+| `advisory` | The step's failure is recorded but does not stop the run, and whatever it changed before failing is put back, so a half-written file cannot be committed by the next step. A change it may not make is still undone and still stops the run. | no |
 | `timeout` | Seconds; overrides the target's `step_timeout_seconds` | none |
 | `model` | Agent steps: passed to the adapter; unused in this stage | none |
 

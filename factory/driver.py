@@ -142,6 +142,9 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
                         result = StepResult(False, "malformed" if name == "envelope_valid" else "check", outcome)
                     break
 
+    if step.advisory and result.failure not in (None, "guard"):
+        checkout.discard(context.changed)   # a failed advisory step leaves nothing behind for the next to commit
+
     if result.passed and step.commit_after:                                              # 6
         commit = checkout.commit(f"factory: {step.name} (run {run.id})")
         if commit:

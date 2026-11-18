@@ -65,6 +65,12 @@ class Workspace:
         _git(self.path, "reset", "-q", "--hard", "HEAD")
         _git(self.path, "clean", "-fdq")
 
+    def discard(self, names) -> None:
+        """Put back just these files: a changed one to its last commit, a new one removed."""
+        for name in names:
+            if _git(self.path, "checkout", "-q", "HEAD", "--", name, ok=(0, 1))[0] != 0:
+                (self.path / name).unlink(missing_ok=True)      # git did not know it: it was new
+
     def commit(self, message) -> str | None:
         """Commit everything not ignored. Returns the commit id, or None if nothing changed."""
         _git(self.path, "add", "-A")

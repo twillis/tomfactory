@@ -366,6 +366,18 @@ def test_an_architect_that_fails_is_recorded_and_the_run_carries_on(cycle, entry
     assert names(store, run) == ORDER
 
 
+@pytest.mark.fr("FR-049")
+@pytest.mark.fr("FR-050")
+def test_what_a_failed_architect_wrote_does_not_slip_into_the_branch(cycle):
+    """A failed advisory step may have left a half-written file. It must not be committed by the next step."""
+    half = {"text": "I ran out of time.", "files": {"docs/backlog.md": "- a half-finished thou"}}
+    run, _, store, target = cycle(script(architecture_review=half))
+    assert run.outcome == "accepted"
+    files = git(target, "ls-tree", "-r", "--name-only", run.branch).split()
+    assert "docs/backlog.md" not in files and "CHANGELOG.md" in files
+    assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "3"    # tests, change, docs
+
+
 @pytest.mark.fr("FR-050")
 @pytest.mark.fr("FR-032")
 def test_an_architect_that_edits_code_is_undone_and_the_run_stops(cycle):
