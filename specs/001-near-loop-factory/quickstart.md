@@ -186,3 +186,41 @@ Three suggestions (one shared read-only query helper; a named type in place of a
 The architect wrote `docs/backlog.md` in the viewer: two warnings and three suggestions, each naming the file, the change, and the ideal it touches. The reviewer accepted, citing the request, the plan and the layering ideal.
 
 Real runs so far: 1 accepted, 2 rejected, 3 and 4 wrongly failed (bug since fixed), 5 accepted. SC-011, three consecutive real requests through the same cycle, is still not met as written.
+
+### A full run on a spec kit codebase — 2026-11-18
+
+A temporary home and a new codebase made with `init-target --spec-kit`. Real agents throughout; the script played the operator and approved at both waits.
+
+| Outcome | Time | Est. cost | Steps | Retries | Questions asked |
+|---------|------|-----------|-------|---------|-----------------|
+| **accepted** | 7m 28s | $5.73 | 14, all passed first time | none | none |
+
+| Stage | Persona | Time | What it left on the branch |
+|-------|---------|------|----------------------------|
+| specify | analyst | 65s | `spec.md` |
+| clarify | analyst | 57s | `spec.md`, clarified. **First wait: approved.** |
+| plan | planner | 70s | `plan.md`, `research.md`, `data-model.md`, `quickstart.md`, a contract |
+| tasks | planner | 65s | `tasks.md` |
+| analyze | reviewer | 75s | Nothing, by design. Four findings. **Second wait: approved.** |
+| write_tests, red | test writer, code | 32s | `tests/test_hello.py`; failed first |
+| build, test | code writer, code | 12s | `hello.py`; all tests passed |
+| architecture_review | architect | 25s | `docs/backlog.md` |
+| document | documenter | 19s | `CHANGELOG.md` |
+| converge | reviewer | 24s | Verdict: accept |
+
+Eight commits on the run's branch, one per stage that wrote something.
+
+**Converge applied the scope rule as intended.** It found no unbuilt work and no change to the requirement, and recorded three differences as implementation details, so the run did not come back to the operator:
+
+1. A changelog and a backlog were added although the plan said no documentation would be. They come from the factory's own documenter and architect steps.
+2. The tests check more than the plan's minimum.
+3. The task checkboxes in `tasks.md` are still unchecked although the work is done.
+
+**Analyze was useful before the build.** Its most serious finding: a task told the builder to fix `tests/test_hello.py` if validation differed, which the factory forbids, since only the test writer may change tests.
+
+**Two things this run shows are still loose**, neither blocking:
+
+- Nobody ticks the tasks off. The writers are told not to, so that an agent cannot claim work is done; the factory's code could tick a task when the tests that cover it pass.
+- The planner does not know the factory will add a changelog and a backlog, so its plan says it will not. The plan prompt should tell it.
+
+SC-011 (three consecutive real requests through the same cycle) is still not met as written; real runs have been made one at a time between changes.

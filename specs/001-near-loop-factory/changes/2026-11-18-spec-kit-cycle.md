@@ -75,7 +75,7 @@ Proposed, for a codebase that uses spec kit:
 3. "approvals of two is appropriate." Built: the specification, then the plan and tasks.
 4. "for simple changes that do not change the requirements they shouldn't need to be bubbled up back to the planning stage." Built: converge records an implementation detail and the run carries on.
 
-One choice made without him, and put to him: on a requirement change the earlier build is set aside on a side branch and the build starts again from the newly approved documents, so that the tests-fail-first rule still holds. It costs a second build.
+One choice made without him, and put to him: on a requirement change the earlier build is set aside on a side branch and the build starts again from the newly approved documents, so that the tests-fail-first rule still holds. It costs a second build. The operator confirmed it the same day: "Keeping the previous build on a branch is a good idea. All good on everything else."
 
 ## What this does not cover
 
