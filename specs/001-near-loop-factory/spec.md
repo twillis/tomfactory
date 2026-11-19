@@ -259,7 +259,8 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 
 **The plan travels with the code**
 
-- **FR-079**: When the operator approves a plan that no spec kit stage wrote, the factory MUST commit it to the run's branch, as `docs/plans/<run>-<name>.md`, before the run carries on: the request as amended by any comments it was sent back with, the plan, how it follows the ideals, and its conflicts. Where spec kit wrote the documents, they are already committed, and nothing more is written. *(Added 2026-11-19 after publishing the viewer, whose plans had stayed in the factory's local database.)*
+- **FR-079**: When the operator approves a plan that no spec kit stage wrote, the factory MUST commit it to the run's branch, in the run's record `docs/runs/<run>-<name>.md`, before the run carries on: the request as amended by any comments it was sent back with, the plan, how it follows the ideals, and its conflicts. Where spec kit wrote the documents, they are already committed. *(Added 2026-11-19 after publishing the viewer, whose plans had stayed in the factory's local database.)*
+- **FR-080**: When a run ends, whatever its outcome, and its checkout still exists, the factory MUST complete the run's record and commit it to the run's branch: what FR-079 records, then each step and how it went, the outcome and its reason, the review's verdict and reasons, and the commits the run made. That commit MUST hold the record and nothing else. *(Added 2026-11-19: "once a run is completed it should be exported and put into the runs directory".)*
 
 **Resuming**
 

@@ -11,7 +11,7 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 
-from factory import agent, config, driver, own_files, proc, records, sandbox, speckit, tables, workflow, workspace
+from factory import agent, config, driver, own_files, proc, records, run_record, sandbox, speckit, tables, workflow, workspace
 from factory.store import open_store
 from factory.workspace import Workspace
 
@@ -195,26 +195,9 @@ def approve(run_id=None) -> dict:
     records.decide(store, run.id, "approved")
     checkout = Workspace.of(run)
     if not workflow.get(run.current_step, driver.table_of(run)).speckit:     # spec kit commits its own documents
-        _commit_plan(store, run, checkout)
+        run_record.write(store, run, checkout, f"factory: approved plan (run {run.id})")
     records.event(store, run.id, "approved", f"approved at {run.current_step}", {"commit": checkout.head()})
     return _carry_on(store, run, "approve")
-
-
-def _commit_plan(store, run, checkout) -> None:
-    """Put the approved plan on the run's branch, so it travels with the code (FR-079)."""
-    plans = store.query("plans", {"run_id": run.id})
-    approved, comments = plans[-1], [p.comment for p in plans if p.decision == "revised" and p.comment]
-    lines = [f"# Run {run.id}: the approved plan", "", f"*A {run.run_kind} run. Plan version {approved.version},"
-             f" approved {approved.created_at[:10]}.*", "", "## The request", "", run.request.strip(), ""]
-    lines += ["## Sent back with", "", *[f"- {comment}" for comment in comments], ""] if comments else []
-    lines += ["## The plan", "", approved.text.strip(), ""]
-    for heading, items in (("How it follows the ideals", approved.ideals_addressed),
-                           ("Where it conflicts with them", approved.conflicts)):
-        lines += [f"## {heading}", "", *[f"- {item}" for item in items], ""] if items else []
-    path = checkout.path / "docs" / "plans" / f"{run.id:03d}-{workspace.slug(run.request) or 'run'}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines))
-    checkout.commit(f"factory: approved plan (run {run.id})")
 
 
 def revise(run_id=None, comment="") -> dict:

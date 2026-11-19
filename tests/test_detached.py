@@ -134,7 +134,7 @@ def test_after_approval_the_whole_cycle_runs_with_no_further_call(detached):
     done = wait_for(lambda: (r := current(detached.home, run.id)).state == "ended" and r, seconds=60,
                     what="the run to end")
     assert done.outcome == "accepted", done.reason
-    assert f"Run {run.id}: accepted" in detached.notifications.read_text()
+    wait_for(lambda: f"Run {run.id}: accepted" in detached.notifications.read_text(), what="the notification")
     assert (done.driver_pid, done.child_pgid) == (None, None)
 
 

@@ -105,11 +105,14 @@ Every run ends in exactly one of three outcomes, with a reason you can read:
 
 Each run works in its own checkout of the target codebase, on its own branch
 (`factory/<run>-<first words of the request>`). Your own working copy is never touched. An
-accepted run leaves up to five commits on its branch: the plan you approved, the tests, the
-change, the architect's backlog notes if it had any, and the documentation. The plan is
-`docs/plans/<run>-<first words>.md`, with the request and anything you sent it back with,
-so the reason for a change travels with it. (On a spec kit codebase, spec kit's own documents
-under `specs/` do that instead.) **You merge the branch yourself.** The factory never merges.
+accepted run leaves up to six commits on its branch: the plan you approved, the tests, the
+change, the architect's backlog notes if it had any, the documentation, and the run's record.
+The record is one file, `docs/runs/<run>-<first words>.md`. It is written when you approve the
+plan (the request, anything you sent it back with, the plan) and completed when the run ends,
+whatever the outcome (every step, the outcome and why, the review, the commits), so the reason
+for a change, and how it was made, travel with it. On a spec kit codebase spec kit's own
+documents under `specs/` hold the plan, and the record is written at the end only.
+**You merge the branch yourself.** The factory never merges.
 
 ## Using the factory
 
@@ -442,6 +445,7 @@ The rest of the code carries those decisions out and decides nothing:
 | `driver.py` | control | Carries one run forward, a step at a time |
 | `checks.py` | control | The checks applied to each step's result |
 | `records.py` | control | The rules about what a run's record must say |
+| `run_record.py` | control | A run's record as a document in the codebase: `docs/runs/`, from approval to its end |
 | `agent.py` | effect | The only code that knows which agent program is used |
 | `workspace.py` | effect | Git, and only this module runs it: the run's checkout, commits, undo |
 | `own_files.py` | effect | Fingerprints, snapshots and restores the factory's own files |

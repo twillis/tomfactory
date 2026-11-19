@@ -7,7 +7,7 @@ factory itself; work the factory does on a target codebase (the viewer) is not l
 
 `docs/backlog.md`: all 44 entries addressed. Change record: `specs/001-near-loop-factory/changes/2026-11-19-architect-backlog.md`.
 
-## A plain-cycle run leaves no plan in the codebase — fixed (2026-11-19, FR-079)
+## A plain-cycle run leaves no plan in the codebase — fixed (2026-11-19, FR-079, FR-080: `docs/runs/`)
 
 Noticed 2026-11-19 by the operator, publishing the viewer: "there were no corresponding
 specs". On a spec kit codebase the documents are committed on the run's branch. On the plain

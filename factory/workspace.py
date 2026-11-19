@@ -109,6 +109,18 @@ class Workspace:
         _git(self.path, *AUTHOR, "commit", "-q", "-m", message)
         return _git(self.path, "rev-parse", "HEAD")[1].strip()
 
+    def commit_only(self, name, message) -> str | None:
+        """Commit this one file, whatever else is changed. Returns the commit id, or None if it is unchanged."""
+        _git(self.path, "add", "--", name)
+        if _git(self.path, "diff", "--cached", "--quiet", "--", name, ok=(0, 1))[0] == 0:
+            return None
+        _git(self.path, *AUTHOR, "commit", "-q", "-m", message, "--", name)
+        return _git(self.path, "rev-parse", "HEAD")[1].strip()
+
+    def log_since_base(self) -> list[str]:
+        """The run's commits so far, oldest first, each as its short id and subject."""
+        return _git(self.path, "log", "--reverse", "--format=%h %s", f"{self.base_commit}..HEAD")[1].splitlines()
+
     def diff_since_base(self) -> str:
         """The run's whole change so far, as a diff against where it started."""
         return _git(self.path, "diff", self.base_commit)[1]

@@ -22,7 +22,7 @@ import signal
 import time
 from dataclasses import asdict, dataclass
 
-from factory import agent, checks, config, notify, own_files, proc, records, sandbox, speckit, tables, workflow, workspace
+from factory import agent, checks, config, notify, own_files, proc, records, run_record, sandbox, speckit, tables, workflow, workspace
 from factory.config import under
 from factory.workflow import Ask, CheckResult, End, Replan, StepResult, Wait
 from factory.workspace import Workspace
@@ -410,6 +410,11 @@ def end_run(store, run_id, outcome, reason):
     proc.stop_group(run.child_pgid)
     ended = records.end(store, run_id, outcome, reason)
     tell(store, run_id, f"Run {run_id}: {outcome}", reason)
+    if pathlib.Path(ended.workspace).is_dir():          # the record travels with the work, whatever the outcome
+        try:
+            run_record.write(store, ended, Workspace.of(ended), f"factory: run record (run {run_id})")
+        except Exception as problem:                    # the run has ended either way; say what went wrong
+            records.event(store, run_id, "error", f"the run's record could not be written: {problem}")
     return ended
 
 

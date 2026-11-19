@@ -32,9 +32,9 @@ def test_the_happy_path_from_an_empty_target(cycle):
     assert red.passed and "ModuleNotFoundError" in red.produced["output"]       # failed first, for the right reason
     assert green.passed and "2 passed" in green.produced["output"]
 
-    assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "5"
+    assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "6"
     subjects = git(target, "log", "--format=%s", f"{run.base_commit}..{run.branch}").splitlines()
-    assert subjects == [f"factory: document (run {run.id})", f"factory: architecture_review (run {run.id})",
+    assert subjects == [f"factory: run record (run {run.id})", f"factory: document (run {run.id})", f"factory: architecture_review (run {run.id})",
                         f"factory: test (run {run.id})", f"factory: red (run {run.id})",
                         f"factory: approved plan (run {run.id})"]
     assert git(target, "show", f"{run.branch}:hello.py") == CODE.strip()
@@ -108,7 +108,7 @@ def test_a_rejecting_review_ends_the_run_rejected(cycle):
     run, _, store, target = cycle(script(review=reject))
     assert run.outcome == "rejected" and "no capital letter" in run.reason
     assert names(store, run)[-1] == "review" and "finish" not in names(store, run)
-    assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "5"   # the work is kept
+    assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "6"   # the work is kept, and its record
     assert cycle.notify[-1] == (f"Run {run.id}: rejected", run.reason)
 
 
@@ -135,7 +135,7 @@ def test_a_code_writer_that_touches_the_tests_is_undone_and_the_run_stops(cycle,
 def test_an_agent_error_ends_needs_me_and_keeps_the_work_so_far(cycle):
     run, _, store, target = cycle(script(build={"error": "usage limit reached"})[:3])
     assert run.outcome == "needs-me" and "usage limit reached" in run.reason
-    assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "2"     # the plan and the tests
+    assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "3"     # the plan, the tests, the record
     assert names(store, run) == ["plan", "baseline", "write_tests", "red", "build"]
 
 
@@ -216,7 +216,7 @@ def test_what_a_failed_architect_wrote_does_not_slip_into_the_branch(cycle):
     assert run.outcome == "accepted"
     files = git(target, "ls-tree", "-r", "--name-only", run.branch).split()
     assert "docs/backlog.md" not in files and "CHANGELOG.md" in files
-    assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "4"    # plan, tests, change, docs
+    assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "5"    # plan, tests, change, docs, record
 
 
 # ---- tidying: a change that must not alter behaviour (FR-066) ----
@@ -353,22 +353,37 @@ def test_resume_is_a_command(cycle, monkeypatch, capsys):
 # ---- the plan travels with the code (FR-079) ----
 
 @pytest.mark.fr("FR-079")
-def test_an_approved_plan_is_committed_with_the_code_with_what_it_was_sent_back_with(home, target, fake_notify):
+@pytest.mark.fr("FR-080")
+def test_a_run_leaves_its_record_with_the_code_from_approval_to_its_end(home, target, fake_notify):
     fake = drive_with(FakeAgent([{"envelope": PLAN}, {"envelope": dict(PLAN, plan="The second version.")}, *script()[1:]]))
     run = operations.request("Add a greeting", target)
     operations.revise(run.id, "Keep it to one file.")
     run = operations.approve(run.id)
     assert run.outcome == "accepted", run.reason
-    name = f"docs/plans/{run.id:03d}-add-a-greeting.md"
-    written = git(target, "show", f"{run.branch}:{name}")
-    for part in ("Add a greeting", "Keep it to one file.", "The second version.", "keeps the layers apart"):
-        assert part in written, part
-    assert PLAN["plan"] not in written                        # the version approved, not the one sent back
-    assert git(target, "log", "--format=%s", "-1", f"{run.branch}~4") == f"factory: approved plan (run {run.id})"
+    name = f"docs/runs/{run.id:03d}-add-a-greeting.md"
+    at_approval = git(target, "show", f"{run.branch}~5:{name}")          # committed before the tests were written
+    assert "The second version." in at_approval and "Keep it to one file." in at_approval
+    assert PLAN["plan"] not in at_approval                               # the version approved, not the one sent back
+    record = git(target, "show", f"{run.branch}:{name}")
+    for part in ("Add a greeting", "The second version.", "keeps the layers apart", "| write_tests | 1 | passed |",
+                 "accepted", "it matches the request", f"factory: red (run {run.id})"):
+        assert part in record, part
+    assert git(target, "log", "--format=%s", "-1", run.branch) == f"factory: run record (run {run.id})"
+    assert git(target, "show", "--name-only", "--format=", run.branch).split() == [name]     # the record alone
+
+
+@pytest.mark.fr("FR-080")
+def test_a_run_that_stops_records_why_and_leaves_half_done_work_out(cycle):
+    half = {"error": "You've hit your 5-hour limit", "files": {"CHANGELOG.md": "- half writ"}}
+    run, _, _, target = cycle(script(document=half)[:5])
+    assert run.outcome == "needs-me"
+    record = git(target, "show", f"{run.branch}:docs/runs/{run.id:03d}-add-a-greeting.md")
+    assert "needs-me" in record and "5-hour limit" in record
+    assert "CHANGELOG.md" not in git(target, "show", "--name-only", "--format=", run.branch).split()
 
 
 @pytest.mark.fr("FR-079")
-def test_a_tidy_commits_its_plan_too(home, tmp_path, fake_notify):
+def test_a_tidy_leaves_its_record_too(home, tmp_path, fake_notify):
     run, _, _, target = tidy(home, tmp_path, fake_notify, "tidy-tests", [{"envelope": PLAN}, TRIMMED, REVIEW])
     assert run.outcome == "accepted", run.reason
-    assert PLAN["plan"] in git(target, "show", f"{run.branch}:docs/plans/{run.id:03d}-tidy-up.md")
+    assert PLAN["plan"] in git(target, "show", f"{run.branch}:docs/runs/{run.id:03d}-tidy-up.md")
