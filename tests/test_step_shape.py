@@ -104,7 +104,7 @@ def test_a_judging_step_passes_only_on_an_accept_that_agrees_with_itself(envelop
     ("not_tests", ["app.py", "src/deep/mod.py", "CHANGELOG.md"], []),
     ("not_tests", ["tests/test_app.py"], ["tests/test_app.py"]),            # this run's test
     ("not_tests", ["tests/test_old.py", "tests/conftest.py"], ["tests/conftest.py", "tests/test_old.py"]),
-    ("not_tests", ["app.py", ".factory.toml", ".gitignore"], [".factory.toml", ".gitignore"]),
+    ("not_tests", ["app.py", ".factory.toml", ".gitignore", "IDEALS.md"], [".factory.toml", ".gitignore", "IDEALS.md"]),
     ("docs", ["docs/guide.md", "CHANGELOG.md"], []),
     ("docs", ["docs/guide.md", "app.py", "CHANGELOG.md.bak"], ["CHANGELOG.md.bak", "app.py"]),
 ])

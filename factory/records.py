@@ -3,7 +3,7 @@
 The data layer (store.py) will write anything it is given. These functions are where the
 factory's own rules about its records live, each stated once:
 
-  * a run's branch is named from its number and its request
+  * a run's branch is named from when it was requested and its request, never from its number
   * changing a run's state writes that into its history
   * a run ends exactly once, with its outcome, reason and end time together
   * plans are numbered in order, and a decision is made on the current one
@@ -21,6 +21,11 @@ NOT_RUNNING = {"driver_pid": None, "driver_started": None, "child_pgid": None}  
 
 # ---- runs ----
 
+def stamp(moment) -> str:
+    """A time as it appears in names shared between machines: 20261119-145203 (FR-081)."""
+    return moment[:19].replace("-", "").replace(":", "").replace("T", "-")
+
+
 def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, current_step=None, run_kind="change"):
     """Start a run's record: planning, on its own branch, with its own checkout path."""
     with gw.transaction():
@@ -28,8 +33,11 @@ def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, curren
             "request": request, "target": str(target), "base_commit": base_commit, "state": "planning",
             "current_step": current_step, "ideals": ideals, "attempt_limit": attempt_limit,
             "run_kind": run_kind, "created_at": now()})
+        branch = f"factory/{stamp(run.created_at)}-{slug(request) or 'run'}"
+        if gw.query("runs", {"branch": branch}):        # the same request twice in one second, on this machine
+            branch += f"-{run.id}"
         run = gw.update("runs", {"id": run.id}, {
-            "branch": f"factory/{run.id}-{slug(request) or 'run'}",
+            "branch": branch,
             "workspace": str(gw.files.workspace_path(run.id))})[0]
         event(gw, run.id, "run_state", "planning", {"state": "planning"})
     return run

@@ -262,6 +262,11 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 - **FR-079**: When the operator approves a plan that no spec kit stage wrote, the factory MUST commit it to the run's branch, in the run's record `docs/runs/<run>-<name>.md`, before the run carries on: the request as amended by any comments it was sent back with, the plan, how it follows the ideals, and its conflicts. Where spec kit wrote the documents, they are already committed. *(Added 2026-11-19 after publishing the viewer, whose plans had stayed in the factory's local database.)*
 - **FR-080**: When a run ends, whatever its outcome, and its checkout still exists, the factory MUST complete the run's record and commit it to the run's branch: what FR-079 records, then each step and how it went, the outcome and its reason, the review's verdict and reasons, and the commits the run made. That commit MUST hold the record and nothing else. *(Added 2026-11-19: "once a run is completed it should be exported and put into the runs directory".)*
 
+**More than one person on a codebase**
+
+- **FR-081**: What a run leaves in the codebase MUST NOT be named by a counter kept on one machine. A run's branch and its record are named from the time the run was requested and the first words of the request, so runs made on different machines do not collide. The run's number remains each operator's own handle for commands. *(Added 2026-11-19: "you would have to identify the runs some other way so they don't clash".)*
+- **FR-082**: A codebase MAY state its own ideals in a committed file, `IDEALS.md`. Where it does, every run on it is held to those, read from the commit the run starts at, in place of the operator's personal ideals; and no step may change that file except as the operator's own commit.
+
 **Resuming**
 
 - **FR-067**: The operator MUST be able to resume a run that ended as needs-me, from the step it stopped at. Everything the run committed before that step MUST be kept and not redone; anything the stopped step left uncommitted MUST be discarded; and the earlier ending MUST stay in the run's history. Resuming MUST be refused for a run that ended any other way, whose checkout no longer exists, or while another run is open.

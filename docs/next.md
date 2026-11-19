@@ -20,6 +20,14 @@ comments it was sent back with) to `docs/plans/<run>-<slug>.md` on the run's bra
 commit it, so it merges with the code. Tests first; the documenter's `docs_paths` already
 covers the folder.
 
+## More than one person on a codebase
+
+Done 2026-11-19 (FR-081, FR-082): branches and run records are named by request time, not a
+local counter, and a codebase can commit its own `IDEALS.md`. Still single-operator: the
+record of a run in progress, and its approval, are local. A team version would make the
+pull request the shared record: the request an issue, the plan posted for review, approval a
+reviewer's, the run record the description. Not designed.
+
 ## The viewer reads the factory's private database
 
 Noted 2026-11-19 by the operator: "it seems like a smell to me". The viewer reads

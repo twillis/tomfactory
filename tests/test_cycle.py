@@ -352,15 +352,21 @@ def test_resume_is_a_command(cycle, monkeypatch, capsys):
 
 # ---- the plan travels with the code (FR-079) ----
 
+def record_name(run):
+    """The record carries the branch's own name: the time of the request and its first words (FR-081)."""
+    return f"docs/runs/{run.branch.removeprefix('factory/')}.md"
+
+
 @pytest.mark.fr("FR-079")
 @pytest.mark.fr("FR-080")
+@pytest.mark.fr("FR-081")
 def test_a_run_leaves_its_record_with_the_code_from_approval_to_its_end(home, target, fake_notify):
     fake = drive_with(FakeAgent([{"envelope": PLAN}, {"envelope": dict(PLAN, plan="The second version.")}, *script()[1:]]))
     run = operations.request("Add a greeting", target)
     operations.revise(run.id, "Keep it to one file.")
     run = operations.approve(run.id)
     assert run.outcome == "accepted", run.reason
-    name = f"docs/runs/{run.id:03d}-add-a-greeting.md"
+    name = record_name(run)
     at_approval = git(target, "show", f"{run.branch}~5:{name}")          # committed before the tests were written
     assert "The second version." in at_approval and "Keep it to one file." in at_approval
     assert PLAN["plan"] not in at_approval                               # the version approved, not the one sent back
@@ -377,7 +383,7 @@ def test_a_run_that_stops_records_why_and_leaves_half_done_work_out(cycle):
     half = {"error": "You've hit your 5-hour limit", "files": {"CHANGELOG.md": "- half writ"}}
     run, _, _, target = cycle(script(document=half)[:5])
     assert run.outcome == "needs-me"
-    record = git(target, "show", f"{run.branch}:docs/runs/{run.id:03d}-add-a-greeting.md")
+    record = git(target, "show", f"{run.branch}:{record_name(run)}")
     assert "needs-me" in record and "5-hour limit" in record
     assert "CHANGELOG.md" not in git(target, "show", "--name-only", "--format=", run.branch).split()
 
@@ -386,4 +392,4 @@ def test_a_run_that_stops_records_why_and_leaves_half_done_work_out(cycle):
 def test_a_tidy_leaves_its_record_too(home, tmp_path, fake_notify):
     run, _, _, target = tidy(home, tmp_path, fake_notify, "tidy-tests", [{"envelope": PLAN}, TRIMMED, REVIEW])
     assert run.outcome == "accepted", run.reason
-    assert PLAN["plan"] in git(target, "show", f"{run.branch}:docs/runs/{run.id:03d}-tidy-up.md")
+    assert PLAN["plan"] in git(target, "show", f"{run.branch}:{record_name(run)}")

@@ -3,7 +3,7 @@ import pytest
 
 from factory import cli, config, operations, records
 from factory.store import open_store
-from tests.conftest import drive_with, PLAN, script
+from tests.conftest import BUILD, drive_with, PLAN, script
 from tests.fake_agent import FakeAgent
 
 IDEAL = "Well-defined layers with explicit interfaces between them."
@@ -93,3 +93,20 @@ def test_the_operator_can_see_where_the_ideals_are_and_what_they_say(home, capsy
     assert cli.main(["ideals"]) == 0
     out = capsys.readouterr().out
     assert str(home / "ideals.md") in out and IDEAL in out
+
+
+# ---- a codebase's own ideals (FR-082) ----
+
+@pytest.mark.fr("FR-082")
+def test_a_codebase_that_states_its_own_ideals_holds_every_run_to_those(cycle, home):
+    (home / "ideals.md").write_text("PERSONAL: mine alone.\n")
+    run, fake, _, _ = cycle(script(), files={"IDEALS.md": "SHARED: the team's.\n"})
+    assert run.outcome == "accepted" and run.ideals.strip() == "SHARED: the team's."
+    assert "SHARED: the team's." in fake.calls[0]["prompt"] and "PERSONAL" not in fake.calls[0]["prompt"]
+
+
+@pytest.mark.fr("FR-082")
+def test_no_step_may_rewrite_the_codebases_ideals(cycle):
+    softened = dict(BUILD, files={**BUILD["files"], "IDEALS.md": "Anything goes.\n"})
+    run, _, _, _ = cycle(script(build=softened)[:3], files={"IDEALS.md": "SHARED: the team's.\n"})
+    assert run.outcome == "needs-me" and "IDEALS.md" in run.reason

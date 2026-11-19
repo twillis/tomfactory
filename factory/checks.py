@@ -73,7 +73,7 @@ def _allowed(scope, name, settings, checkout) -> bool:
     if scope == "tests":
         return under(name, settings.test_paths)
     if scope == "not_tests":
-        return not under(name, settings.test_paths) and name not in (".factory.toml", ".gitignore")
+        return not under(name, settings.test_paths) and name not in (".factory.toml", ".gitignore", config.IDEALS_FILE)
     if scope == "docs":
         return under(name, settings.docs_paths)
     return False    # "nothing"

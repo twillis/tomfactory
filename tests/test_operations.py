@@ -1,6 +1,8 @@
 """What the operator can do to a run (Story 1: request, plan, approve, revise, abandon)."""
 import dataclasses
 
+import re
+
 import pytest
 
 from factory import operations, records
@@ -85,7 +87,7 @@ def test_after_the_plan_step_the_run_waits_and_nothing_has_changed(home, target,
     assert run.state == "awaiting_approval" and run.current_step == "plan"
     assert (run.driver_pid, run.driver_started, run.child_pgid) == (None, None, None)
     assert run.base_commit == git(target, "rev-parse", "HEAD")
-    assert run.branch == f"factory/{run.id}-create-a-hello-page"
+    assert re.fullmatch(r"factory/\d{8}-\d{6}-create-a-hello-page", run.branch)
 
     store = open_store(home)
     plan = operations.plan(run.id)

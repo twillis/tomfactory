@@ -17,6 +17,14 @@ def gw(home):
     return open_store(home)
 
 
+STAMP = "20261119-145203"
+
+
+@pytest.fixture(autouse=True)
+def a_fixed_clock(monkeypatch):
+    monkeypatch.setattr(records, "now", lambda: "2026-11-19T14:52:03.123Z")
+
+
 def new_run(gw, request="Create a hello page", **kw):
     return records.new_run(gw, request=request, target="/tmp/target", base_commit="abc123", **kw)
 
@@ -25,7 +33,7 @@ def new_run(gw, request="Create a hello page", **kw):
 def test_a_new_run_gets_its_branch_and_checkout_and_starts_planning(gw, home):
     run = new_run(gw, "Create a hello-world app, please!")
     assert (run.state, run.outcome, run.attempt_limit) == ("planning", None, 3)
-    assert run.branch == f"factory/{run.id}-create-a-hello-world-app-please"
+    assert run.branch == f"factory/{STAMP}-create-a-hello-world-app-please"
     assert run.workspace == str(home / "workspaces" / str(run.id))
     assert run.created_at.endswith("Z")
     assert [e.kind for e in records.events_after(gw, run.id)] == ["run_state"]
@@ -42,8 +50,20 @@ def test_a_new_run_gets_its_branch_and_checkout_and_starts_planning(gw, home):
     ("one two three four five six seven", "one-two-three-four-five"),
     ("x" * 200, "x" * 40),
 ])
-def test_a_runs_branch_is_named_from_its_number_and_request(gw, request_text, slug):
-    assert new_run(gw, request=request_text).branch == f"factory/1-{slug}"
+def test_a_runs_branch_is_named_from_when_it_was_requested_and_its_request(gw, request_text, slug):
+    assert new_run(gw, request=request_text).branch == f"factory/{STAMP}-{slug}"
+
+
+@pytest.mark.fr("FR-081")
+def test_runs_on_two_machines_with_the_same_number_and_request_do_not_share_a_name(tmp_path, monkeypatch):
+    mine, theirs = open_store(tmp_path / "mine"), open_store(tmp_path / "theirs")
+    first = new_run(mine)
+    monkeypatch.setattr(records, "now", lambda: "2026-11-19T15:00:07.000Z")
+    second = new_run(theirs)
+    assert first.id == second.id == 1 and first.request == second.request
+    assert first.branch != second.branch and second.branch == "factory/20261119-150007-create-a-hello-page"
+    records.end(theirs, second.id, "rejected", "x")
+    assert new_run(theirs).branch == "factory/20261119-150007-create-a-hello-page-2"     # same second, same machine
 
 
 @pytest.mark.fr("FR-033")

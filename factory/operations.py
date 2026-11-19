@@ -161,7 +161,7 @@ def request(text, target, attempts=3, run_kind="change") -> dict:
     if run_kind not in tables.RUN_KINDS:
         raise Refused(f"a run is one of: {', '.join(tables.RUN_KINDS)}; not {run_kind!r}")
 
-    run = records.new_run(store, text.strip(), target, base, ideals=config.read_ideals(),
+    run = records.new_run(store, text.strip(), target, base, ideals=config.ideals_for(target, base),
                           attempt_limit=attempts, run_kind=run_kind)
     try:
         Workspace.create(target, run.workspace, run.branch, base)

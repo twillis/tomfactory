@@ -139,7 +139,7 @@ The gateway holds no rules about runs, plans or steps. Those are business rules 
 
 | Rule | Function |
 |------|----------|
-| A run's branch is `factory/<id>-<slug>`. The slug is the request's first five words, lower-cased, every run of characters other than `a–z` and `0–9` replaced by `-`, trimmed of `-`, cut to 40 characters; `run` if that leaves nothing | `new_run`, `slug` |
+| A run's branch is `factory/<stamp>-<slug>`, where the stamp is when the run was requested, as `YYYYMMDD-HHMMSS` in UTC, never the run's id (FR-081). The slug is the request's first five words, lower-cased, every run of characters other than `a–z` and `0–9` replaced by `-`, trimmed of `-`, cut to 40 characters; `run` if that leaves nothing | `new_run`, `slug` |
 | Changing a run's state writes a `run_state` event | `set_state`, `end` |
 | A run ends once: `state`, `outcome`, `reason` and `ended_at` together, and `driver_pid`, `driver_started` and `child_pgid` cleared | `end` |
 | Only the fields that move as a run is carried on may be changed afterwards | `move` |

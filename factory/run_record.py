@@ -6,12 +6,10 @@ rendered from the factory's own records of the run; this module decides nothing.
 """
 import datetime
 
-from factory.workspace import slug
-
 
 def name(run) -> str:
-    """Where the record lives in the codebase."""
-    return f"docs/runs/{run.id:03d}-{slug(run.request) or 'run'}.md"
+    """Where the record lives in the codebase: under the run's branch's own name, which no other machine shares."""
+    return f"docs/runs/{run.branch.removeprefix('factory/')}.md"
 
 
 def write(store, run, checkout, message) -> None:

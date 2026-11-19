@@ -155,7 +155,7 @@ def test_show_prints_every_step_with_its_persona_and_checks(capsys, done):
     assert code == 0
     for expected in ("Add a greeting to the page please", "accepted", "attempt limit: 3", "plan version 1",
                      "planner", "test_writer", "code_writer", "architect", "reviewer", "documenter",
-                     "tests_fail_first", "tests_pass", "factory/1-add-a-greeting-to-the"):
+                     "tests_fail_first", "tests_pass", "-add-a-greeting-to-the"):
         assert expected in out, f"{expected!r} is missing from the listing"
     import re
     rows = re.findall(r"^ +\d+  (\w+) ", out, re.M)       # the step rows, in the order printed

@@ -90,6 +90,15 @@ def ideals_path() -> pathlib.Path:
     return home() / "ideals.md"
 
 
+IDEALS_FILE = "IDEALS.md"       # a codebase's own ideals, committed in it; they replace the operator's
+
+
+def ideals_for(target, commit) -> str:
+    """The ideals a run on this codebase is held to: its own if it states any, else the operator's."""
+    shared = workspace.committed(target, commit, IDEALS_FILE)
+    return shared if shared and shared.strip() else read_ideals()
+
+
 def read_ideals() -> str:
     """The operator's ideals as written, or an empty string if none have been stated."""
     path = ideals_path()

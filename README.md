@@ -104,10 +104,13 @@ Every run ends in exactly one of three outcomes, with a reason you can read:
 ### Where the work goes
 
 Each run works in its own checkout of the target codebase, on its own branch
-(`factory/<run>-<first words of the request>`). Your own working copy is never touched. An
+(`factory/<when it was requested>-<first words of the request>`, for example
+`factory/20261119-145203-add-a-greeting`). Your own working copy is never touched. An
 accepted run leaves up to six commits on its branch: the plan you approved, the tests, the
 change, the architect's backlog notes if it had any, the documentation, and the run's record.
-The record is one file, `docs/runs/<run>-<first words>.md`. It is written when you approve the
+The record is one file under `docs/runs/`, with the branch's own name. Neither is named by the
+run's number, which is counted on your machine alone, so two people working on one codebase do
+not collide. It is written when you approve the
 plan (the request, anything you sent it back with, the plan) and completed when the run ends,
 whatever the outcome (every step, the outcome and why, the review, the commits), so the reason
 for a change, and how it was made, travel with it. On a spec kit codebase spec kit's own
@@ -226,7 +229,7 @@ difference between what was built and what you approved:
 - *Unbuilt work* goes back to the build.
 - *An implementation detail* is recorded, and the run carries on. It does not come back to you.
 - *A change to the requirement* goes back to planning, and waits for you again. What had
-  been built is kept on a side branch (`factory/<run>-…-aside-1`) and the build starts again
+  been built is kept on a side branch (`factory/…-aside-1`) and the build starts again
   from the documents you approve, tests first.
 
 **Whose rules win.** Where they disagree, the order is: the codebase's own constitution
@@ -318,6 +321,11 @@ own words, for example:
 Every plan must say how it follows them. Every review checks the result against each one;
 a result that breaks an ideal cannot be accepted. Editing the file takes effect on the next
 run and needs no other change.
+
+That file is yours alone. A codebase more than one person works on can state its ideals
+itself, in a committed `IDEALS.md` at its root. Where it does, every run on it is held to
+those instead, whoever makes the request, read from the commit the run starts at; no step
+may change the file.
 
 ### Things worth knowing
 
