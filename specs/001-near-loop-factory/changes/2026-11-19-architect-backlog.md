@@ -24,7 +24,7 @@ No requirement changed. Behaviour changed in four places, each a fix the archite
 | `0d917f8` | The reply's JSON shape is generated from each step's envelope. The rules-in-order, spec kit and asking blocks are shared fragments the driver appends. The proportion rule is stated once, in the test writer's priorities. |
 | `4a6810a` | `own_files.py` takes fingerprint, snapshot and restore out of `workspace.py`, which is now the only module that runs git. Each target setting's default is written once and the default `.factory.toml` is generated. One slug function; one front-matter rule; the command line's repeats folded. |
 | `5e7d5df` | Tests: each rule tested once at its own level, one whole run per route; refusal and spec kit tests as tables; dead assertions fixed. The requirement gate is part of test collection; `scripts/traceability.py` is gone. |
-| next commit | The README's map, rules and step guide brought in line; the docs test derives the commands from the parser and the inputs and modules from the code. Contracts updated. |
+| `c758577` | The README's map, rules and step guide brought in line; the docs test derives the commands from the parser and the inputs and modules from the code. Contracts updated. |
 
 ## For spec kit to review
 
@@ -34,3 +34,9 @@ No requirement changed. Behaviour changed in four places, each a fix the archite
 - One backlog entry is left: split tables from rules when a fourth table arrives.
 - The code grew by about 170 lines (2,335 to 2,508), mostly `validate`, the migrations and
   the input registry; the tests shrank (3,531 lines and 245 test functions to 3,417 and 216).
+
+## Proven on a real run
+
+Run 17, a `--kind tidy-code` request on the viewer, after all five commits: accepted first
+time in 99 seconds, an estimated $0.74. Every step passed on its first attempt; the tests ran
+contained before and after; the plan named no new tests; no test file changed.
