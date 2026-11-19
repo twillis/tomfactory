@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from factory import config
+from factory import config, tables
 
 HEADINGS = ["## Expertise", "## Priorities", "## Must not"]
 
@@ -28,9 +28,9 @@ def test_the_planner_states_expertise_priorities_and_what_it_must_not_do():
 @pytest.mark.fr("FR-042")
 def test_all_six_personas_exist_with_the_three_headings():
     from factory import workflow
-    named = {step.persona for step in workflow.STEPS if step.kind == "agent"}
+    named = {step.persona for step in tables.STEPS if step.kind == "agent"}
     assert named == {"planner", "test_writer", "code_writer", "architect", "reviewer", "documenter"}
-    with_spec_kit = {step.persona for step in workflow.table_for(True, "change") if step.kind == "agent"}
+    with_spec_kit = {step.persona for step in tables.table_for(True, "change") if step.kind == "agent"}
     assert with_spec_kit == named | {"analyst"}             # spec kit's specify and clarify have their own persona
     for name in with_spec_kit:
         sections(name)

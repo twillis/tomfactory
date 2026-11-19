@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from factory import config
+from factory import config, tables
 
 ROOT = config.PACKAGE_DIR.parent
 HEADINGS = ["How a run flows", "Using the factory", "Adding a step", "Adding a persona",
@@ -32,7 +32,7 @@ def test_the_readme_names_every_command_step_input_and_module():
     readme = (ROOT / "README.md").read_text()
     for command in _commands():
         assert f"factory {command}" in readme, f"README.md does not show `factory {command}`"
-    for step in {s.name for table in workflow.TABLES for s in table}:
+    for step in {s.name for table in tables.TABLES for s in table}:
         assert f"`{step}`" in readme, f"README.md does not mention the {step} step"
     for name in driver.INPUTS:
         assert f"`{name}`" in readme, f"README.md does not list the input {name}"

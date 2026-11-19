@@ -22,7 +22,7 @@ import signal
 import time
 from dataclasses import asdict, dataclass
 
-from factory import agent, checks, config, notify, own_files, proc, records, sandbox, speckit, workflow, workspace
+from factory import agent, checks, config, notify, own_files, proc, records, sandbox, speckit, tables, workflow, workspace
 from factory.config import under
 from factory.workflow import Ask, CheckResult, End, Replan, StepResult, Wait
 from factory.workspace import Workspace
@@ -36,7 +36,7 @@ class Stopped(BaseException):
 
 def table_of(run) -> list:
     """The steps a run goes through. Decided here only: by its kind, and by its checkout's codebase."""
-    return workflow.table_for(speckit.available(run.workspace), run.run_kind)
+    return tables.table_for(speckit.available(run.workspace), run.run_kind)
 
 
 def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) -> None:
@@ -70,7 +70,7 @@ def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) ->
             if isinstance(then, Replan):        # the requirement changed: back to planning, build set aside
                 set_aside(store, run, checkout)
             if isinstance(then, Ask):           # the lead answers if it can; otherwise the operator is asked
-                answered, said = run_step(store, run, workflow.LEAD, checkout, settings, adapter,
+                answered, said = run_step(store, run, tables.LEAD, checkout, settings, adapter,
                                           personas_dir, prompts_dir)
                 if workflow.lead_answered(answered, said):
                     records.answer(store, asked.id, said["answer"], "lead")
@@ -398,7 +398,7 @@ def validate(table, personas_dir=None, prompts_dir=None) -> None:
     prompts_dir = pathlib.Path(prompts_dir or config.PROMPTS_DIR)
     names = {step.name for step in table}
     problems = []
-    for step in [*table, workflow.LEAD]:
+    for step in [*table, tables.LEAD]:
         leads = [step.on_pass, step.on_approve, step.revise_from, step.on_fail, *step.routes.values()]
         for target in leads:
             target = getattr(target, "step", target)

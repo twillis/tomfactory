@@ -11,7 +11,7 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 
-from factory import agent, config, driver, own_files, proc, records, sandbox, speckit, workflow, workspace
+from factory import agent, config, driver, own_files, proc, records, sandbox, speckit, tables, workflow, workspace
 from factory.store import open_store
 from factory.workspace import Workspace
 
@@ -104,7 +104,7 @@ def _launch_at(store, run, step) -> dict:
 
 def run_kinds() -> list[str]:
     """The kinds of run a request can be."""
-    return list(workflow.RUN_KINDS)
+    return list(tables.RUN_KINDS)
 
 
 def get_run(run_id=None) -> dict:
@@ -158,8 +158,8 @@ def request(text, target, attempts=3, run_kind="change") -> dict:
     if open_run:    # one run at a time (FR-033)
         raise Refused(f"run {open_run.id} has not ended ({records.described(open_run)});"
                       " let it finish, or stop or abandon it, before making another request")
-    if run_kind not in workflow.RUN_KINDS:
-        raise Refused(f"a run is one of: {', '.join(workflow.RUN_KINDS)}; not {run_kind!r}")
+    if run_kind not in tables.RUN_KINDS:
+        raise Refused(f"a run is one of: {', '.join(tables.RUN_KINDS)}; not {run_kind!r}")
 
     run = records.new_run(store, text.strip(), target, base, ideals=config.read_ideals(),
                           attempt_limit=attempts, run_kind=run_kind)

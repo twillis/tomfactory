@@ -3,7 +3,7 @@ the question comes to the operator. Either way it is all on record (FR-061 to FR
 """
 import pytest
 
-from factory import cli, operations, workflow
+from factory import cli, operations, tables, workflow
 from factory.checks import CheckResult
 from factory.operations import Refused
 from factory.store import open_store
@@ -30,11 +30,11 @@ def asked(result_note="Tabs or spaces?"):
 
 @pytest.mark.fr("FR-061")
 def test_a_question_is_one_of_the_ways_a_step_can_end():
-    build = workflow.get("build", workflow.STEPS)
+    build = workflow.get("build", tables.STEPS)
     assert next_step(build, asked(), {"build": 1}, 3) == Ask("Tabs or spaces?")
     ended = next_step(build, asked(), {"build": 3}, 3)                  # it cannot ask for ever
     assert ended.outcome == "needs-me" and "build" in ended.reason and "Tabs or spaces?" in ended.reason
-    lead = workflow.LEAD
+    lead = tables.LEAD
     assert (lead.capabilities, lead.may_change, lead.may_ask) == ("read", "nothing", False)   # it answers; it cannot ask
 
 

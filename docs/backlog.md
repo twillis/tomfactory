@@ -10,7 +10,7 @@ left; a **Suggestion** would make the code better. Within each file, most seriou
 Whole-codebase review, 2026-11-19, at commit `26a7e00`. Nothing was changed.
 
 **Addressed 2026-11-19**, at the operator's direction ("all of the architect's items should be
-addressed"), in five commits: 43 of 44 entries done; one waits on its own condition. Each
+addressed"), in five commits: all 44 entries done (the last one after review with the operator). Each
 entry below names the commit. Change record: `specs/001-near-loop-factory/changes/2026-11-19-architect-backlog.md`.
 
 ## factory/driver.py
@@ -31,7 +31,7 @@ entry below names the commit. Change record: `specs/001-near-loop-factory/change
 - ~~**Suggestion**~~ **Done** — `factory/workflow.py`: move the `RUN_KINDS` prose (301–308) into `prompts/`; it is prompt text living in the file that is meant to hold only the table and the rules. (Layers.) *(84c5e24.)*
 - ~~**Suggestion**~~ **Done** — `factory/workflow.py`: use `KIT_INPUTS` in the plain table instead of spelling `"speckit_instructions", "speckit_context"` three times above its definition (105, 114, 122), or better, stop listing them at all (see `prompts/`). (S9.) *(0d917f8.)*
 - ~~**Suggestion**~~ **Done** — `factory/workflow.py`: move `CheckResult` here (it is pure data) so `StepResult.failed_check` can be typed and `next_step` need not reach it through `getattr(..., "note", "")`; and have `End` refuse an outcome outside `accepted | rejected | needs-me`, which today is only caught by the database. (Explicit interfaces.) *(84c5e24.)*
-- **Suggestion** *(not yet)* — `factory/workflow.py`: when a fourth table arrives (docs/next.md, "a factory per project"), split tables from rules; three tables, the rules and the lead now share one file whose promise is that it can be read top to bottom. (S9: each piece has one obvious place.) *Not done: its own condition, a fourth table, has not arrived; the tables and rules still read top to bottom in one file.*
+- ~~**Suggestion**~~ **Done** — `factory/workflow.py`: when a fourth table arrives (docs/next.md, "a factory per project"), split tables from rules; three tables, the rules and the lead now share one file whose promise is that it can be read top to bottom. (S9: each piece has one obvious place.) *(Done when its condition was found already met: tidy runs had made the fourth table.)*
 
 ## factory/checks.py
 

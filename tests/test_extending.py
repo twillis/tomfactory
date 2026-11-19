@@ -10,18 +10,18 @@ import shutil
 
 import pytest
 
-from factory import checks, config, own_files, workflow, workspace
+from factory import checks, config, own_files, tables, workflow, workspace
 from factory.workflow import Step
 from tests.conftest import script
 
 
 def table_with(monkeypatch, after, new, **replace_previous):
     """Install a copy of the step table with `new` inserted after the step named `after`."""
-    steps = list(workflow.STEPS)
+    steps = list(tables.STEPS)
     index = [s.name for s in steps].index(after)
     steps[index] = dataclasses.replace(steps[index], on_pass=new.name, **replace_previous)
     steps.insert(index + 1, new)
-    monkeypatch.setattr(workflow, "table_for", lambda spec_kit, run_kind: steps)
+    monkeypatch.setattr(tables, "table_for", lambda spec_kit, run_kind: steps)
     return steps
 
 
@@ -62,10 +62,10 @@ def test_a_new_persona_is_one_file_named_on_an_entry(cycle, monkeypatch):
     def install():      # the cycle fixture has already pointed PERSONAS_DIR at a temporary copy
         (config.PERSONAS_DIR / "careful_coder.md").write_text(
             "# Careful coder\n\n## Expertise\n\nCAREFUL-CODER-MARKER\n\n## Priorities\n\nSafety.\n\n## Must not\n\nRush.\n")
-        steps = list(workflow.STEPS)
+        steps = list(tables.STEPS)
         index = [s.name for s in steps].index("build")
         steps[index] = dataclasses.replace(steps[index], persona="careful_coder")
-        monkeypatch.setattr(workflow, "table_for", lambda spec_kit, run_kind: steps)
+        monkeypatch.setattr(tables, "table_for", lambda spec_kit, run_kind: steps)
 
     install()
     run, fake, store, _ = cycle(script())
@@ -103,7 +103,7 @@ def test_a_prompt_may_only_use_the_inputs_its_entry_lists(cycle, monkeypatch, pr
 @pytest.mark.parametrize("file", ["store.py", "records.py", "driver.py", "cli.py", "operations.py", "checks.py"])
 def test_no_module_but_the_rules_decides_by_a_steps_or_personas_name(file):
     """No comparison with, or lookup by, a step's or persona's name outside workflow.py."""
-    names = {s.name for t in workflow.TABLES for s in t} | {s.persona for t in workflow.TABLES for s in t if s.persona}
+    names = {s.name for t in tables.TABLES for s in t} | {s.persona for t in tables.TABLES for s in t if s.persona}
     tree = ast.parse((config.PACKAGE_DIR / file).read_text())
     found = []
     for node in ast.walk(tree):

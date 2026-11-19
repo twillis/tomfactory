@@ -1,6 +1,6 @@
 # Contract: The Workflow
 
-`factory/workflow.py` is the one place that says which steps exist, in what order, and what happens after each (FR-038). It holds a table of step entries and one small function, `next_step`, that reads the table. It does no input or output. This document is that file's specification.
+`factory/tables.py` says which steps exist and in what order, and `factory/workflow.py` what happens after each (FR-038): the tables are data, and the rules are small pure functions, chief among them `next_step`, that read them. It does no input or output. This document is that file's specification.
 
 ## A step entry
 
@@ -59,7 +59,7 @@ The branch history of an accepted run therefore reads: tests, then the change, t
 
 ## Two tables: the table is chosen by the codebase (FR-055)
 
-`workflow.table_for(spec_kit, run_kind)` returns, for a change, the plain table above for a codebase without spec kit, and the table below for one that has it. Both are data in `workflow.py`; the driver and the operations take whichever applies and name no step.
+`tables.table_for(spec_kit, run_kind)` returns, for a change, the plain table above for a codebase without spec kit, and the table below for one that has it. Both are data in `tables.py`; the driver and the operations take whichever applies and name no step.
 
 | # | `name` | `persona` | spec kit stage | `may_change` | `on_pass` | notes |
 |---|--------|-----------|----------------|--------------|-----------|-------|
@@ -93,7 +93,7 @@ Any step may have `on_pass=WAIT`. `after_wait("approve", …)` continues at the 
 
 ## Kinds of run (FR-066)
 
-`workflow.table_for(spec_kit, run_kind)` chooses the table from `workflow.RUN_KINDS`. A run's kind is stored on it (`runs.run_kind`), and `driver.table_of(run)` is the one place a run's table is decided, from its own checkout. What the planner and reviewer are told about each kind is in `prompts/run_kinds/`.
+`tables.table_for(spec_kit, run_kind)` chooses the table from `tables.RUN_KINDS`. A run's kind is stored on it (`runs.run_kind`), and `driver.table_of(run)` is the one place a run's table is decided, from its own checkout. What the planner and reviewer are told about each kind is in `prompts/run_kinds/`.
 
 | Kind | Table | For |
 |------|-------|-----|

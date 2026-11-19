@@ -31,7 +31,8 @@ No requirement changed. Behaviour changed in four places, each a fix the archite
 - `plan.md` and `tasks.md` of feature 001 still describe `scripts/traceability.py`, the
   `verdict_accept` check and the single plain table. They record what was planned then; this
   record and the contracts say what is true now.
-- One backlog entry is left: split tables from rules when a fourth table arrives.
+- The last entry, splitting tables from rules, was done after review: the condition (a fourth
+  table) was already met. The tables are in `factory/tables.py`; the rules stay in `workflow.py`.
 - The code grew by about 170 lines (2,335 to 2,508), mostly `validate`, the migrations and
   the input registry; the tests shrank (3,531 lines and 245 test functions to 3,417 and 216).
 

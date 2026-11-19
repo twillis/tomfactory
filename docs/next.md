@@ -5,8 +5,7 @@ factory itself; work the factory does on a target codebase (the viewer) is not l
 
 ## 0. The architect's review of the factory — done (2026-11-19)
 
-`docs/backlog.md`: 43 of 44 entries addressed; the one left waits on its own condition (a
-fourth table). Change record: `specs/001-near-loop-factory/changes/2026-11-19-architect-backlog.md`.
+`docs/backlog.md`: all 44 entries addressed. Change record: `specs/001-near-loop-factory/changes/2026-11-19-architect-backlog.md`.
 
 ## 1. Small fixes found by real runs
 

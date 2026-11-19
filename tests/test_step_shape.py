@@ -1,7 +1,7 @@
 """What a step entry is, and the three checks applied to every step (contracts/workflow.md)."""
 import pytest
 
-from factory import checks, own_files, workflow, workspace
+from factory import checks, own_files, tables, workflow, workspace
 from factory.checks import CheckContext
 from factory.config import TargetConfig
 from factory.workflow import End, Rework, Step
@@ -88,7 +88,7 @@ def test_envelope_valid_checks_keys_and_types(envelope, passes, note_has):
     ({"verdict": "reject", "reasons": []}, False, ["no reason"]),
 ])
 def test_a_judging_step_passes_only_on_an_accept_that_agrees_with_itself(envelope, passes, said):
-    review = workflow.get("review", workflow.STEPS)
+    review = workflow.get("review", tables.STEPS)
     result = checks.get("verdict")(context(review, envelope=envelope))
     assert result.passed is passes and all(words in result.note for words in said), result.note
     assert checks.get("envelope_valid")(context(review, envelope={**envelope, "verdict": "maybe",

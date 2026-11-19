@@ -8,7 +8,7 @@ import pathlib
 
 import pytest
 
-from factory import driver, workflow
+from factory import driver, tables, workflow
 from factory.workflow import (END_ACCEPTED, WAIT, CheckResult, End, Replan, Rework, Run, Step, StepResult, Wait,
                               after_wait, next_step)
 
@@ -20,7 +20,7 @@ def failed(check="a_check", note="it failed", verdict=None):
     return StepResult(False, "check", CheckResult(False, note, name=check), verdict=verdict)
 
 
-def step(name, table=workflow.STEPS):
+def step(name, table=tables.STEPS):
     return workflow.get(name, table)
 
 
@@ -39,7 +39,7 @@ def path_through(table):
 
 @pytest.mark.fr("FR-006")
 @pytest.mark.fr("FR-037")
-@pytest.mark.parametrize("table", workflow.TABLES, ids=["change", "spec-kit", "tidy-tests", "tidy-code"])
+@pytest.mark.parametrize("table", tables.TABLES, ids=["change", "spec-kit", "tidy-tests", "tidy-code"])
 def test_every_table_names_only_steps_checks_inputs_personas_and_prompts_that_exist(table):
     driver.validate(table)
 
@@ -47,10 +47,10 @@ def test_every_table_names_only_steps_checks_inputs_personas_and_prompts_that_ex
 @pytest.mark.fr("FR-002")
 @pytest.mark.fr("FR-015")
 @pytest.mark.parametrize("table, path", [
-    (workflow.STEPS, ["plan", "baseline", "write_tests", "red", "build", "test", "architecture_review",
+    (tables.STEPS, ["plan", "baseline", "write_tests", "red", "build", "test", "architecture_review",
                       "document", "review", "finish"]),
-    (workflow.TIDY_TESTS, ["plan", "baseline", "tidy_tests", "test", "review", "finish"]),
-    (workflow.TIDY_CODE, ["plan", "baseline", "tidy_code", "test", "review", "finish"]),
+    (tables.TIDY_TESTS, ["plan", "baseline", "tidy_tests", "test", "review", "finish"]),
+    (tables.TIDY_CODE, ["plan", "baseline", "tidy_code", "test", "review", "finish"]),
 ])
 def test_a_run_that_passes_every_step_goes_this_way(table, path):
     assert path_through(table) == path
@@ -61,26 +61,26 @@ def test_a_run_that_passes_every_step_goes_this_way(table, path):
 @pytest.mark.fr("FR-050")
 @pytest.mark.fr("FR-051")
 def test_the_roles_are_kept_apart():
-    by_persona = {s.name: s.persona for s in workflow.STEPS}
+    by_persona = {s.name: s.persona for s in tables.STEPS}
     assert len({by_persona["write_tests"], by_persona["build"], by_persona["review"]}) == 3
-    for table in workflow.TABLES:
+    for table in tables.TABLES:
         for judge in (s for s in table if s.routes):
             assert (judge.capabilities, judge.may_change) == ("read", "nothing")     # a judge changes nothing
-    assert [s.name for s in workflow.STEPS if s.advisory] == ["architecture_review"]
-    assert not any(s.speckit for s in workflow.STEPS)          # the plain cycle names no spec kit command
-    assert all(s.inputs == () and s.envelope == {} for t in workflow.TABLES for s in t if s.kind == "code")
+    assert [s.name for s in tables.STEPS if s.advisory] == ["architecture_review"]
+    assert not any(s.speckit for s in tables.STEPS)          # the plain cycle names no spec kit command
+    assert all(s.inputs == () and s.envelope == {} for t in tables.TABLES for s in t if s.kind == "code")
 
 
 @pytest.mark.fr("FR-066")
-@pytest.mark.parametrize("table, tidy, scope", [(workflow.TIDY_TESTS, "tidy_tests", "tests"),
-                                                (workflow.TIDY_CODE, "tidy_code", "not_tests")])
+@pytest.mark.parametrize("table, tidy, scope", [(tables.TIDY_TESTS, "tidy_tests", "tests"),
+                                                (tables.TIDY_CODE, "tidy_code", "not_tests")])
 def test_a_tidy_needs_no_failing_test_and_holds_one_side_still(table, tidy, scope):
     assert step(tidy, table).may_change == scope
     assert step("test", table).on_fail == Rework(tidy)                       # the tests must pass after
     assert step("review", table).routes == {"reject": Rework(tidy)}          # a rejection guides another try
-    assert workflow.table_for(True, "tidy-tests") is workflow.TIDY_TESTS     # the same on a spec kit codebase
+    assert tables.table_for(True, "tidy-tests") is tables.TIDY_TESTS     # the same on a spec kit codebase
     with pytest.raises(ValueError, match="tidy-tests"):
-        workflow.table_for(False, "rewrite-everything")
+        tables.table_for(False, "rewrite-everything")
 
 
 @pytest.mark.fr("FR-037")
@@ -181,15 +181,15 @@ def test_what_follows_a_step(name, result, attempts, expected):
     ("reject", {}, ended("rejected", "why")),
 ])
 def test_a_judging_steps_verdict_chooses_its_route(verdict, attempts, expected):
-    got = next_step(step("converge", workflow.SPEC_KIT_STEPS), failed("verdict", "why", verdict), attempts, LIMIT)
+    got = next_step(step("converge", tables.SPEC_KIT_STEPS), failed("verdict", "why", verdict), attempts, LIMIT)
     assert follows(got, expected), got
 
 
 @pytest.mark.fr("FR-055")
 def test_a_codebase_that_uses_spec_kit_gets_a_stage_for_each_spec_kit_command():
-    assert workflow.table_for(False, "change") is workflow.STEPS
-    assert workflow.table_for(True, "change") is workflow.SPEC_KIT_STEPS
-    assert [s.name for s in workflow.SPEC_KIT_STEPS][:5] == ["specify", "clarify", "plan", "tasks", "analyze"]
+    assert tables.table_for(False, "change") is tables.STEPS
+    assert tables.table_for(True, "change") is tables.SPEC_KIT_STEPS
+    assert [s.name for s in tables.SPEC_KIT_STEPS][:5] == ["specify", "clarify", "plan", "tasks", "analyze"]
 
 
 @pytest.mark.fr("FR-003")
@@ -197,7 +197,7 @@ def test_the_operators_three_decisions():
     plan = step("plan")
     assert after_wait("approve", plan) == Run("baseline")
     assert after_wait("revise", plan) == Run("plan")
-    assert after_wait("revise", step("clarify", workflow.SPEC_KIT_STEPS)) == Run("specify")   # the stage's start
+    assert after_wait("revise", step("clarify", tables.SPEC_KIT_STEPS)) == Run("specify")   # the stage's start
     assert after_wait("abandon", plan) == End("rejected", "abandoned by operator")
     with pytest.raises(ValueError):
         after_wait("postpone", plan)
@@ -210,11 +210,11 @@ def test_the_rules_live_in_one_place_and_do_no_input_or_output():
         defined = {node.name for node in ast.walk(ast.parse(file.read_text())) if isinstance(node, ast.FunctionDef)}
         if file.name != "workflow.py":
             assert not defined & {"next_step", "after_wait"}, f"{file.name} defines a rule function"
-    tree = ast.parse((package / "workflow.py").read_text())
-    imported = {alias.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.Import)
-                for alias in node.names}
-    imported |= {node.module.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
-    assert imported <= {"dataclasses", "pathlib"}, f"workflow.py must import nothing that does input or output"
+    for file, allowed in (("workflow.py", {"dataclasses", "pathlib"}), ("tables.py", {"dataclasses", "factory.workflow"})):
+        tree = ast.parse((package / file).read_text())
+        imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
+        imported |= {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+        assert imported <= allowed, f"{file} must import nothing that does input or output: {imported - allowed}"
 
 
 @pytest.mark.fr("FR-014")
@@ -241,7 +241,7 @@ def test_how_the_agent_programs_reply_went(reply, failure, said):
 def test_the_planner_and_reviewer_are_told_what_kind_of_run_it_is(run_kind, told):
     from factory import config
     assert told in (config.PROMPTS_DIR / "run_kinds" / f"{run_kind}.md").read_text()
-    for table in workflow.RUN_KINDS[run_kind]:
+    for table in tables.RUN_KINDS[run_kind]:
         for step in (s for s in table if s.name in ("plan", "review")):
             assert "run_kind" in step.inputs, f"{run_kind}: {step.name} is not told"
 

@@ -8,7 +8,7 @@ import shutil
 
 import pytest
 
-from factory import operations, speckit
+from factory import operations, speckit, tables
 from factory.store import open_store
 from factory.workspace import Workspace
 from tests.conftest import ARCHITECT, BUILD, commit_files, DOCUMENT, drive_with, git, PLAN, to_the_end, WRITE_TESTS
@@ -111,7 +111,7 @@ def test_a_revision_writes_the_same_feature_and_a_new_run_a_new_one(specified, k
 @pytest.mark.fr("FR-056")
 def test_each_spec_kit_stage_has_the_persona_that_uses_it():
     from factory import workflow
-    kit = workflow.table_for(True, "change")
+    kit = tables.table_for(True, "change")
     used = {command for s in kit for command in s.speckit}
     assert {"specify", "clarify", "plan", "tasks", "analyze", "implement", "converge"} <= used
     assert all(s.kind == "agent" and s.persona for s in kit if s.speckit)        # a persona follows each one

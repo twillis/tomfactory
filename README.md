@@ -270,7 +270,7 @@ run and needs no other change.
 
 ## Adding a step
 
-A step is one entry in the table in `factory/workflow.py`.
+A step is one entry in a table in `factory/tables.py`.
 
 **A code step** is a check. Say you want to refuse any change that adds a file over 500
 lines. Write the check in `factory/checks.py`:
@@ -283,7 +283,7 @@ def no_huge_files(ctx) -> CheckResult:
     return CheckResult(not huge, f"over 500 lines: {', '.join(huge)}")      # the registry adds the name
 ```
 
-Then add its entry to `STEPS` in `factory/workflow.py`, after `test`, and point `test` at it:
+Then add its entry to `STEPS` in `factory/tables.py`, after `test`, and point `test` at it:
 
 ```python
 Step("test", "code", on_pass="no_huge_files", checks=("tests_pass",), on_fail=Rework("build"),
@@ -360,12 +360,13 @@ test writer's attention to edge cases, for example, is in `personas/test_writer.
 
 ## Where the rules live
 
-In one file: `factory/workflow.py`. It holds the vocabularies (outcomes, the ways a step
-can fail, verdicts), the tables of steps for each kind of run, and the small functions that
-read them: `next_step` and `after_wait`, and the rules for which checks a step gets, what
-counts as a question, and how the agent program's reply went. It does no input or output —
-no files, no database, no processes — so you can read it top to bottom and know everything
-the factory will decide.
+In two files. `factory/tables.py` holds the tables: which steps each kind of run goes
+through, in what order. `factory/workflow.py` holds the rules: the vocabularies (outcomes,
+the ways a step can fail, verdicts), what a step entry may say, and the small functions that
+read entries: `next_step` and `after_wait`, and the rules for which checks a step gets, what
+counts as a question, and how the agent program's reply went. Neither does any input or
+output — no files, no database, no processes — so you can read the two top to bottom and know
+everything the factory will decide.
 
 The rest of the code carries those decisions out and decides nothing:
 
@@ -374,6 +375,7 @@ The rest of the code carries those decisions out and decides nothing:
 | `cli.py` | presentation | Parses commands and prints results. No rules. |
 | `operations.py` | control | What you can do to a run, and when it is refused |
 | `workflow.py` | control | **The rules** |
+| `tables.py` | control | **The tables**: the steps of each kind of run |
 | `driver.py` | control | Carries one run forward, a step at a time |
 | `checks.py` | control | The checks applied to each step's result |
 | `records.py` | control | The rules about what a run's record must say |
@@ -387,7 +389,7 @@ The rest of the code carries those decisions out and decides nothing:
 | `store.py` | data | Everything the factory keeps, behind one gateway: insert, get, query, update, delete on any table |
 | `config.py` | data | Where things are; the target's settings; your ideals |
 
-Read them in this order: `workflow.py`, `driver.py`, `checks.py`, `operations.py`, then the
+Read them in this order: `tables.py`, `workflow.py`, `driver.py`, `checks.py`, `operations.py`, then the
 rest as you need them.
 
 ## What this proof of concept does not protect you from

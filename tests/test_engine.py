@@ -7,7 +7,7 @@ import shutil
 
 import pytest
 
-from factory import operations, workflow
+from factory import operations, tables, workflow
 from factory.store import open_store
 from factory.workflow import END_ACCEPTED, WAIT, End, Replan, Rework, Step
 from tests.conftest import drive_with, git
@@ -32,7 +32,7 @@ TABLE = [
 @pytest.fixture
 def made_up(monkeypatch, tmp_path, home, target, fake_notify):
     from factory import config
-    monkeypatch.setattr(workflow, "table_for", lambda spec_kit, run_kind: TABLE)
+    monkeypatch.setattr(tables, "table_for", lambda spec_kit, run_kind: TABLE)
     prompts = tmp_path / "prompts"
     prompts.mkdir()
     for name in ("draft", "design", "make", "judge"):
