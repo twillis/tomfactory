@@ -7,6 +7,19 @@ factory itself; work the factory does on a target codebase (the viewer) is not l
 
 `docs/backlog.md`: all 44 entries addressed. Change record: `specs/001-near-loop-factory/changes/2026-11-19-architect-backlog.md`.
 
+## A plain-cycle run leaves no plan in the codebase
+
+Noticed 2026-11-19 by the operator, publishing the viewer: "there were no corresponding
+specs". On a spec kit codebase the documents are committed on the run's branch. On the plain
+cycle the approved plan lives only in the factory's local database, so a codebase built by
+the factory carries no record of why. The viewer's history was exported by hand into its
+`docs/runs/` (run 1 to 17).
+
+The fix: when a plan is approved on the plain cycle, write it (with the request, and any
+comments it was sent back with) to `docs/plans/<run>-<slug>.md` on the run's branch and
+commit it, so it merges with the code. Tests first; the documenter's `docs_paths` already
+covers the folder.
+
 ## The viewer reads the factory's private database
 
 Noted 2026-11-19 by the operator: "it seems like a smell to me". The viewer reads
