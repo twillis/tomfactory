@@ -114,7 +114,28 @@ Commands are run from this folder as `uv run python -m factory <command>`. Below
 written `factory <command>` for short; an alias makes that literal:
 
 ```bash
-alias factory='uv run --project ~/projects/2026_projects/src/tomfactory python -m factory'
+alias factory='uv run --project /path/to/tomfactory python -m factory'
+```
+
+### What it needs
+
+It was built and tested on Linux (Ubuntu 26.04). The versions it was tested with are in
+brackets.
+
+| Needed | For | Install |
+|--------|-----|---------|
+| Python 3.13 and [uv](https://docs.astral.sh/uv/) | running the factory | `curl -LsSf https://astral.sh/uv/install.sh \| sh` (uv 0.11) |
+| git | each run's own checkout and branch | your distribution's package (git 2.x) |
+| [Claude Code](https://docs.claude.com/en/docs/claude-code), signed in | the agents; it runs on your Claude subscription | `npm install -g @anthropic-ai/claude-code`, then run `claude` once to sign in (2.1) |
+| bubblewrap | running a codebase's tests contained; without it the factory refuses to run them | `sudo apt install bubblewrap` (0.11) |
+| notify-send | the desktop notification when a run needs you or has finished; optional | `sudo apt install libnotify-bin` |
+| [spec kit](https://github.com/github/spec-kit)'s `specify` command | only for a codebase made with `--spec-kit`; the plain cycle does not use it | `uv tool install specify-cli --from git+https://github.com/github/spec-kit.git` (1.3.3) |
+
+Then, from this directory:
+
+```bash
+uv sync                             # pytest, for the factory's own tests; the factory itself needs nothing else
+uv run python -m factory doctor     # checks git, the agent, notifications, its home and containment
 ```
 
 ### Before the first run
