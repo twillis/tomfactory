@@ -10,6 +10,45 @@ it over, documents the change, reviews the whole result — and notifies you whe
 
 This is a proof of concept. It is meant to be read, used, and changed.
 
+## How this was built, and why
+
+I wanted to work *near* the loop with AI coding agents instead of *in* it: hand over a
+request, read and approve a plan, and be told when it is done, without supervising every
+step. Most "agentic" setups let the agent decide what happens next. This one does not.
+**Agents propose; code disposes.** A plain Python script owns the order of steps, runs the
+tests itself, and checks every result; the agents have no shell.
+
+It was built in two days, by me working with Claude Code, in the same way it now works:
+
+- **Specification first.** [spec kit](https://github.com/github/spec-kit) for the
+  specification, plan and task list (`specs/`), and an independent analysis pass before any
+  code was written, which found 39 problems, 8 of them critical, that were fixed in the
+  documents first.
+- **A constitution the work is held to** (`.specify/memory/constitution.md`). Among its
+  rules: every requirement has tests that fail before it is built (78 requirements, each
+  named by a test, enforced when the tests are collected), and "the most functionality for
+  the least code, impeccably organised".
+- **Personas per step.** A test writer who is not the code writer, a reviewer who may change
+  nothing, an architect whose review is advice for a backlog, and a lead who answers the
+  other agents' questions before they reach me (`personas/`).
+- **Measured, not assumed.** Before containing agent-written tests, a harmless stand-in test
+  showed they could read `~/.ssh`, reach the network and the docker socket, and outlive
+  their step. Three ways to contain them were measured; the one chosen (bubblewrap) closes
+  every hole, and the stand-in test is now a permanent check.
+- **The factory reviewed itself.** Its own architect persona was run over its code and
+  found 44 things to improve; all 44 were addressed, with the tests green after each.
+
+Then it was used: **17 real runs** built [tomfactory-viewer](https://github.com/twillis/tomfactory-viewer),
+a small web app for watching the factory's runs. Three consecutive requests were accepted
+first time at about 7 minutes and $6 each. Along the way the runs exposed real problems: a
+test writer producing ten lines of tests per line of code, a review that could reject but
+not guide, no way to tidy without a failing test first, and work lost to a usage limit. Each
+became a change to the factory, made test first. The record of each is in
+`specs/001-near-loop-factory/changes/`.
+
+About 2,500 lines of Python, 314 tests, standard library plus pytest. What is next is in
+`docs/next.md`.
+
 ## How a run flows
 
 A run is one attempt to carry out one request. It goes through ten steps. Six are done
