@@ -62,5 +62,6 @@ from".
 
 ## Recommended order
 
-1, then 2, then pick one from 3. The fixes are cheap and remove noise from every later run;
-per-step models make every later run cheaper; the ideas are where the factory grows.
+**Revised 2026-11-19 by the operator:** the sandbox (4) comes first — "I am more concerned
+about the sandbox and isolation aspects" — and the expert panel is deferred ("I would defer
+the expert panel stuff for now"). Then 1 and 2.
