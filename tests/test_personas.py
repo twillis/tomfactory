@@ -46,6 +46,10 @@ def test_the_test_writer_is_directed_to_edge_and_failure_cases_and_away_from_imp
     priorities = writer["priorities"].lower()
     assert "once" in priorities and "level" in priorities and "parametri" in priorities     # FR-065: proportionate
     assert "budget" in priorities
+    import re
+    own = [line for line in writer["priorities"].splitlines() if re.match(r"\d+\. ", line)]
+    assert any(line.lower().split(". ", 1)[1].startswith("parametrise") for line in own), \
+        "parametrised tests must be a priority of their own, not a clause inside another"
     assert "test" in sections("code_writer")["must_not"].lower()
 
 

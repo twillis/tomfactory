@@ -280,7 +280,8 @@ SPEC_KIT_STEPS: list[Step] = [
 def _tidy(step: Step) -> list[Step]:
     return [_plain["plan"], replace(_plain["baseline"], on_pass=step.name), step,
             replace(_plain["test"], on_pass="review", on_fail=Rework(step.name)),
-            _plain["review"], _plain["finish"]]
+            replace(_plain["review"], on_fail=Rework(step.name)),      # a rejecting review guides another attempt
+            _plain["finish"]]
 
 
 TIDY_TESTS = _tidy(Step("tidy_tests", "agent", persona="test_writer", capabilities="read+edit",

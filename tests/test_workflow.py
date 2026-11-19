@@ -258,6 +258,9 @@ def test_a_tidy_run_has_no_failing_tests_first_step_and_holds_one_side_still():
     assert (tidy_tests.persona, tidy_tests.may_change) == ("test_writer", "tests")      # the code is held still
     assert (tidy_code.persona, tidy_code.may_change) == ("code_writer", "not_tests")    # the tests are held still
     assert workflow.get("test", tests).on_fail == Rework("tidy_tests")                  # and must pass after
+    assert workflow.get("review", tests).on_fail == Rework("tidy_tests")                # a rejecting review sends it back
+    assert workflow.get("review", code).on_fail == Rework("tidy_code")
+    assert workflow.get("review").on_fail == End("rejected")                            # unlike a change, which it ends
     assert workflow.get("test", code).on_fail == Rework("tidy_code")
     assert workflow.table_for(True, "tidy-tests") is tests                              # the same on a spec kit codebase
     assert workflow.table_for(False) is workflow.STEPS and workflow.table_for(False, "change") is workflow.STEPS

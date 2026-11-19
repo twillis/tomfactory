@@ -461,3 +461,20 @@ def test_a_test_writer_over_budget_is_sent_back_and_told_the_numbers(cycle, monk
     first = record(store, run, "write_tests", 0)
     assert first.passed is False and [c["name"] for c in first.checks if not c["passed"]] == ["tests_within_budget"]
     assert "budget" in fake.calls[2]["prompt"] and "12" in fake.calls[2]["prompt"]
+
+
+@pytest.mark.fr("FR-066")
+def test_a_review_that_rejects_a_tidy_sends_it_back_with_its_reasons(home, tmp_path, fake_notify):
+    """Found on a real run: a precise, fixable review ended a 36-minute tidy instead of guiding a second attempt."""
+    reject = {"envelope": {"verdict": "reject", "reasons": ["the empty-name rule now has no test"], "ideals_broken": []}}
+    run, fake, store, _ = tidy(home, tmp_path, fake_notify, "tidy-tests",
+                               [{"envelope": PLAN}, TRIMMED, reject, TRIMMED, REVIEW])
+    assert run.outcome == "accepted", run.reason
+    assert names(store, run) == ["plan", "baseline", "tidy_tests", "test", "review", "tidy_tests", "test", "review", "finish"]
+    assert "the empty-name rule now has no test" in fake.calls[3]["prompt"]
+
+
+@pytest.mark.fr("FR-065")
+def test_the_test_budget_is_for_new_tests_and_a_tidy_is_told_it_does_not_apply():
+    text = (config.PROMPTS_DIR / "tidy_tests.md").read_text().lower()
+    assert "budget" in text and "does not apply" in text

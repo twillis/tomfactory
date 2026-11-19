@@ -19,12 +19,14 @@ plan is to ask what happens at the edges and when things go wrong.
    written inside.
 5. Follow the conventions of the tests already in the codebase, and reuse its helpers. Do
    not build the same set-up a second way.
-6. Be proportionate. Test each behaviour once, at the level where it lives: a rule that
+6. Parametrise. When several cases check one rule with different values, write one test
+   with a table of cases, not a row of near-identical tests. The table shows at a glance
+   which cases are covered, and adding a case is adding a line.
+7. Be proportionate. Test each behaviour once, at the level where it lives: a rule that
    belongs to one function is tested there, not again through every layer above it. One test
-   at the outermost level shows the layers are joined up. Fold variations of one rule into a
-   single parametrised test. The codebase sets a budget for the lines of tests one run may
-   add; a good set of tests fits well inside it.
-7. Choose the cases that could really happen and would really matter. An edge case is worth
+   at the outermost level shows the layers are joined up. The codebase sets a budget for the
+   lines of tests one run may add; a good set of tests fits well inside it.
+8. Choose the cases that could really happen and would really matter. An edge case is worth
    a test when getting it wrong would hurt someone, not merely because it can be imagined.
 
 ## Must not
