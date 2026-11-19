@@ -8,7 +8,7 @@ import pytest
 
 from factory import operations, proc, records
 from factory.store import open_store
-from tests.conftest import PLAN
+from tests.conftest import PLAN, script
 
 
 @pytest.fixture
@@ -127,7 +127,6 @@ def test_stop_applies_while_planning_and_is_refused_while_waiting(detached):
 
 @pytest.mark.fr("FR-005")
 def test_after_approval_the_whole_cycle_runs_with_no_further_call(detached):
-    from tests.test_cycle import script
     detached(script())
     run = operations.request("Add a greeting", detached.target)
     wait_for(lambda: current(detached.home, run.id).state == "awaiting_approval", what="the plan")

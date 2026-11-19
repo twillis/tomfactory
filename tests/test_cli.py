@@ -118,7 +118,6 @@ def test_the_kind_of_run_is_chosen_with_a_flag(capsys, tmp_path, fake):
 @pytest.fixture
 def done(capsys, tmp_path, monkeypatch, home, fake_notify):
     """A finished run, made through the command line with the fake agent."""
-    from tests.test_cycle import script
     monkeypatch.setattr(operations, "launch", in_process(FakeAgent(script())))
     target = tmp_path / "viewer"
     run_cli(capsys, "init-target", str(target))

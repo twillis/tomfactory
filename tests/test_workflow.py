@@ -215,3 +215,33 @@ def test_the_rules_live_in_one_place_and_do_no_input_or_output():
                 for alias in node.names}
     imported |= {node.module.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
     assert imported <= {"dataclasses", "pathlib"}, f"workflow.py must import nothing that does input or output"
+
+
+@pytest.mark.fr("FR-014")
+@pytest.mark.fr("FR-016")
+@pytest.mark.fr("FR-032")
+@pytest.mark.parametrize("reply, failure, said", [
+    (dict(timed_out=True), "timeout", "900 seconds"),
+    (dict(ok=False, error="usage limit reached"), "error", "usage limit reached"),
+    (dict(denials=[{"path": "/work/run/app.py"}]), "error", "/work/run/app.py"),   # retrying cannot help
+    (dict(denials=[{"path": "/home/op/.ssh/id"}]), None, ""),     # outside the checkout: the guard working
+    (dict(), None, ""),
+])
+def test_how_the_agent_programs_reply_went(reply, failure, said):
+    from types import SimpleNamespace
+    reply = SimpleNamespace(**{"timed_out": False, "ok": True, "error": None, "denials": [], **reply})
+    result = workflow.reply_failure(reply, "/work/run", 900)
+    assert result.failure == failure and said in result.message
+
+
+@pytest.mark.fr("FR-066")
+@pytest.mark.parametrize("run_kind, told", [("change", "fail before it is built"),
+                                            ("tidy-tests", "The code is held still"),
+                                            ("tidy-code", "The tests are held still")])
+def test_the_planner_and_reviewer_are_told_what_kind_of_run_it_is(run_kind, told):
+    from factory import config
+    assert told in (config.PROMPTS_DIR / "run_kinds" / f"{run_kind}.md").read_text()
+    for table in workflow.RUN_KINDS[run_kind]:
+        for step in (s for s in table if s.name in ("plan", "review")):
+            assert "run_kind" in step.inputs, f"{run_kind}: {step.name} is not told"
+

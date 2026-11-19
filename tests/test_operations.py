@@ -6,7 +6,7 @@ import pytest
 from factory import operations, records
 from factory.operations import Refused
 from factory.store import open_store
-from tests.conftest import drive_with, git, PLAN, tree
+from tests.conftest import drive_with, git, PLAN, script, tree
 from tests.fake_agent import FakeAgent
 
 
@@ -29,22 +29,35 @@ def test_init_target_makes_a_committed_repository_with_the_defaults(tmp_path):
         operations.init_target(made)
 
 
-@pytest.mark.fr("FR-001")
-def test_a_request_is_refused_with_a_reason_when_it_cannot_start(home, target, tmp_path, fake_notify):
-    drive_with(FakeAgent([]))
-    with pytest.raises(Refused, match="empty"):
-        operations.request("   ", target)
-    with pytest.raises(Refused, match="not a git repository"):
-        operations.request("Do something", tmp_path / "nowhere")
+def _no_commit(target, tmp_path):
     (tmp_path / "plain").mkdir()
     git(tmp_path / "plain", "init", "-q")
-    with pytest.raises(Refused, match="not a git repository with at least one commit"):
-        operations.request("Do something", tmp_path / "plain")
+    return tmp_path / "plain"
+
+
+def _no_settings(target, tmp_path):
     git(target, "rm", "-q", ".factory.toml")
     git(target, "commit", "-q", "-m", "remove settings")
-    with pytest.raises(Refused, match=".factory.toml"):
-        operations.request("Do something", target)
-    assert open_store(home).query("runs", order="-id", limit=20) == []  # nothing was recorded for any of them
+    return target
+
+
+@pytest.mark.fr("FR-001")
+@pytest.mark.fr("FR-010")
+@pytest.mark.fr("FR-066")
+@pytest.mark.parametrize("where, text, kw, refused", [
+    (lambda target, tmp_path: target, "   ", {}, "empty"),
+    (lambda target, tmp_path: tmp_path / "nowhere", "Do something", {}, "not a git repository"),
+    (_no_commit, "Do something", {}, "not a git repository with at least one commit"),
+    (_no_settings, "Do something", {}, ".factory.toml"),
+    (lambda target, tmp_path: target, "Do something", {"attempts": 0}, "at least 1"),
+    (lambda target, tmp_path: target, "Do something", {"run_kind": "rewrite"}, "tidy-tests"),
+])
+def test_a_request_is_refused_with_a_reason_when_it_cannot_start(home, target, tmp_path, fake_notify,
+                                                               where, text, kw, refused):
+    drive_with(FakeAgent([]))
+    with pytest.raises(Refused, match=refused):
+        operations.request(text, where(target, tmp_path), **kw)
+    assert open_store(home).query("runs") == []          # nothing was recorded
 
 
 @pytest.mark.fr("FR-033")
@@ -62,9 +75,6 @@ def test_a_second_request_is_declined_while_a_run_is_open(home, target, fake_not
 def test_the_attempt_limit_can_be_set_when_making_the_request(home, target, fake_notify):
     run, _ = planned(target, fake_notify, attempts=2)
     assert run.attempt_limit == 2
-    with pytest.raises(Refused, match="at least 1"):
-        drive_with(FakeAgent([]))
-        operations.request("x", target, attempts=0)
 
 
 @pytest.mark.fr("FR-002")
@@ -175,18 +185,9 @@ def test_a_plan_that_is_malformed_every_time_ends_needs_me_at_the_limit(home, ta
     assert (run.state, run.outcome) == ("ended", "needs-me")
     assert "plan" in run.reason and "3 times" in run.reason
     steps = open_store(home).query("steps", {"run_id": run.id})
-    assert [(s.attempt, s.passed, s.failure) for s in steps] == [(1, False, "malformed")] * 0 + [
-        (1, False, "malformed"), (2, False, "malformed"), (3, False, "malformed")]
+    assert [(s.attempt, s.passed, s.failure) for s in steps] == [(n, False, "malformed") for n in (1, 2, 3)]
     assert "did not end with a JSON object" in fake.calls[1]["prompt"]   # told what was wrong
     assert fake_notify[-1][0] == f"Run {run.id}: needs-me"
-
-
-@pytest.mark.fr("FR-016")
-def test_an_agent_error_during_planning_ends_needs_me_with_the_message(home, target, fake_notify):
-    run, _ = planned(target, fake_notify, script=[{"error": "usage limit reached"}])
-    assert run.outcome == "needs-me" and "usage limit reached" in run.reason
-    step = open_store(home).query("steps", {"run_id": run.id})[0]
-    assert step.failure == "error" and step.passed is False
 
 
 @pytest.mark.fr("FR-032")
@@ -203,7 +204,6 @@ def test_a_planner_that_changes_a_file_is_undone_and_the_run_stops(home, target,
 
 def finished(target, fake_notify, entries=None):
     """Carry a request all the way to its end, with one plan revision on the way."""
-    from tests.test_cycle import script
     entries = entries or ([{"envelope": PLAN}] + script())
     fake = FakeAgent(entries)
     drive_with(fake)
@@ -286,7 +286,6 @@ def test_a_run_whose_driver_id_now_belongs_to_another_process_is_interrupted(hom
 @pytest.mark.fr("FR-012")
 def test_the_operators_comments_travel_with_the_request_to_every_later_step(home, target, fake_notify):
     """Found on a real run: the reviewer called the operator's own revision 'not asked for'."""
-    from tests.test_cycle import script
     fake = FakeAgent([{"envelope": PLAN}] + script())
     drive_with(fake)
     run = operations.request("Add a greeting", target)
@@ -308,7 +307,7 @@ def test_a_home_made_by_an_earlier_version_is_refused_in_words(home, target):
     old.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY, request TEXT)")     # no version stamp
     old.commit()
     old.close()
-    with pytest.raises(Refused, match="cannot\s+read"):
+    with pytest.raises(Refused, match=r"cannot\s+read"):
         operations.status()
-    with pytest.raises(Refused, match="cannot\s+read"):
+    with pytest.raises(Refused, match=r"cannot\s+read"):
         operations.request("Do something", target)

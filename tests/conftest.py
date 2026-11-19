@@ -1,4 +1,6 @@
 """Shared fixtures, and the rule that every test names the requirement it covers (constitution S8)."""
+import pathlib
+import re
 import shutil
 import subprocess
 
@@ -19,12 +21,33 @@ def _keep_monkeypatch(monkeypatch):
     _patch = monkeypatch
 
 
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def requirements() -> set[str]:
+    """Every functional requirement, across every feature's specification. They share one numbering."""
+    found = set()
+    for spec in (ROOT / "specs").glob("*/spec.md"):
+        found |= set(re.findall(r"^- \*\*(FR-\d{3})\*\*:", spec.read_text(), re.M))
+    return found
+
+
+@pytest.hookimpl(tryfirst=True)         # before -m and -k deselect anything
 def pytest_collection_modifyitems(config, items):
+    """The gate for constitution S8, over the tests pytest actually collected.
+
+    Every test names the requirement it covers; and, when the whole suite is collected,
+    every requirement is named by at least one test.
+    """
     unmarked = [item.nodeid for item in items if item.get_closest_marker("fr") is None]
     if unmarked:
         raise pytest.UsageError(
-            "every test must carry @pytest.mark.fr(\"FR-nnn\"); unmarked:\n  " + "\n  ".join(unmarked)
-        )
+            "every test must carry @pytest.mark.fr(\"FR-nnn\"); unmarked:\n  " + "\n  ".join(unmarked))
+    whole = all(pathlib.Path(arg).resolve() in (ROOT, ROOT / "tests") for arg in config.args)
+    named = {marker.args[0] for item in items for marker in item.iter_markers("fr")}
+    missing = sorted(requirements() - named)
+    if whole and missing:
+        raise pytest.UsageError("these requirements are named by no test: " + ", ".join(missing))
 
 
 def git(cwd, *args):
