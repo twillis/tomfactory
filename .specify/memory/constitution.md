@@ -144,6 +144,29 @@ cannot be tested MUST be rewritten until it can be, or removed.
 Rationale: "any FR should have at least one if not several unit/functional
 tests that fail until implemented rgr style."
 
+### S9. The Most Functionality for the Least Code; Impeccably Organised
+
+Software MUST deliver what is required with the least code that does so, within
+reason. A plan MUST prefer the smaller design that does the same job, and MUST
+say what it reuses or removes. A plan MUST NOT add code that repeats what
+existing code already does; it MUST give the repeated thing one home instead.
+
+Code MUST be organised so that its structure can be read: each piece has one
+obvious place, and a reader can tell where a thing lives before opening a file.
+The standard is code worth admiring, not merely code that works.
+
+This applies to tests as much as to the code they cover. Each behaviour is
+tested once, at the level where it lives. Variations of one rule MUST be one
+parametrised test, not a row of near-identical ones. Test volume MUST be
+proportionate to the code.
+
+"Within reason" is part of the rule. Brevity MUST NOT be bought with
+obscurity, and a safety property MUST NOT be dropped to save lines.
+
+Rationale: "Most functionality for least amount of code within reason.
+Impeccably organized, art." And, of tests: "Parameterized tests seems like a
+thing the test writer should be encouraged to use going forward."
+
 ## Part III — bttr Principles
 
 These apply when a spec touches `src/bttr_clojure`, `src/chart_app`,
@@ -295,7 +318,12 @@ PATCH for wording.
 `/speckit-analyze` treats a conflict with any MUST above as critical. The spec,
 plan or tasks change to comply; the rule is not reinterpreted to fit.
 
-**Version**: 1.3.0 | **Ratified**: 2026-11-10 | **Last Amended**: 2026-11-18
+**Version**: 1.4.0 | **Ratified**: 2026-11-10 | **Last Amended**: 2026-11-18
+
+Amendment 1.4.0 (2026-11-18, this copy only): added S9, "The Most Functionality
+for the Least Code; Impeccably Organised", at the operator's direction ("That
+should be in the constitution"), after the factory's test writer produced ten
+lines of tests for every line of code. MINOR: a principle was added.
 
 Amendment 1.3.0 (2026-11-18, this copy only): added S8, "Every Functional
 Requirement Has Tests That Fail First", at the operator's direction, so that no
