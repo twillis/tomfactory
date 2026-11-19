@@ -58,6 +58,7 @@ bwrap --ro-bind / /                       the system, read-only
 
 - `--unshare-all` gives a new PID namespace. When the factory stops `bwrap` (it is the leader of the group `proc.run` stops), the namespace's first process dies and the kernel kills everything left in it. That closes R1's escape.
 - `--unshare-all` gives a network namespace with only loopback, brought up by bubblewrap. Local HTTP servers inside the tests work (the viewer's do).
+- **`/var/run` is a link to `/run` on this machine**, so hiding `/run` hides the docker socket. Where `/var/run` is a real folder it must be hidden as well; `sandbox.command` does so. The stand-in test checks the socket either way. (Found by the analysis step.)
 - `--clearenv` keeps the operator's environment out (FR-073). The variables set are the ones the viewer's suite needed.
 - `--ro-bind / /` and then `--tmpfs` over parts is the simplest whole: everything system-wide is readable and nothing is writable. Hiding `/home` wholesale, then binding back only three paths, makes the home's contents an allowlist.
 

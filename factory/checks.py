@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 import os
 
-from factory import config, proc, speckit, workspace
+from factory import config, proc, sandbox, speckit, workspace
 
 REGISTRY: dict = {}
 
@@ -22,6 +22,7 @@ class CheckResult:
     passed: bool
     note: str = ""      # why it failed, or a short remark; may hold test output
     timed_out: bool = False     # the check ran a command that hit the time limit
+    contained: dict | None = None   # the check ran the target's code, contained: {"network": bool}
 
 
 @dataclass
@@ -123,18 +124,19 @@ def envelope_valid(ctx) -> CheckResult:
 OUTPUT_LIMIT = 6000     # how much of a test run's output is kept and passed on
 
 
-def run_tests(ctx) -> tuple[int | None, str]:
-    """Run the target's test command in the checkout. Returns (exit code, output).
+def run_tests(ctx) -> tuple[int | None, str, dict]:
+    """Run the target's test command in the checkout, contained. Returns (exit code, output, containment).
 
-    The command is the one committed in the target at the run's starting commit, never one
-    from the checkout. The exit code is None if the command hit the time limit.
+    The command, and whether it may reach the network, are as committed in the target at the
+    run's starting commit, never as in the checkout. The exit code is None if the command hit
+    the time limit. Raises sandbox.Unavailable, and runs nothing, if it cannot be contained.
     """
     lines: list[str] = []
-    environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
-    done = proc.run(config.test_argv(ctx.target_config), ctx.checkout.path, ctx.timeout, lines.append,
-                    ctx.stderr_file, env=environment, on_child=ctx.on_child)
+    network = ctx.target_config.test_network
+    argv = sandbox.command(config.test_argv(ctx.target_config), ctx.checkout.path, network)
+    done = proc.run(argv, ctx.checkout.path, ctx.timeout, lines.append, ctx.stderr_file, on_child=ctx.on_child)
     output = "\n".join(lines)[-OUTPUT_LIMIT:]
-    return (None if done.timed_out else done.exit_code), output
+    return (None if done.timed_out else done.exit_code), output, {"network": network}
 
 
 def _timed_out(name, ctx) -> CheckResult:
@@ -145,14 +147,14 @@ def _timed_out(name, ctx) -> CheckResult:
 @register("baseline")
 def baseline(ctx) -> CheckResult:
     """Before anything changes: the existing tests pass, or there are none."""
-    code, output = run_tests(ctx)
+    code, output, contained = run_tests(ctx)
     if code is None:
         return _timed_out("baseline", ctx)
     if code == ctx.target_config.no_tests_exit_code:
-        return CheckResult("baseline", True, "no prior tests")
+        return CheckResult("baseline", True, "no prior tests", contained=contained)
     if code == 0:
-        return CheckResult("baseline", True, output)
-    return CheckResult("baseline", False, f"the existing tests were already failing:\n{output}")
+        return CheckResult("baseline", True, output, contained=contained)
+    return CheckResult("baseline", False, f"the existing tests were already failing:\n{output}", contained=contained)
 
 
 @register("tests_added")
@@ -188,25 +190,27 @@ def edge_cases_stated(ctx) -> CheckResult:
 @register("tests_fail_first")
 def tests_fail_first(ctx) -> CheckResult:
     """The new tests fail before the change is built. "No tests found" is not a failing test."""
-    code, output = run_tests(ctx)
+    code, output, contained = run_tests(ctx)
     if code is None:
         return _timed_out("tests_fail_first", ctx)
     if code == 0:
         return CheckResult("tests_fail_first", False,
-                           "the new tests pass before anything was built, so they do not describe the change")
+                           "the new tests pass before anything was built, so they do not describe the change",
+                           contained=contained)
     if code == ctx.target_config.no_tests_exit_code:
         return CheckResult("tests_fail_first", False,
-                           "the test command found no tests to run; the new tests were not collected")
-    return CheckResult("tests_fail_first", True, output)
+                           "the test command found no tests to run; the new tests were not collected",
+                           contained=contained)
+    return CheckResult("tests_fail_first", True, output, contained=contained)
 
 
 @register("tests_pass")
 def tests_pass(ctx) -> CheckResult:
     """Every test passes: the new ones and the ones that were already there."""
-    code, output = run_tests(ctx)
+    code, output, contained = run_tests(ctx)
     if code is None:
         return _timed_out("tests_pass", ctx)
-    return CheckResult("tests_pass", code == 0, output)
+    return CheckResult("tests_pass", code == 0, output, contained=contained)
 
 
 @register("verdict_accept")

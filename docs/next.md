@@ -42,7 +42,14 @@ probably the code writer, would cut that without touching the judgement steps.
 - **Backlog to request.** The architect's findings sit in `docs/backlog.md`. A command that
   turns an entry into a `--tidy code` request would close that loop.
 
-## 4. Safety: a sandbox
+## 4. Safety: a sandbox — phase 1 done (2026-11-19)
+
+Phase 1 (feature 002): the test command runs in bubblewrap. Phase 2: contain the agent
+program itself, which needs a network allowlist, so `srt` and an AppArmor profile for its
+helper (research 002 R3). Also open: a per-codebase list of extra tool folders.
+
+The original note:
+
 
 The largest gap. Agents have no shell and are confined to their checkout, but the test
 command runs code and tests that agents wrote, with the operator's permissions, and nothing

@@ -1,6 +1,8 @@
 """Shared fixtures, and the rule that every test names the requirement it covers (constitution S8)."""
 import subprocess
 
+collect_ignore_glob = ["fixtures/*"]     # files copied into target codebases, not the factory's tests
+
 from factory import records
 import pytest
 

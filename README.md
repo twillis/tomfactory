@@ -185,6 +185,20 @@ the tests again (which must still pass), review. One side is held still: tidying
 may not touch the code, and tidying the code may not touch the tests. The architect's
 backlog is the natural source of tidy requests.
 
+### Tests run contained
+
+Every time the factory runs a codebase's tests, they run inside bubblewrap and can reach
+nothing of yours beyond their own checkout. A codebase whose tests genuinely need the
+network says so in its committed `.factory.toml`:
+
+```toml
+test_network = true     # off unless this line is here
+```
+
+`factory show --step <id>` on a test step shows `contained`, and whether the network was
+allowed. `factory doctor` reports whether containment works on the machine. Tests that need
+a tool from your home other than the factory's own Python, or that use git, fail contained.
+
 ### Keeping tests proportionate
 
 Left alone, a test writer told to cover edge cases will keep finding more. Two things hold
@@ -360,10 +374,16 @@ rest as you need them.
 
 Be clear-eyed about these before pointing it at anything you care about.
 
-- **Tests written by an agent are run on your machine with your permissions.** The agents
-  themselves have no shell and cannot write outside their checkout. But the test command
-  executes the tests and the code that agents wrote, and nothing limits what that code does
-  when it runs. There is no sandbox. This is the main thing the next stage has to add.
+- **Tests written by an agent run contained, but not in a virtual machine.** The factory runs
+  every test command inside bubblewrap: the code sees its checkout, the system read-only and
+  the factory's Python, and nothing else of yours — no home, no records, no keys, no
+  environment variables, no docker socket, no network unless the codebase allows it, and
+  nothing it starts outlives the step. It shares your kernel, has no system-call filter, and
+  has no limit on CPU or memory beyond the step's time limit. If bubblewrap does not work,
+  the factory refuses to run the tests at all. (Feature 002.)
+- **The agent program itself is not contained by the factory.** It is confined by its own
+  permission system: no shell, and reads and edits outside the checkout refused. Containing
+  it too is phase 2.
 - **Confinement depends on the agent program.** When this was built, the agent program
   refused both reads and edits outside the run's checkout. That was tested with direct
   requests, not against an agent determined to get round it, and a later version of the

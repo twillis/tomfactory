@@ -11,7 +11,7 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 
-from factory import agent, config, driver, proc, records, speckit, workflow, workspace
+from factory import agent, config, driver, proc, records, sandbox, speckit, workflow, workspace
 from factory import workflow as flow     # for the one function that takes an argument named workflow
 from factory.store import open_store
 from factory.workspace import Workspace
@@ -328,6 +328,8 @@ def doctor() -> list[Health]:
     found.append(Health("notification", bool(notifier), notifier or "notify-send is not installed"))
     home = config.home()
     found.append(Health("home", os.access(home, os.W_OK), str(home)))
+    contained, reason = sandbox.available()
+    found.append(Health("containment", contained, reason))
     return found
 
 

@@ -1,4 +1,4 @@
-"""Gate (constitution S8): every FR in the spec must be named by at least one test.
+"""Gate (constitution S8): every FR in every feature's spec must be named by at least one test.
 
 Run from the repository root:  uv run python scripts/traceability.py
 Prints the requirements no test names and exits 1 if there are any.
@@ -8,11 +8,12 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SPEC = ROOT / "specs" / "001-near-loop-factory" / "spec.md"
 
 
 def main() -> int:
-    wanted = set(re.findall(r"^- \*\*(FR-\d{3})\*\*:", SPEC.read_text(), re.M))
+    wanted = set()      # requirement numbers run in one sequence across every feature's spec
+    for spec in sorted((ROOT / "specs").glob("*/spec.md")):
+        wanted |= set(re.findall(r"^- \*\*(FR-\d{3})\*\*:", spec.read_text(), re.M))
     named: set[str] = set()
     for path in (ROOT / "tests").rglob("*.py"):
         named |= set(re.findall(r"""fr\(\s*["'](FR-\d{3})["']\s*\)""", path.read_text()))

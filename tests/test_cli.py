@@ -206,12 +206,12 @@ def test_doctor_reports_each_thing_the_factory_needs(capsys, home, monkeypatch):
     monkeypatch.setenv("TOMFACTORY_AGENT", "tests.test_cli:healthy_agent")
     code, out = run_cli(capsys, "doctor")
     lines = [line for line in out.splitlines() if line.strip()]
-    assert code == 0 and len(lines) == 4
-    for needed in ("git", "agent", "notification", str(home)):
+    assert code == 0 and len(lines) == 5
+    for needed in ("git", "agent", "notification", str(home), "containment"):
         assert needed in out
     assert all(line.startswith("ok") for line in lines)
 
     monkeypatch.setenv("TOMFACTORY_AGENT", "tests.test_cli:broken_agent")
     code, out = run_cli(capsys, "doctor")
     assert code == 1 and "you are not signed in" in out
-    assert [line[:2] for line in out.splitlines() if line.strip()].count("ok") == 3
+    assert [line[:2] for line in out.splitlines() if line.strip()].count("ok") == 4

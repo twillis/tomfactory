@@ -23,7 +23,7 @@ import signal
 import time
 from dataclasses import asdict
 
-from factory import agent, checks, config, notify, proc, records, speckit, workflow, workspace
+from factory import agent, checks, config, notify, proc, records, sandbox, speckit, workflow, workspace
 from factory.workflow import Ask, End, Replan, StepResult, Wait
 from factory.workspace import Workspace
 
@@ -166,14 +166,17 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
         if result.passed:
             own = ((["envelope_valid"] if step.kind == "agent" else []) + list(step.checks)
                    + (["verdict"] if step.routes else []))
-            for name in own:
-                outcome = check(name)
-                if not outcome.passed:
-                    if outcome.timed_out:
-                        result = StepResult(False, "timeout", outcome, message=f"{timeout:g} seconds")
-                    else:
-                        result = StepResult(False, "malformed" if name == "envelope_valid" else "check", outcome)
-                    break
+            try:
+                for name in own:
+                    outcome = check(name)
+                    if not outcome.passed:
+                        if outcome.timed_out:
+                            result = StepResult(False, "timeout", outcome, message=f"{timeout:g} seconds")
+                        else:
+                            result = StepResult(False, "malformed" if name == "envelope_valid" else "check", outcome)
+                        break
+            except sandbox.Unavailable as refused:      # not run at all, rather than run uncontained
+                result = StepResult(False, "error", message=str(refused))
         if reply is not None and isinstance(reply.envelope, dict):
             result.verdict = reply.envelope.get("verdict")
 
@@ -189,6 +192,8 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
         produced = reply.envelope if reply.envelope is not None else {"text": reply.text[:2000]}
     else:
         produced = {"output": done[-1].note} if step.checks and done else {}
+        if step.checks and done and done[-1].contained is not None:
+            produced["contained"] = done[-1].contained
     records.finish_step(store, record.id, produced, [asdict(outcome) for outcome in done], result.passed,   # 7
                        "check" if result.failure == "question" else result.failure,
                        reply.tokens if reply else None,

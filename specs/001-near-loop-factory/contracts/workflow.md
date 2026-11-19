@@ -129,6 +129,8 @@ A check is a named function in `factory/checks.py`, registered by name, with the
 
 `envelope_valid` also enforces one cross-field rule: a review envelope that lists any broken ideal with the verdict `accept` is malformed (SC-009).
 
+The three checks that run the test command (`baseline`, `tests_fail_first`, `tests_pass`) run it contained (feature 002, `factory/sandbox.py`). If it cannot be contained, the step fails as `error` and the run ends as needs-me without running the tests.
+
 ### `may_change` scopes
 
 "Changed" means the files git reports as added, modified or deleted in the checkout after the step that it did not report before the step. The target's `.gitignore` is honoured, so caches do not count.

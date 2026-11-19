@@ -173,7 +173,7 @@ Requirement numbers continue the factory's single sequence from feature 001, so 
 
 ### Measurable Outcomes
 
-- **SC-013**: Run contained, the stand-in test can do none of the seven things in the "Why" table: 0 of 7, where today it is 7 of 7.
+- **SC-013**: Run contained, the stand-in test can do none of the seven things in the "Why" table, and cannot see the operator's environment (FR-073): 0 of 8, where today it is 8 of 8.
 - **SC-014**: 100% of the viewer's existing tests pass when run contained.
 - **SC-015**: When containment is unavailable, 0 target tests are run, and the operator can tell why from the run's reason alone.
 - **SC-016**: Containment adds under one second to each test run.

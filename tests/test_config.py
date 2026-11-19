@@ -85,7 +85,8 @@ def test_the_default_target_files_are_valid_and_ignore_caches():
     import tomllib
     parsed = tomllib.loads(config.DEFAULT_FACTORY_TOML)
     assert set(parsed) == {"test_command", "no_tests_exit_code", "test_paths", "docs_paths",
-                           "step_timeout_seconds", "test_budget_lines"}
+                           "step_timeout_seconds", "test_budget_lines", "test_network"}
+    assert parsed["test_network"] is False and config.TargetConfig().test_network is False      # off unless asked
     assert parsed["test_budget_lines"] == config.TargetConfig().test_budget_lines == 300
     ignored = config.DEFAULT_GITIGNORE.split()
     assert {"__pycache__/", ".pytest_cache/", "*.pyc", ".venv/"} <= set(ignored)

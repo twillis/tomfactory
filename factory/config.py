@@ -21,6 +21,7 @@ test_paths = ["tests/"]         # where tests live; only the test writer may cha
 docs_paths = ["docs/", "CHANGELOG.md"]   # where the documenter may write
 step_timeout_seconds = 900      # the time limit for any one step
 test_budget_lines = 300         # the most lines of tests one run may add; 0 means no limit
+test_network = false            # true lets this codebase's tests reach the network; they are contained either way
 '''
 
 DEFAULT_GITIGNORE = "__pycache__/\n.pytest_cache/\n*.pyc\n.venv/\n"
@@ -38,6 +39,7 @@ class TargetConfig:
     docs_paths: tuple = ("docs/", "CHANGELOG.md")
     step_timeout_seconds: int = 900
     test_budget_lines: int = 300
+    test_network: bool = False
 
 
 def home() -> pathlib.Path:
