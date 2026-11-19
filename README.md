@@ -328,8 +328,8 @@ whatever its entry says. A new step cannot leave them out.
 
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
 `ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`,
-`test_files`, `failure`, `question`, `diff`, `test_output`. Each is a small function in
-`factory/driver.py` registered under its name; a new one is a function with `@given("name")`.
+`test_files`, `failure`, `question`, `diff`, `test_output`. Each is one entry in `INPUTS` in
+`factory/driver.py`; a new input is one entry there.
 
 ## Adding a persona
 

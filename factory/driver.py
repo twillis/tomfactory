@@ -275,18 +275,6 @@ class Sources:
         return [record for record in self.store.query("steps", {"run_id": self.run.id}) if record.ended_at]
 
 
-INPUTS: dict = {}
-
-
-def given(name):
-    """Make an input available to step entries and prompts under `name`."""
-    def add(function):
-        INPUTS[name] = function
-        return function
-    return add
-
-
-@given("request")
 def _request(src):
     """The request, as the operator has amended it when sending plans back."""
     comments = [plan.comment for plan in src.plans if plan.decision == "revised" and plan.comment]
@@ -296,24 +284,8 @@ def _request(src):
             + "\n".join(f"- {comment}" for comment in comments))
 
 
-@given("run_kind")
-def _run_kind(src):
-    return (src.prompts_dir / "run_kinds" / f"{src.run.run_kind}.md").read_text()
-
-
-@given("ideals")
-def _ideals(src):
-    return src.run.ideals or NO_IDEALS
-
-
-@given("constitution")
-def _constitution(src):
-    """The codebase's own rules; they come before the operator's ideals."""
-    return speckit.constitution(src.checkout.path) or "This codebase has no constitution of its own."
-
-
-@given("plan")
 def _plan(src):
+    """The plan last approved; or, before any approval, the latest."""
     approved = [plan for plan in src.plans if plan.decision == "approved"]
     return (approved or src.plans)[-1].text if src.plans else ""
 
@@ -323,33 +295,11 @@ def _sent_back(src):
     return src.plans[-1] if src.plans and src.plans[-1].decision == "revised" else None
 
 
-@given("previous_plan")
-def _previous_plan(src):
-    return _sent_back(src).text if _sent_back(src) else ""
-
-
-@given("comment")
-def _comment(src):
-    return (_sent_back(src).comment or "") if _sent_back(src) else ""
-
-
-@given("test_paths")
-def _test_paths(src):
-    return ", ".join(src.settings.test_paths)
-
-
-@given("docs_paths")
-def _docs_paths(src):
-    return ", ".join(src.settings.docs_paths)
-
-
-@given("test_files")
 def _test_files(src):
     touched = set(src.checkout.files_changed_since_base()) | set(src.checkout.dirty())
     return "\n".join(sorted(name for name in touched if under(name, src.settings.test_paths)))
 
 
-@given("failure")
 def _failure(src):
     """What went wrong last time, with what the command printed if one ran."""
     if not src.finished or src.finished[-1].passed:
@@ -360,21 +310,28 @@ def _failure(src):
     return f"{failed['name']}: {failed['note']}" + (f"\n{failed['output']}" if failed.get("output") else "")
 
 
-@given("question")
-def _question(src):
-    waiting = records.pending_question(src.store, src.run.id)
-    return waiting.question if waiting else ""
-
-
-@given("diff")
-def _diff(src):
-    return src.checkout.diff_since_base()
-
-
-@given("test_output")
 def _test_output(src):
     outputs = [r.produced["output"] for r in src.finished if r.kind == "code" and (r.produced or {}).get("output")]
     return outputs[-1] if outputs else ""
+
+
+# The inputs a prompt may use, by name. A new input is one entry here.
+INPUTS = {
+    "request": _request,
+    "run_kind": lambda src: (src.prompts_dir / "run_kinds" / f"{src.run.run_kind}.md").read_text(),
+    "ideals": lambda src: src.run.ideals or NO_IDEALS,
+    "constitution": lambda src: speckit.constitution(src.checkout.path) or "This codebase has no constitution of its own.",
+    "plan": _plan,
+    "previous_plan": lambda src: _sent_back(src).text if _sent_back(src) else "",
+    "comment": lambda src: (_sent_back(src).comment or "") if _sent_back(src) else "",
+    "test_paths": lambda src: ", ".join(src.settings.test_paths),
+    "docs_paths": lambda src: ", ".join(src.settings.docs_paths),
+    "test_files": _test_files,
+    "failure": _failure,
+    "question": lambda src: (records.pending_question(src.store, src.run.id) or {}).get("question", ""),
+    "diff": lambda src: src.checkout.diff_since_base(),
+    "test_output": _test_output,
+}
 
 
 PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
