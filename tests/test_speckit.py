@@ -123,6 +123,7 @@ def test_each_spec_kit_stage_has_the_persona_that_uses_it():
 @pytest.mark.fr("FR-055")
 @pytest.mark.fr("FR-056")
 @pytest.mark.fr("FR-057")
+@pytest.mark.fr("FR-079")
 def test_a_whole_run_on_a_spec_kit_target_follows_spec_kits_stages(home, kit_target, fake_notify):
     fake = FakeAgent(kit_script())
     drive_with(fake)
@@ -132,6 +133,7 @@ def test_a_whole_run_on_a_spec_kit_target_follows_spec_kits_stages(home, kit_tar
     assert FEATURE in operations.plan(run.id).text
     on_branch = git(kit_target, "ls-tree", "-r", "--name-only", run.branch).split()
     assert f"{FEATURE}/spec.md" in on_branch and f"{FEATURE}/plan.md" not in on_branch
+    assert not [name for name in on_branch if name.startswith("docs/plans/")]     # FR-079: spec kit wrote its own
     assert "Clarifications" in git(kit_target, "show", f"{run.branch}:{FEATURE}/spec.md")
 
     run = operations.approve(run.id)

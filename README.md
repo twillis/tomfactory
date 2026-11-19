@@ -105,8 +105,11 @@ Every run ends in exactly one of three outcomes, with a reason you can read:
 
 Each run works in its own checkout of the target codebase, on its own branch
 (`factory/<run>-<first words of the request>`). Your own working copy is never touched. An
-accepted run leaves up to four commits on its branch: the tests, the change, the architect's
-backlog notes if it had any, and the documentation. **You merge the branch yourself.** The factory never merges.
+accepted run leaves up to five commits on its branch: the plan you approved, the tests, the
+change, the architect's backlog notes if it had any, and the documentation. The plan is
+`docs/plans/<run>-<first words>.md`, with the request and anything you sent it back with,
+so the reason for a change travels with it. (On a spec kit codebase, spec kit's own documents
+under `specs/` do that instead.) **You merge the branch yourself.** The factory never merges.
 
 ## Using the factory
 

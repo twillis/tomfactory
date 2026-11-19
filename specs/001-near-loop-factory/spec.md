@@ -257,6 +257,10 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 - **FR-065**: The tests a run adds MUST be proportionate to the change. The test-writer persona MUST be directed to test each behaviour once, at the level where it lives, and the factory MUST refuse a set of tests larger than a budget the target codebase sets, saying how large it was and what the budget is.
 - **FR-066**: The operator MUST be able to request a change that must not alter behaviour — tidying the tests, or tidying the code — without the factory demanding new failing tests. In such a run the existing tests MUST pass before and after; tidying the tests MUST NOT change the code, and tidying the code MUST NOT change the tests. The planner and the reviewer MUST be told which kind of run it is and what it holds still, so that a plan never asks for what the run may not change. *(Added 2026-11-19 after run 15, whose planner planned new tests in a tidy of the code.)*
 
+**The plan travels with the code**
+
+- **FR-079**: When the operator approves a plan that no spec kit stage wrote, the factory MUST commit it to the run's branch, as `docs/plans/<run>-<name>.md`, before the run carries on: the request as amended by any comments it was sent back with, the plan, how it follows the ideals, and its conflicts. Where spec kit wrote the documents, they are already committed, and nothing more is written. *(Added 2026-11-19 after publishing the viewer, whose plans had stayed in the factory's local database.)*
+
 **Resuming**
 
 - **FR-067**: The operator MUST be able to resume a run that ended as needs-me, from the step it stopped at. Everything the run committed before that step MUST be kept and not redone; anything the stopped step left uncommitted MUST be discarded; and the earlier ending MUST stay in the run's history. Resuming MUST be refused for a run that ended any other way, whose checkout no longer exists, or while another run is open.
