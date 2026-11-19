@@ -3,6 +3,12 @@
 Queued 2026-11-19. Each item names where its thinking already lives. Items are for the
 factory itself; work the factory does on a target codebase (the viewer) is not listed here.
 
+## 0. The architect's review of the factory
+
+`docs/backlog.md`: 15 warnings and 29 suggestions, by file. Its suggested order: one
+judging mechanism and one vocabulary of failure kinds, then `run_step`, then a generated
+prompt footer, then the tests.
+
 ## 1. Small fixes found by real runs
 
 No design needed. A few hours, no quota beyond a check run.
