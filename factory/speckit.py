@@ -11,7 +11,7 @@ import json
 import pathlib
 import re
 
-from factory import agent, proc
+from factory import agent, proc, workspace
 
 SCRIPTS = pathlib.Path(".specify") / "scripts" / "bash"
 FEATURE_FILE = ".specify/feature.json"
@@ -102,8 +102,7 @@ def _specify(checkout, request) -> dict:
     if feature is None:
         specs = checkout.path / "specs"
         numbers = [int(p.name[:3]) for p in specs.iterdir() if re.match(r"\d{3}-", p.name)] if specs.is_dir() else []
-        words = re.sub(r"[^a-z0-9]+", "-", " ".join(request.split()[:4]).lower()).strip("-") or "feature"
-        feature = f"specs/{max(numbers, default=0) + 1:03d}-{words[:40].strip('-')}"
+        feature = f"specs/{max(numbers, default=0) + 1:03d}-{workspace.slug(request, words=4) or 'feature'}"
         (checkout.path / feature).mkdir(parents=True)
         template = _script(checkout, "resolve-template.sh", "spec-template", "--json")["TEMPLATE_CONTENT"]
         (checkout.path / feature / "spec.md").write_text(template)
@@ -130,9 +129,7 @@ def _tasks(checkout, request) -> dict:
     tasks = checkout.path / feature / "tasks.md"
     if not tasks.exists():                                      # never overwrite tasks being revised
         template = report.get("TASKS_TEMPLATE_CONTENT") or pathlib.Path(report["TASKS_TEMPLATE"]).read_text()
-        if template.startswith("---"):          # the template's own header is not part of the document
-            template = template.split("---", 2)[2].lstrip()
-        tasks.write_text(template)
+        tasks.write_text(agent.without_front_matter(template).lstrip())     # its header is not part of the document
     return {"feature_directory": feature, "tasks_file": f"{feature}/tasks.md",
             "available_docs": report.get("AVAILABLE_DOCS", [])}
 

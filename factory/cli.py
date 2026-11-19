@@ -111,23 +111,30 @@ def approve(args):
     print(f"Run {run.id} approved. It now runs unattended; you will be notified when it has finished.")
 
 
+def run_and_text(words) -> tuple[int | None, str]:
+    """`[run] words`: a leading number is the run, when more words follow it."""
+    if len(words) > 1 and words[0].isdigit():
+        return int(words[0]), " ".join(words[1:])
+    return None, " ".join(words)
+
+
+def ended(run) -> str:
+    return f"Run {run.id} ended: {run.outcome} — {run.reason}"
+
+
 def revise(args):
-    words = list(args.words)
-    run_id = int(words.pop(0)) if len(words) > 1 and words[0].isdigit() else None
-    run = operations.revise(run_id, " ".join(words))
+    run = operations.revise(*run_and_text(args.words))
     print(f"Run {run.id}: the plan was sent back. You will be notified when the new version is ready.")
 
 
 def answer(args):
-    words = list(args.words)
-    run_id = int(words.pop(0)) if len(words) > 1 and words[0].isdigit() else None
-    run = operations.answer(run_id, " ".join(words))
+    run = operations.answer(*run_and_text(args.words))
     print(f"Run {run.id}: answered. It carries on; you will be notified when it next needs you or has finished.")
 
 
 def abandon(args):
     run = operations.abandon(args.run_id)
-    print(f"Run {run.id} ended: {run.outcome} — {run.reason}")
+    print(ended(run))
 
 
 
@@ -135,13 +142,13 @@ def abandon(args):
 def resume(args):
     run = operations.resume(args.run_id)
     if run.state == "ended":
-        print(f"Run {run.id} ended: {run.outcome} — {run.reason}")
+        print(ended(run))
     else:
         print(f"Run {run.id} resumed at {run.current_step}. You will be notified when it next needs you or has finished.")
 
 def stop(args):
     run = operations.stop(args.run_id)
-    print(f"Run {run.id} ended: {run.outcome} — {run.reason}")
+    print(ended(run))
 
 def status(args):
     views = operations.status()
@@ -224,7 +231,7 @@ def watch(args):
             break
         time.sleep(1)
     if run.state == "ended":
-        print(f"Run {run.id} ended: {run.outcome} — {run.reason}")
+        print(ended(run))
     else:
         print(f"Run {run.id} is waiting for you:  {PROG} plan")
 

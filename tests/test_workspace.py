@@ -3,18 +3,12 @@ import pytest
 
 from factory import workspace
 from factory.workspace import Workspace
-from tests.conftest import git
+from tests.conftest import git, tree
 
 
 @pytest.fixture
 def ws(target, tmp_path):
     return Workspace.create(target, tmp_path / "home" / "workspaces" / "1", "factory/1-hello", git(target, "rev-parse", "HEAD"))
-
-
-def tree(path):
-    """Every file under a directory with its bytes, ignoring git's own folder."""
-    return {str(f.relative_to(path)): f.read_bytes()
-            for f in sorted(path.rglob("*")) if f.is_file() and ".git" not in f.relative_to(path).parts}
 
 
 @pytest.mark.fr("FR-019")
@@ -96,55 +90,6 @@ def test_diff_since_base_is_the_runs_whole_change(ws):
     ws.commit("two")
     diff = ws.diff_since_base()
     assert "+print('hello')" in diff and "app.py" in diff and "print('hi')" not in diff
-
-
-@pytest.mark.fr("FR-030")
-def test_fingerprint_changes_only_when_content_does(tmp_path):
-    folder, single, missing = tmp_path / "pkg", tmp_path / "ideals.md", tmp_path / "absent"
-    folder.mkdir()
-    (folder / "a.py").write_text("a\n")
-    single.write_text("layers\n")
-    paths = [folder, single, missing]
-    first = workspace.fingerprint(paths)
-    assert workspace.fingerprint(paths) == first
-    (folder / "__pycache__").mkdir()
-    (folder / "__pycache__" / "a.pyc").write_text("cache")
-    assert workspace.fingerprint(paths) == first, "caches written by Python itself must not count"
-    (folder / "a.py").write_text("changed\n")
-    second = workspace.fingerprint(paths)
-    assert second != first
-    (folder / "b.py").write_text("new\n")
-    third = workspace.fingerprint(paths)
-    assert third != second
-    single.unlink()
-    assert workspace.fingerprint(paths) != third
-    missing.write_text("now exists\n")
-    assert workspace.fingerprint(paths) != third
-
-
-@pytest.mark.fr("FR-032")
-def test_snapshot_then_restore_returns_everything_to_the_snapshot(tmp_path):
-    folder, single, missing = tmp_path / "personas", tmp_path / "ideals.md", tmp_path / "prompts"
-    folder.mkdir()
-    (folder / "planner.md").write_text("plan\n")
-    (folder / "reviewer.md").write_text("review\n")
-    single.write_text("layers\n")
-    paths, dest = [folder, single, missing], tmp_path / "snapshot"
-    workspace.snapshot(paths, dest)
-    before = workspace.fingerprint(paths)
-
-    (folder / "planner.md").write_text("tampered\n")
-    (folder / "reviewer.md").unlink()
-    (folder / "intruder.md").write_text("new\n")
-    single.unlink()
-    missing.mkdir()
-    (missing / "plan.md").write_text("should not exist\n")
-    assert workspace.fingerprint(paths) != before
-
-    workspace.restore(paths, dest)
-    assert workspace.fingerprint(paths) == before
-    assert (folder / "planner.md").read_text() == "plan\n" and not (folder / "intruder.md").exists()
-    assert single.read_text() == "layers\n" and not missing.exists()
 
 
 @pytest.mark.fr("FR-003")

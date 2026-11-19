@@ -1,7 +1,7 @@
 """What a step entry is, and the three checks applied to every step (contracts/workflow.md)."""
 import pytest
 
-from factory import checks, workflow, workspace
+from factory import checks, own_files, workflow, workspace
 from factory.checks import CheckContext
 from factory.config import TargetConfig
 from factory.workflow import End, Rework, Step
@@ -123,7 +123,7 @@ def test_factory_untouched_compares_fingerprints(tmp_path):
     (package / "driver.py").write_text("code\n")
     ideals.write_text("layers\n")
     paths = [package, ideals]
-    before = workspace.fingerprint(paths)
+    before = own_files.fingerprint(paths)
     check = checks.get("factory_untouched")
     assert check(context(agent_step(), before=before, factory_paths=paths)).passed
     ideals.write_text("tampered\n")

@@ -37,13 +37,13 @@ def test_a_new_run_gets_its_branch_and_checkout_and_starts_planning(gw, home):
 
 @pytest.mark.fr("FR-001")
 @pytest.mark.parametrize("request_text, slug", [
-    ("!!!", "run"),
+    ("!!!", "run"),                         # no usable words: the branch is still named
     ("Fix   the\tBUG now", "fix-the-bug-now"),
     ("one two three four five six seven", "one-two-three-four-five"),
     ("x" * 200, "x" * 40),
 ])
-def test_the_branch_slug_follows_the_rule(request_text, slug):
-    assert records.slug(request_text) == slug
+def test_a_runs_branch_is_named_from_its_number_and_request(gw, request_text, slug):
+    assert new_run(gw, request=request_text).branch == f"factory/1-{slug}"
 
 
 @pytest.mark.fr("FR-033")

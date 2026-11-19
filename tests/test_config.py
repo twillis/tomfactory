@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from factory import config
+from factory import config, workspace
 from tests.conftest import git
 
 
@@ -51,9 +51,9 @@ def test_a_target_without_committed_settings_is_a_readable_error(tmp_path):
     git(bare, "commit", "-q", "-m", "base")
     with pytest.raises(config.ConfigError, match=".factory.toml"):
         config.read_target_config(bare, git(bare, "rev-parse", "HEAD"))
-    with pytest.raises(config.ConfigError, match="not a git repository"):
-        config.head_commit(tmp_path / "nowhere")
-    assert config.head_commit(bare) == git(bare, "rev-parse", "HEAD")
+    with pytest.raises(workspace.WorkspaceError, match="not a git repository"):
+        workspace.head_of(tmp_path / "nowhere")
+    assert workspace.head_of(bare) == git(bare, "rev-parse", "HEAD")
 
 
 @pytest.mark.fr("FR-020")
@@ -83,11 +83,10 @@ def test_the_test_command_is_split_into_words_without_a_shell(target):
 @pytest.mark.fr("FR-034")
 def test_the_default_target_files_are_valid_and_ignore_caches():
     import tomllib
-    parsed = tomllib.loads(config.DEFAULT_FACTORY_TOML)
-    assert set(parsed) == {"test_command", "no_tests_exit_code", "test_paths", "docs_paths",
-                           "step_timeout_seconds", "test_budget_lines", "test_network"}
-    assert parsed["test_network"] is False and config.TargetConfig().test_network is False      # off unless asked
-    assert parsed["test_budget_lines"] == config.TargetConfig().test_budget_lines == 300
+    parsed = tomllib.loads(config.DEFAULT_FACTORY_TOML)          # the file written from the defaults reads back as them
+    assert config.TargetConfig(**{k: tuple(v) if isinstance(v, list) else v for k, v in parsed.items()}) \
+        == config.TargetConfig()
+    assert config.TargetConfig().test_network is False and config.TargetConfig().test_budget_lines == 300
     ignored = config.DEFAULT_GITIGNORE.split()
     assert {"__pycache__/", ".pytest_cache/", "*.pyc", ".venv/"} <= set(ignored)
     assert config.factory_paths()[0] == pathlib.Path(config.__file__).resolve().parent

@@ -1,17 +1,15 @@
 """Effect: git, and files on disk.
 
 A run works in its own checkout (a git worktree on its own branch), so the operator's
-working copy is never touched. This module also fingerprints, snapshots and restores
-the files a run must never change. It decides nothing.
+working copy is never touched. This is the only module that runs git. It decides nothing.
 """
 import hashlib
 import pathlib
-import shutil
+import re
 
 from factory import proc
 
 AUTHOR = ["-c", "user.name=tomfactory", "-c", "user.email=tomfactory@localhost"]
-CACHES = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 
 class WorkspaceError(Exception):
@@ -133,46 +131,25 @@ def changed(before: dict[str, str], after: dict[str, str]) -> set[str]:
     return {name for name in before.keys() | after.keys() if before.get(name) != after.get(name)}
 
 
-def _files(path: pathlib.Path):
-    """The files that count under a path: everything except Python's own caches."""
-    if path.is_file():
-        return [(path.name, path)]
-    return [(str(f.relative_to(path)), f) for f in sorted(path.rglob("*"))
-            if f.is_file() and "__pycache__" not in f.parts and f.suffix != ".pyc"]
+# ---- a codebase, outside any run's checkout ----
+
+def head_of(target) -> str:
+    """The commit a codebase is at now."""
+    if not pathlib.Path(target).is_dir():
+        raise WorkspaceError(f"{target} is not a git repository")
+    code, out = _git(target, "rev-parse", "HEAD", ok=(0, 128))
+    if code != 0:
+        raise WorkspaceError(f"{target} is not a git repository with at least one commit")
+    return out.strip()
 
 
-def fingerprint(paths) -> str:
-    """One digest over the content of some files and folders. Changes when any of them does."""
-    digest = hashlib.sha256()
-    for index, path in enumerate(pathlib.Path(p) for p in paths):
-        digest.update(f"[{index}:{'present' if path.exists() else 'missing'}]".encode())
-        for name, file in _files(path) if path.exists() else []:
-            digest.update(name.encode() + b"\0" + file.read_bytes() + b"\0")
-    return digest.hexdigest()
+def committed(target, commit, name) -> str | None:
+    """A file's text as committed at `commit`, or None if it was not there."""
+    code, out = _git(target, "show", f"{commit}:{name}", ok=(0, 128))
+    return out if code == 0 else None
 
 
-def snapshot(paths, dest) -> None:
-    """Copy some files and folders into `dest`, so they can be put back later."""
-    dest = pathlib.Path(dest)
-    shutil.rmtree(dest, ignore_errors=True)
-    dest.mkdir(parents=True)
-    for index, path in enumerate(pathlib.Path(p) for p in paths):
-        if path.is_dir():
-            shutil.copytree(path, dest / str(index), ignore=CACHES)
-        elif path.is_file():
-            shutil.copy2(path, dest / str(index))
-
-
-def restore(paths, dest) -> None:
-    """Put back what `snapshot` copied, removing anything that was not there then."""
-    dest = pathlib.Path(dest)
-    for index, path in enumerate(pathlib.Path(p) for p in paths):
-        saved = dest / str(index)
-        if path.is_dir():
-            shutil.rmtree(path)
-        elif path.exists():
-            path.unlink()
-        if saved.is_dir():
-            shutil.copytree(saved, path)
-        elif saved.is_file():
-            shutil.copy2(saved, path)
+def slug(text, words=5) -> str:
+    """A name safe for git and folders: the first few words of `text`, lower case. "" if none are usable."""
+    joined = " ".join(text.split()[:words]).lower()
+    return re.sub(r"[^a-z0-9]+", "-", joined).strip("-")[:40].strip("-")

@@ -11,7 +11,7 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 
-from factory import agent, config, driver, proc, records, sandbox, speckit, workflow, workspace
+from factory import agent, config, driver, own_files, proc, records, sandbox, speckit, workflow, workspace
 from factory.store import open_store
 from factory.workspace import Workspace
 
@@ -150,9 +150,9 @@ def request(text, target, attempts=3, run_kind="change") -> dict:
         raise Refused("the attempt limit must be at least 1")
     target = pathlib.Path(target).resolve()
     try:
-        base = config.head_commit(target)
+        base = workspace.head_of(target)
         config.read_target_config(target, base)
-    except config.ConfigError as problem:
+    except (workspace.WorkspaceError, config.ConfigError) as problem:
         raise Refused(str(problem)) from None
     open_run = records.open_run(store)
     if open_run:    # one run at a time (FR-033)
@@ -165,7 +165,7 @@ def request(text, target, attempts=3, run_kind="change") -> dict:
                           attempt_limit=attempts, run_kind=run_kind)
     try:
         Workspace.create(target, run.workspace, run.branch, base)
-        workspace.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))
+        own_files.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))
     except Exception as problem:
         driver.end_run(store, run.id, "needs-me", f"the run's checkout could not be created: {problem}")
         raise Refused(f"the run's checkout could not be created: {problem}") from None
@@ -242,7 +242,7 @@ def resume(run_id=None) -> dict:
     if other:
         raise Refused(f"run {other.id} has not ended; let it finish, or stop or abandon it, before resuming another")
     Workspace.of(run).undo()            # whatever the stopped step left half-done
-    workspace.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))   # the factory as it is now
+    own_files.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))   # the factory as it is now
     state = "planning" if workflow.is_planning(run.current_step, driver.table_of(run)) else "working"
     return _launch_at(store, records.reopen(store, run.id, state), run.current_step)
 

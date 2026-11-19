@@ -22,7 +22,7 @@ import signal
 import time
 from dataclasses import asdict, dataclass
 
-from factory import agent, checks, config, notify, proc, records, sandbox, speckit, workflow, workspace
+from factory import agent, checks, config, notify, own_files, proc, records, sandbox, speckit, workflow, workspace
 from factory.config import under
 from factory.workflow import Ask, CheckResult, End, Replan, StepResult, Wait
 from factory.workspace import Workspace
@@ -111,7 +111,7 @@ class Doing:
 def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompts_dir):
     """Run one step once. Returns (how it went, the agent's envelope if there was one)."""
     paths = config.factory_paths()
-    before, dirty_before = workspace.fingerprint(paths), checkout.dirty()
+    before, dirty_before = own_files.fingerprint(paths), checkout.dirty()
     doing = Doing(store, run, step, checkout, settings, step.timeout or settings.step_timeout_seconds)
     asked = prompt(doing, prompts_dir) if step.kind == "agent" else ""
     doing.record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)
@@ -239,8 +239,8 @@ def _undo_change(doing, outcome, paths):
 def _restore_factory(doing, outcome, paths):
     """Put the factory's files back, keeping the changed versions in case the operator made them."""
     kept = doing.store.files.displaced_dir(doing.run.id)
-    workspace.snapshot(paths, kept)
-    workspace.restore(paths, doing.store.files.snapshot_dir(doing.run.id))
+    own_files.snapshot(paths, kept)
+    own_files.restore(paths, doing.store.files.snapshot_dir(doing.run.id))
     outcome.note += f"; they were put back, and the changed versions are kept in {kept}"
 
 

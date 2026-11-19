@@ -12,18 +12,11 @@ factory's own rules about its records live, each stated once:
 
 Everything here is done through the gateway's five plain operations.
 """
-import re
-
 from factory.store import gt, is_null, ne, now
+from factory.workspace import slug
 
 MOVING = ("current_step", "driver_pid", "driver_started", "child_pgid")    # what changes as a run is carried on
 NOT_RUNNING = {"driver_pid": None, "driver_started": None, "child_pgid": None}   # no process carries the run
-
-
-def slug(request) -> str:
-    """The readable part of a run's branch name: its first five words, made safe."""
-    words = " ".join(request.split()[:5]).lower()
-    return re.sub(r"[^a-z0-9]+", "-", words).strip("-")[:40].strip("-") or "run"
 
 
 # ---- runs ----
@@ -36,7 +29,7 @@ def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, curren
             "current_step": current_step, "ideals": ideals, "attempt_limit": attempt_limit,
             "run_kind": run_kind, "created_at": now()})
         run = gw.update("runs", {"id": run.id}, {
-            "branch": f"factory/{run.id}-{slug(request)}",
+            "branch": f"factory/{run.id}-{slug(request) or 'run'}",
             "workspace": str(gw.files.workspace_path(run.id))})[0]
         event(gw, run.id, "run_state", "planning", {"state": "planning"})
     return run

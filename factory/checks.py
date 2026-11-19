@@ -7,7 +7,7 @@ stamps the name on what it returns. Which checks a step gets is a rule: workflow
 """
 from dataclasses import dataclass, field, replace
 
-from factory import config, proc, sandbox, speckit, workspace
+from factory import config, own_files, proc, sandbox, speckit, workspace
 from factory.config import under
 from factory.workflow import ACCEPT, CheckResult, verdicts
 
@@ -53,7 +53,7 @@ def get(name):
 @register("factory_untouched")
 def factory_untouched(ctx) -> CheckResult:
     """The factory's own code, personas, prompts and the ideals are as they were (FR-030)."""
-    same = workspace.fingerprint(ctx.factory_paths) == ctx.before
+    same = own_files.fingerprint(ctx.factory_paths) == ctx.before
     return CheckResult(same, "" if same else "the factory's own code, personas, prompts or ideals were changed")
 
 

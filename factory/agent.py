@@ -176,7 +176,9 @@ def get_adapter():
 
 def command_instructions(root, name) -> str:
     """The instruction text of one of a codebase's own commands for this agent program."""
-    text = (pathlib.Path(root) / COMMANDS_DIR / name / "SKILL.md").read_text()
-    if text.startswith("---"):          # drop the front matter; keep the instructions
-        text = text.split("---", 2)[2]
-    return text.strip()
+    return without_front_matter((pathlib.Path(root) / COMMANDS_DIR / name / "SKILL.md").read_text()).strip()
+
+
+def without_front_matter(text) -> str:
+    """A document's text without the `---` header block some files start with."""
+    return text.split("---", 2)[2] if text.startswith("---") else text

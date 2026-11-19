@@ -6,7 +6,7 @@ collect_ignore_glob = ["fixtures/*"]     # files copied into target codebases, n
 
 import pytest
 
-from factory import config, operations, records, workspace
+from factory import config, operations, own_files, records, workspace
 from factory.store import open_store
 from tests.fake_agent import FakeAgent
 
@@ -179,12 +179,12 @@ def cycle(home, tmp_path, fake_notify, monkeypatch):
     def go(entries, target=None, files=None, attempts=3, request="Add a greeting", run_kind="change"):
         if target is None:
             target = commit_files(operations.init_target(tmp_path / "target"), files)
-        before, fingerprint = tree(target), workspace.fingerprint(config.factory_paths())
+        before, fingerprint = tree(target), own_files.fingerprint(config.factory_paths())
         fake = FakeAgent(entries)
         run, _ = to_the_end(target, fake, request, attempts=attempts, run_kind=run_kind)
         assert run.state == "ended", f"the run did not end: {run.state} at {run.current_step}"
         assert tree(target) == before, "the operator's working copy changed"                      # FR-019
-        assert workspace.fingerprint(config.factory_paths()) == fingerprint, "the factory changed"  # FR-030
+        assert own_files.fingerprint(config.factory_paths()) == fingerprint, "the factory changed"  # FR-030
         assert (run.driver_pid, run.child_pgid) == (None, None)
         return run, fake, open_store(home), target
 
