@@ -85,7 +85,7 @@ One execution of one step. Every execution is an attempt and gets its own record
 | produced | What it produced: the envelope for an agent step, the output summary for a code step |
 | checks | Every check that ran, in order, each with its name, whether it passed, and a note |
 | passed | Yes, no, or empty while running. Yes means every check passed. |
-| failure | Empty, or why the step failed: `timeout`, `error`, `guard`, `malformed`, `check` |
+| failure | Empty, or why the step failed: `timeout`, `error`, `guard`, `malformed`, `check`, `question` (the list is `workflow.FAILURES`) |
 | started_at, ended_at | Timestamps; duration is the difference |
 | tokens, cost_estimate | From the agent's result; empty for code steps |
 

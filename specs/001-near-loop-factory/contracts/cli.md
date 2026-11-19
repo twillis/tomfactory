@@ -9,7 +9,7 @@ The factory's home directory is `~/.tomfactory` unless `TOMFACTORY_HOME` is set.
 | Command | What it does | Returns |
 |---------|--------------|---------|
 | `factory init-target <dir>` | Creates a git repository at `<dir>` with a default `.factory.toml` and one commit. Refuses if `<dir>` already has content. | At once |
-| `factory request "<text>" --target <dir> [--attempts N] [--tidy tests\|code]` | Creates a run, creates its checkout, starts the plan step in the background. `--attempts` sets how many times any one step may run (default 3). `--tidy tests` or `--tidy code` makes it a run that must not alter behaviour. Refuses if another run has not ended (FR-033), if `<dir>` is not a git repository with a committed `.factory.toml`, or if the text is empty. | At once, printing the run id |
+| `factory request "<text>" --target <dir> [--attempts N] [--kind change\|tidy-tests\|tidy-code]` | Creates a run, creates its checkout, starts the plan step in the background. `--attempts` sets how many times any one step may run (default 3). `--kind tidy-tests` or `--kind tidy-code` makes it a run that must not alter behaviour; the default is `change`. Refuses if another run has not ended (FR-033), if `<dir>` is not a git repository with a committed `.factory.toml`, or if the text is empty. | At once, printing the run id |
 | `factory plan [<run>]` | Prints the current plan, how it addresses the ideals, and any conflicts. | At once |
 | `factory approve [<run>]` | Approves the waiting plan and starts the unattended cycle in the background. Refuses unless the run is awaiting approval. | At once |
 | `factory revise [<run>] "<comment>"` | Sends the plan back with a comment and starts a new plan step in the background. | At once |

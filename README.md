@@ -36,17 +36,19 @@ from git, never from what the agent says it did.
 
 ### What happens after each step
 
-Seven rules, applied in this order:
+Eight rules, applied in this order:
 
 1. The step changed something it may not → the change is undone, the run ends, **needs-me**.
 2. The step is advisory and failed in any other way → the failure is recorded and the run carries on.
-3. The step ran past its time limit → **needs-me**.
-4. The agent program failed, or refused to let the agent work in its own checkout → **needs-me**.
-5. An agent's reply did not end with the JSON it was asked for → that step runs again.
-6. One of the step's own checks failed → what the step's entry says. Failing tests send the
-   work back to `build`. Tests that do not fail first send it back to `write_tests`. A review
-   that rejects ends the run, **rejected**.
-7. Everything passed → the next step.
+3. The agent asked a question instead of finishing → the lead answers if it can, otherwise you are asked.
+4. The step ran past its time limit → **needs-me**.
+5. The agent program failed, or refused to let the agent work in its own checkout → **needs-me**.
+6. An agent's reply did not end with the JSON it was asked for → that step runs again.
+7. One of the step's own checks failed → what the step's entry says. Failing tests send the
+   work back to `build`. Tests that do not fail first send it back to `write_tests`. A
+   judging step's verdict chooses its route: the review's reject ends the run **rejected**
+   (in a tidy, it sends the work back); a judge that contradicts itself is asked again.
+8. Everything passed → the next step.
 
 No step runs more than three times in one run (you can change the number per request).
 When a step has used its attempts, the run ends as **needs-me** and tells you what failed.
@@ -95,7 +97,7 @@ one `init-target` writes is the example to copy.
 factory request "Add a page that says hello." --target ../my-app
 ```
 
-Add `--tidy tests` or `--tidy code` for a change that must not alter behaviour; see below.
+Add `--kind tidy-tests` or `--kind tidy-code` for a change that must not alter behaviour; see below.
 
 This returns at once. A plan is written in the background, and a desktop notification tells
 you when it is ready.
@@ -176,11 +178,12 @@ The normal cycle insists on tests that fail first, which is right for a change a
 for a tidy-up: trimming tests or reshaping code should make nothing fail. For that:
 
 ```bash
-factory request "Cut the duplicate tests." --target ../my-app --tidy tests
-factory request "Give the greeting text one home." --target ../my-app --tidy code
+factory request "Cut the duplicate tests." --target ../my-app --kind tidy-tests
+factory request "Give the greeting text one home." --target ../my-app --kind tidy-code
 ```
 
-A tidy run goes: plan, your approval, the existing tests (which must pass), the tidy step,
+A tidy run goes: plan, your approval, the existing tests (which must pass), the tidy step
+(`tidy_tests` or `tidy_code`),
 the tests again (which must still pass), review. One side is held still: tidying the tests
 may not touch the code, and tidying the code may not touch the tests. The architect's
 backlog is the natural source of tidy requests.
@@ -277,7 +280,7 @@ lines. Write the check in `factory/checks.py`:
 def no_huge_files(ctx) -> CheckResult:
     huge = [name for name in ctx.checkout.files_changed_since_base()
             if len((ctx.checkout.path / name).read_text().splitlines()) > 500]
-    return CheckResult("no_huge_files", not huge, f"over 500 lines: {', '.join(huge)}")
+    return CheckResult(not huge, f"over 500 lines: {', '.join(huge)}")      # the registry adds the name
 ```
 
 Then add its entry to `STEPS` in `factory/workflow.py`, after `test`, and point `test` at it:
@@ -294,14 +297,26 @@ new step is run, recorded and shown like any other.
 
 **An agent step** needs two more things: a prompt at `prompts/<step name>.md`, and a persona
 (an existing one, or a new file). In its entry you say which inputs its prompt uses, what its
-reply must contain, and what it may change:
+reply must contain, and what it may change. A step that judges gives a verdict, and its
+routes say where each verdict other than accept leads:
 
 ```python
-Step("security_review", "agent", persona="reviewer", on_pass="finish",
+Step("security_review", "agent", persona="reviewer", on_pass="finish", on_fail=Rework("security_review"),
      inputs=("request", "diff"),
      envelope={"verdict": "verdict", "reasons": "list", "ideals_broken": "list"},
-     checks=("verdict_accept",), on_fail=End("rejected")),
+     routes={"reject": End("rejected")}),
 ```
+
+The prompt says what the step is for and what each key of its reply holds. The factory adds
+the rest: the rules in order of precedence (for a step given the constitution and the
+ideals), spec kit's instructions (for a step that follows a spec kit command), how to ask a
+question, and the exact shape of the reply, written from the entry's `envelope`. These shared
+parts are in `prompts/fragments/`.
+
+Before a run uses a table, the factory checks it: every step it leads to exists, every check
+is registered, every input is defined, every persona and prompt file exists, and every prompt
+uses only its entry's inputs and explains each key of its reply. A mistake is found then, not
+after paid steps have run.
 
 Add `advisory=True` to an entry and the step's failure is recorded without stopping the run,
 which is how the architect's review works.
@@ -311,9 +326,10 @@ edit, and may change nothing. The safety checks — the factory itself is untouc
 changed outside what the entry allows, the reply is well-formed — are applied to every step
 whatever its entry says. A new step cannot leave them out.
 
-The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `ideals`,
-`plan`, `constitution`, `previous_plan`, `comment`, `test_paths`, `docs_paths`, `test_files`, `failure`,
-`diff`, `test_output`.
+The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
+`ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`,
+`test_files`, `failure`, `question`, `diff`, `test_output`. Each is a small function in
+`factory/driver.py` registered under its name; a new one is a function with `@given("name")`.
 
 ## Adding a persona
 
@@ -344,10 +360,12 @@ test writer's attention to edge cases, for example, is in `personas/test_writer.
 
 ## Where the rules live
 
-In one file: `factory/workflow.py`. It holds the table of steps and two small functions,
-`next_step` and `after_wait`, that read it. It does no input or output — no files, no
-database, no processes — so you can read it top to bottom and know everything the factory
-will decide.
+In one file: `factory/workflow.py`. It holds the vocabularies (outcomes, the ways a step
+can fail, verdicts), the tables of steps for each kind of run, and the small functions that
+read them: `next_step` and `after_wait`, and the rules for which checks a step gets, what
+counts as a question, and how the agent program's reply went. It does no input or output —
+no files, no database, no processes — so you can read it top to bottom and know everything
+the factory will decide.
 
 The rest of the code carries those decisions out and decides nothing:
 
@@ -360,7 +378,9 @@ The rest of the code carries those decisions out and decides nothing:
 | `checks.py` | control | The checks applied to each step's result |
 | `records.py` | control | The rules about what a run's record must say |
 | `agent.py` | effect | The only code that knows which agent program is used |
-| `workspace.py` | effect | Git: the run's checkout, commits, undo |
+| `workspace.py` | effect | Git, and only this module runs it: the run's checkout, commits, undo |
+| `own_files.py` | effect | Fingerprints, snapshots and restores the factory's own files |
+| `sandbox.py` | effect | The only code that knows how the target's code is contained |
 | `proc.py` | effect | Runs a child process with a time limit; stops process groups |
 | `notify.py` | effect | The desktop notification |
 | `speckit.py` | effect | The only code that knows spec kit's scripts |
@@ -403,7 +423,9 @@ Be clear-eyed about these before pointing it at anything you care about.
 ```bash
 uv run pytest                           # everything, on a fake agent; uses no subscription
 uv run pytest -m live                   # the few tests that use the real agent and desktop
-uv run python scripts/traceability.py   # every requirement in the spec is named by a test
 ```
+
+Collection refuses a test that names no requirement, and, when the whole suite is collected,
+a requirement that no test names (constitution S8).
 
 The full specification, plan and design decisions are in `specs/001-near-loop-factory/`.

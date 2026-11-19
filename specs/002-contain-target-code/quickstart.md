@@ -6,7 +6,7 @@
 
 ```bash
 uv run pytest -q
-uv run python scripts/traceability.py      # now reads every feature's spec
+# the requirement gate now runs as part of test collection, over every feature's spec
 ```
 
 **Expect**: everything passes, including `tests/test_sandbox.py`, whose stand-in test reports 0 of 8 capabilities contained (the seven measured, plus seeing an operator environment variable), nothing left running, and under one second of overhead. **Proves**: SC-013, SC-016, SC-017, SC-018.

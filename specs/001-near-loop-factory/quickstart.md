@@ -23,7 +23,7 @@ uv run pytest
 Then:
 
 ```bash
-uv run python scripts/traceability.py
+uv run pytest -q     # collection refuses a requirement no test names (was scripts/traceability.py)
 ```
 
 **Expect**: it lists nothing: every requirement in the spec is named by a test.

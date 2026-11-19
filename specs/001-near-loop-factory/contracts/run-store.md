@@ -22,7 +22,7 @@ The database schema is the contract between the factory and the observability ap
 
 - The factory opens the database in WAL mode, so readers never block the writer and the writer never blocks readers.
 - Readers must open it read-only and must not hold long transactions.
-- The schema carries a version stamp (`PRAGMA user_version`, currently 2). The factory refuses a home made by an earlier version, with a message, instead of misreading it.
+- The schema carries a version stamp (`PRAGMA user_version`, currently 4). The factory brings a home from version 2 up to date with numbered migrations (`store.MIGRATIONS`: v3 names a run's kind `run_kind`, v4 lets a step's failure be `question`), and refuses an older or newer one, with a message, instead of misreading it.
 
 ## Tables
 
@@ -71,7 +71,7 @@ CREATE TABLE steps (
     produced       JSON TEXT,
     checks         JSON TEXT,
     passed         BOOLEAN,
-    failure        TEXT    CHECK (failure IN ('timeout','error','guard','malformed','check')),
+    failure        TEXT    CHECK (failure IN ('timeout','error','guard','malformed','check','question')),
     started_at     TEXT    NOT NULL,
     ended_at       TEXT,
     tokens         JSON TEXT,
@@ -112,7 +112,7 @@ All timestamps are UTC in ISO 8601 form **with milliseconds**, for example `2026
 | Column | Shape | Example |
 |--------|-------|---------|
 | `steps.checks` | A list, in the order the checks ran. Each item is an object with `name` (text), `passed` (true or false), `note` (text; why it failed, or test output; often empty when it passed) and `timed_out` (true or false). A check failed when `passed` is false. Empty (`NULL`) until the step finishes. | `[{"name": "tests_pass", "passed": false, "note": "1 failed…", "timed_out": false}]` |
-| `steps.produced` | An object. For an agent step, the envelope it replied with, whose keys depend on the step (see the workflow contract); if it gave none, `{"text": "…"}`. For a code step that ran a command, `{"output": "…"}`; otherwise `{}`. `NULL` until the step finishes. | `{"summary": "added greet", "files_changed": ["hello.py"]}` |
+| `steps.produced` | An object. For an agent step, the envelope it replied with, whose keys depend on the step (see the workflow contract); if it gave none, `{"text": "…"}`. For a code step that ran the target's tests, `{"output": "…", "contained": {"network": false}}`; otherwise `{}`. `NULL` until the step finishes. | `{"summary": "added greet", "files_changed": ["hello.py"]}` |
 | `steps.tokens` | An object with `input` and `output` (numbers), for agent steps; `NULL` for code steps. | `{"input": 25416, "output": 2935}` |
 | `plans.ideals_addressed`, `plans.conflicts` | Lists of text. | `["keeps the layers apart"]` |
 | `events.payload` | An object whose keys depend on the event's kind. A reader should show `summary` and treat the payload as detail. | `{"name": "tests_pass", "passed": true, "note": "", "timed_out": false}` |

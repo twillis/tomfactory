@@ -3,11 +3,10 @@
 Queued 2026-11-19. Each item names where its thinking already lives. Items are for the
 factory itself; work the factory does on a target codebase (the viewer) is not listed here.
 
-## 0. The architect's review of the factory
+## 0. The architect's review of the factory — done (2026-11-19)
 
-`docs/backlog.md`: 15 warnings and 29 suggestions, by file. Its suggested order: one
-judging mechanism and one vocabulary of failure kinds, then `run_step`, then a generated
-prompt footer, then the tests.
+`docs/backlog.md`: 43 of 44 entries addressed; the one left waits on its own condition (a
+fourth table). Change record: `specs/001-near-loop-factory/changes/2026-11-19-architect-backlog.md`.
 
 ## 1. Small fixes found by real runs
 
@@ -51,7 +50,7 @@ probably the code writer, would cut that without touching the judgement steps.
 - **The architect in planning.** Advise the planner, or review the plan before the operator
   sees it. Open question for the operator: alongside the plan, or folded in? (R21)
 - **Backlog to request.** The architect's findings sit in `docs/backlog.md`. A command that
-  turns an entry into a `--tidy code` request would close that loop.
+  turns an entry into a `--kind tidy-code` request would close that loop.
 
 ## 4. Safety: a sandbox — phase 1 done (2026-11-19)
 

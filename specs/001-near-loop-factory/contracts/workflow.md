@@ -40,7 +40,7 @@ A code step has no persona, capabilities, inputs or envelope. Its work is its ch
 | 6 | `test` | code | — | — | nothing | `tests_pass` | `architecture_review` | `Rework("build")` | yes |
 | 7 | `architecture_review` | agent | `architect` | read+edit | docs | — | `document` | — (advisory) | yes |
 | 8 | `document` | agent | `documenter` | read+edit | docs | — | `review` | — | yes |
-| 9 | `review` | agent | `reviewer` | read | nothing | `verdict_accept` | `finish` | `End("rejected")` | no |
+| 9 | `review` | agent | `reviewer` | read | nothing | `verdict`; routes `reject` → `End("rejected")` | `finish` | `Rework("review")` (a reply that contradicts itself) | no |
 | 10 | `finish` | code | — | — | nothing | — | `END_ACCEPTED` | — | no |
 
 `architecture_review` is the one advisory step. The architect reviews the change for maintainability and adds its suggestions and warnings to `docs/backlog.md` in the target; its envelope puts the same findings on the run's record. Nothing it finds, and no way it can fail short of changing what it may not, stops the run (FR-048 to FR-050).
@@ -59,7 +59,7 @@ The branch history of an accepted run therefore reads: tests, then the change, t
 
 ## Two tables: the table is chosen by the codebase (FR-055)
 
-`workflow.table_for(spec_kit)` returns the plain table above for a codebase without spec kit, and the table below for one that has it. Both are data in `workflow.py`; the driver and the operations take whichever applies and name no step.
+`workflow.table_for(spec_kit, run_kind)` returns, for a change, the plain table above for a codebase without spec kit, and the table below for one that has it. Both are data in `workflow.py`; the driver and the operations take whichever applies and name no step.
 
 | # | `name` | `persona` | spec kit stage | `may_change` | `on_pass` | notes |
 |---|--------|-----------|----------------|--------------|-----------|-------|
@@ -93,7 +93,7 @@ Any step may have `on_pass=WAIT`. `after_wait("approve", …)` continues at the 
 
 ## Kinds of run (FR-066)
 
-`workflow.table_for(spec_kit, kind)` chooses the table. A run's kind is stored on it (`runs.workflow`).
+`workflow.table_for(spec_kit, run_kind)` chooses the table from `workflow.RUN_KINDS`. A run's kind is stored on it (`runs.run_kind`), and `driver.table_of(run)` is the one place a run's table is decided, from its own checkout. What the planner and reviewer are told about each kind is in `prompts/run_kinds/`.
 
 | Kind | Table | For |
 |------|-------|-----|
@@ -125,9 +125,7 @@ A check is a named function in `factory/checks.py`, registered by name, with the
 | `edge_cases_stated` | the envelope's `edge_cases` list has at least one entry (FR-045) |
 | `tests_fail_first` | the test command exits non-zero **and** not with `no_tests_exit_code` (FR-007). "No tests found" is not a failing test. |
 | `tests_pass` | the test command exits 0 (FR-008) |
-| `verdict_accept` | the envelope's `verdict` is `accept` |
-
-`envelope_valid` also enforces one cross-field rule: a review envelope that lists any broken ideal with the verdict `accept` is malformed (SC-009).
+| `verdict` | given to every judging step (one with `routes`): the verdict is `accept`, and the reply does not name broken ideals while accepting (SC-009). A failed verdict leads where the step's route for it says; a reply that contradicts itself leads to `on_fail`. |
 
 The three checks that run the test command (`baseline`, `tests_fail_first`, `tests_pass`) run it contained (feature 002, `factory/sandbox.py`). If it cannot be contained, the step fails as `error` and the run ends as needs-me without running the tests.
 
@@ -215,7 +213,7 @@ Where two disagree, the earlier wins, and the agent is told to say so. The steps
 
 ## Questions (FR-061 to FR-064)
 
-Any agent step may end its reply with only `{"question": "..."}` instead of its envelope. Every agent prompt is given a standard footer (`prompts/asking.md`) saying how, together with the questions that step asked earlier in the run and their answers.
+Any agent step may end its reply with only `{"question": "..."}` instead of its envelope. Every agent prompt whose step `may_ask` is given a shared part (`prompts/fragments/asking.md`) saying how, together with the questions that step asked earlier in the run and their answers.
 
 | What happens | Where |
 |--------------|-------|
@@ -296,12 +294,14 @@ CheckContext    run            the run record
 
 CheckResult     name           the check's name
                 passed         bool
-                note           why it failed, or a short remark; may hold test output
+                note           why it failed, or a short remark
+                output         what a command it ran printed
+                contained      for a check that ran the target's tests: {"network": bool}
                 timed_out      the check ran a command that hit the time limit; the step then
                                fails as "timeout", not "check"
 
 StepResult      passed         bool
-                failure        None | "timeout" | "error" | "guard" | "malformed" | "check"
+                failure        None, or one of workflow.FAILURES: timeout | error | guard | malformed | check | question
                 failed_check   the CheckResult that failed, or None
                 message        the agent program's message, for "error"
 
