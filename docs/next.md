@@ -7,6 +7,19 @@ factory itself; work the factory does on a target codebase (the viewer) is not l
 
 `docs/backlog.md`: all 44 entries addressed. Change record: `specs/001-near-loop-factory/changes/2026-11-19-architect-backlog.md`.
 
+## The viewer reads the factory's private database
+
+Noted 2026-11-19 by the operator: "it seems like a smell to me". The viewer reads
+`factory.db` directly and keeps a copy of its schema in `docs/run-store.md`, so every schema
+change (today's migration to version 4) has to be carried into another project by hand. The
+copy is a symptom; the coupling to storage is the cause.
+
+The better seam, to decide later: the factory publishes what it chooses to, and the viewer
+reads only that. The obvious candidate is the JSON the factory's own commands already give
+(`factory status --json`, `factory show --json`, the events after a given one), which is
+the operations layer's view of a run, not the tables behind it. Then a schema change is the
+factory's own business, and only a change to that published shape touches the viewer.
+
 ## 1. Small fixes found by real runs
 
 No design needed. A few hours, no quota beyond a check run.
