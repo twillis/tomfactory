@@ -137,19 +137,44 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
 
 
 def prompt(doing, prompts_dir) -> str:
-    """An agent step's prompt: its file with the inputs filled in, then how to ask a question."""
+    """An agent step's prompt: its own file, then the shared parts that apply to it.
+
+    The shared parts are the rules in order of precedence (for a step given the constitution
+    and the ideals), spec kit's instructions (for a step that follows a spec kit command, where
+    the codebase uses spec kit), how to ask a question, and the shape of the reply.
+    """
     step, run = doing.step, doing.run
-    kit = (speckit.prepare(step.speckit, doing.checkout, run.request)    # spec kit's scripts, run for the agent
-           if step.speckit and speckit.available(doing.checkout.path) else None)
-    sources = Sources(doing.store, run, doing.checkout, doing.settings, kit, prompts_dir)
-    asked = fill((prompts_dir / f"{step.name}.md").read_text(),
-                 {name: INPUTS[name](sources) for name in step.inputs})
+    sources = Sources(doing.store, run, doing.checkout, doing.settings, prompts_dir)
+    inputs = {name: INPUTS[name](sources) for name in step.inputs}
+    parts = [fill((prompts_dir / f"{step.name}.md").read_text(), inputs)]
+    if {"constitution", "ideals"} <= set(step.inputs):
+        parts.append(fill(_fragment(prompts_dir, "rules"), inputs))
+    if step.speckit and speckit.available(doing.checkout.path):    # spec kit's scripts, run for the agent
+        kit = speckit.prepare(step.speckit, doing.checkout, run.request)
+        parts.append(fill(_fragment(prompts_dir, "speckit"), {"speckit_instructions": kit["instructions"],
+                                                             "speckit_context": json.dumps(kit["context"], indent=2)}))
     if step.may_ask:            # every agent that may ask is told how, and what it was answered
         earlier = doing.store.query("questions", {"run_id": run.id, "step": step.name})
         answers = "\n\n".join(f"You asked: {q.question}\nThe {q.answered_by} answered: {q.answer}"
                               for q in earlier if q.answer is not None)
-        asked += "\n" + fill((prompts_dir / "asking.md").read_text(), {"answers": answers})
-    return asked
+        parts.append(fill(_fragment(prompts_dir, "asking"), {"answers": answers}))
+    parts.append(fill(_fragment(prompts_dir, "reply"), {"shape": reply_shape(step)}))
+    return "\n".join(part.rstrip() + "\n" for part in parts)
+
+
+def _fragment(prompts_dir, name) -> str:
+    return (prompts_dir / "fragments" / f"{name}.md").read_text()
+
+
+def reply_shape(step) -> str:
+    """The JSON object a step must end its reply with, written out from its entry's envelope."""
+    def shown(kind):
+        if kind == "text":
+            return '"…"'
+        if kind == "list":
+            return '["…"]'
+        return '"' + " | ".join(workflow.verdicts(step) if kind == "verdict" else kind) + '"'
+    return "{\n" + ",\n".join(f'  "{key}": {shown(kind)}' for key, kind in step.envelope.items()) + "\n}"
 
 
 def execute(doing, asked, adapter, personas_dir):
@@ -239,7 +264,6 @@ class Sources:
     run: object
     checkout: Workspace
     settings: object
-    kit: dict | None
     prompts_dir: pathlib.Path
 
     @functools.cached_property
@@ -353,16 +377,6 @@ def _test_output(src):
     return outputs[-1] if outputs else ""
 
 
-@given("speckit_instructions")
-def _speckit_instructions(src):
-    return src.kit["instructions"] if src.kit else ""
-
-
-@given("speckit_context")
-def _speckit_context(src):
-    return json.dumps(src.kit["context"], indent=2) if src.kit else ""
-
-
 PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 
 
@@ -403,8 +417,11 @@ def validate(table, personas_dir=None, prompts_dir=None) -> None:
         if not prompt_file.is_file():
             problems.append(f"{step.name} has no prompt file {prompt_file}")
             continue
+        text = prompt_file.read_text()
         problems += [f"{step.name}'s prompt uses {{{{{name}}}}}, which its entry does not list"
-                     for name in PLACEHOLDER.findall(prompt_file.read_text()) if name not in step.inputs]
+                     for name in PLACEHOLDER.findall(text) if name not in step.inputs]
+        problems += [f"{step.name}'s prompt does not say what `{key}` in its reply holds"
+                     for key in step.envelope if f"`{key}`" not in text]
     if problems:
         raise ValueError("the step table is not sound: " + "; ".join(problems))
 

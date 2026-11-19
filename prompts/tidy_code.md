@@ -12,18 +12,6 @@ when you finish; the factory runs them.
 
 {{plan}}
 
-## The rules this work is held to, in order of precedence
-
-When two of these disagree, the earlier one wins.
-
-### 1. This codebase's own constitution
-
-{{constitution}}
-
-### 2. The operator's ideals
-
-{{ideals}}
-
 ## If the tests failed after your last attempt
 
 {{failure}}
@@ -32,11 +20,7 @@ When two of these disagree, the earlier one wins.
 
 The tidied code. Behaviour as seen by the tests and by anyone using the code stays the same.
 
-End your reply with one JSON object, and nothing after it, in exactly this shape:
+In your reply's JSON object:
 
-```json
-{
-  "summary": "what you changed and why it is better",
-  "files_changed": ["the files you changed"]
-}
-```
+- `summary`: what you changed and why it is better
+- `files_changed`: the files you changed

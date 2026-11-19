@@ -24,11 +24,7 @@ You may create or change files only under: {{docs_paths}}
 
 A short written account of the change in the documentation paths. Do not change code or tests.
 
-End your reply with one JSON object, and nothing after it, in exactly this shape:
+In your reply's JSON object:
 
-```json
-{
-  "summary": "one paragraph for the operator: what this run changed",
-  "files_changed": ["the documentation files you created or changed"]
-}
-```
+- `summary`: one paragraph for the operator: what this run changed
+- `files_changed`: the documentation files you created or changed

@@ -12,22 +12,6 @@ it does not decide whether the change is accepted.
 
 {{plan}}
 
-## The rules this work is held to, in order of precedence
-
-When two of these disagree, the earlier one wins. Say plainly where that happens.
-
-### 1. This codebase's own constitution
-
-{{constitution}}
-
-### 2. The operator's ideals
-
-{{ideals}}
-
-### 3. Spec kit's own instructions, where any are given further down
-
-These come last. Follow them where they do not conflict with the two above.
-
 ## The change
 
 ```diff
@@ -46,12 +30,8 @@ whether it is a suggestion or a warning. If you have nothing to add, change noth
 
 Your suggestions and warnings, each as one plain sentence, added to the backlog.
 
-End your reply with one JSON object, and nothing after it, in exactly this shape:
+In your reply's JSON object:
 
-```json
-{
-  "summary": "your overall view of the change, in a sentence or two",
-  "suggestions": ["things that would make the code better; empty if none"],
-  "warnings": ["things that will cause trouble if left; empty if none"]
-}
-```
+- `summary`: your overall view of the change, in a sentence or two
+- `suggestions`: things that would make the code better; empty if none
+- `warnings`: things that will cause trouble if left; empty if none

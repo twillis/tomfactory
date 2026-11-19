@@ -256,15 +256,12 @@ def is_planning(name, steps) -> bool:
 
 # ---- the plain table: a change, test first ----
 
-KIT_INPUTS = ("speckit_instructions", "speckit_context")
-
 STEPS: list[Step] = [
     # "spec" allows spec kit's documents where the target uses spec kit, and nothing elsewhere:
     # so in this plain cycle the planner changes no file.
     Step("plan", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass=WAIT,
          on_approve="baseline", commit_after=True,
-         inputs=("request", "run_kind", "constitution", "ideals", "previous_plan", "comment", "failure",
-                 *KIT_INPUTS),
+         inputs=("request", "run_kind", "constitution", "ideals", "previous_plan", "comment", "failure"),
          envelope={"plan": "text", "ideals_addressed": "list", "conflicts": "list"}),
 
     Step("baseline", "code", on_pass="write_tests", checks=("baseline",)),
@@ -272,7 +269,7 @@ STEPS: list[Step] = [
     Step("write_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
          on_pass="red", checks=("tests_added", "tests_within_budget", "edge_cases_stated"),
          on_fail=Rework("write_tests"),
-         inputs=("request", "plan", "test_paths", "failure", *KIT_INPUTS),
+         inputs=("request", "plan", "test_paths", "failure"),
          envelope={"summary": "text", "test_files": "list", "edge_cases": "list"}),
 
     Step("red", "code", on_pass="build", checks=("tests_fail_first",), on_fail=Rework("write_tests"),
@@ -280,7 +277,7 @@ STEPS: list[Step] = [
 
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
          on_pass="test",
-         inputs=("request", "plan", "constitution", "ideals", "test_files", "failure", *KIT_INPUTS),
+         inputs=("request", "plan", "constitution", "ideals", "test_files", "failure"),
          envelope={"summary": "text", "files_changed": "list"}),
 
     Step("test", "code", on_pass="architecture_review", checks=("tests_pass",), on_fail=Rework("build"),
@@ -321,24 +318,24 @@ LEAD = Step("answer_question", "agent", persona="lead", on_pass="", may_ask=Fals
 SPEC_KIT_STEPS: list[Step] = [
     Step("specify", "agent", persona="analyst", capabilities="read+edit", may_change="spec", on_pass="clarify",
          commit_after=True, speckit=("specify",),
-         inputs=("request", "constitution", "ideals", "comment", "failure", *KIT_INPUTS),
+         inputs=("request", "constitution", "ideals", "comment", "failure"),
          envelope={"summary": "text", "assumptions": "list"}),
 
     Step("clarify", "agent", persona="analyst", capabilities="read+edit", may_change="spec", on_pass=WAIT,
          on_approve="plan", revise_from="specify", commit_after=True, speckit=("clarify",),  # first approval
-         inputs=("request", "constitution", "ideals", "failure", *KIT_INPUTS),
+         inputs=("request", "constitution", "ideals", "failure"),
          envelope={"plan": "text", "clarified": "list"}),
 
     replace(_plain["plan"], on_pass="tasks", on_approve=None, speckit=("plan",)),
 
     Step("tasks", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass="analyze",
          commit_after=True, speckit=("tasks",),
-         inputs=("request", "constitution", "ideals", "failure", *KIT_INPUTS),
+         inputs=("request", "constitution", "ideals", "failure"),
          envelope={"summary": "text"}),
 
     Step("analyze", "agent", persona="reviewer", on_pass=WAIT, on_approve="baseline", revise_from="plan",
          speckit=("analyze", "checklist"),                                    # second approval: plan and tasks
-         inputs=("request", "constitution", "ideals", "failure", *KIT_INPUTS),
+         inputs=("request", "constitution", "ideals", "failure"),
          envelope={"plan": "text", "findings": "list"}),
 
     _plain["baseline"],
@@ -353,7 +350,7 @@ SPEC_KIT_STEPS: list[Step] = [
     Step("converge", "agent", persona="reviewer", on_pass="finish", on_fail=Rework("converge"),
          speckit=("converge",),
          routes={"rework": Rework("build"), "replan": Replan("specify"), "reject": End("rejected")},
-         inputs=("request", "constitution", "ideals", "diff", "test_output", *KIT_INPUTS),
+         inputs=("request", "constitution", "ideals", "diff", "test_output"),
          envelope={"verdict": "verdict", "unbuilt": "list", "details": "list", "requirement_changes": "list",
                    "reasons": "list", "ideals_broken": "list"}),
 

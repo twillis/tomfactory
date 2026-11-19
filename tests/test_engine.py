@@ -3,6 +3,8 @@
 a step that can branch on its verdict, a run that waits more than once, sending work
 back to the start of a stage, and setting a build aside to start again from the plan.
 """
+import shutil
+
 import pytest
 
 from factory import operations, workflow
@@ -35,9 +37,10 @@ def made_up(monkeypatch, tmp_path, home, target, fake_notify):
     prompts.mkdir()
     for name in ("draft", "design", "make", "judge"):
         (prompts / f"{name}.md").write_text(f"# {name}\n\n{{{{request}}}}\n\nEarlier problem: "
-                                            + ("{{diff}}" if name == "judge" else "{{failure}}") + "\n")
-    for shared in ("asking.md", "answer_question.md"):      # every agent is told how to ask; the lead answers
-        (prompts / shared).write_text((config.PROMPTS_DIR / shared).read_text())
+                                            + ("{{diff}}" if name == "judge" else "{{failure}}") + "\n\n"
+                                            + "".join(f"- `{key}`: it\n" for key in workflow.get(name, TABLE).envelope))
+    shutil.copytree(config.PROMPTS_DIR / "fragments", prompts / "fragments")        # shared by every prompt
+    (prompts / "answer_question.md").write_text((config.PROMPTS_DIR / "answer_question.md").read_text())
     monkeypatch.setattr(config, "PROMPTS_DIR", prompts)
     return target
 

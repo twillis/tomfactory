@@ -12,16 +12,6 @@ Change no file.
 
 {{request}}
 
-## The rules this work is held to, in order of precedence
-
-### 1. This codebase's own constitution
-
-{{constitution}}
-
-### 2. The operator's ideals
-
-{{ideals}}
-
 ## The plan as it stands
 
 {{plan}}
@@ -36,11 +26,7 @@ If those settle the question, answer it and say `"confident": "yes"`.
 If they do not, do not guess on the operator's behalf. Say what is missing and
 `"confident": "no"`. The question then goes to the operator.
 
-End your reply with one JSON object, and nothing after it, in exactly this shape:
+In your reply's JSON object:
 
-```json
-{
-  "answer": "the answer and where it comes from; or what is missing",
-  "confident": "yes or no"
-}
-```
+- `answer`: the answer and where it comes from; or what is missing
+- `confident`: yes or no

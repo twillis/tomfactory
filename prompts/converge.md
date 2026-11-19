@@ -8,22 +8,6 @@ directory.
 
 {{request}}
 
-## The rules this work is held to, in order of precedence
-
-When two of these disagree, the earlier one wins. Say plainly where that happens.
-
-### 1. This codebase's own constitution
-
-{{constitution}}
-
-### 2. The operator's ideals
-
-{{ideals}}
-
-### 3. Spec kit's own instructions, where any are given further down
-
-These come last. Follow them where they do not conflict with the two above.
-
 ## What was built
 
 ```diff
@@ -35,16 +19,6 @@ These come last. Follow them where they do not conflict with the two above.
 ```text
 {{test_output}}
 ```
-
-## Spec kit, if this codebase uses it
-
-{{speckit_instructions}}
-
-### What the factory has set up
-
-{{speckit_context}}
-
-If both of those say (none), this codebase does not use spec kit: ignore this section.
 
 ## How to judge
 
@@ -64,15 +38,11 @@ Then give one verdict:
   the operator, so use it only for a real change to what is required, not for a detail.
 - `reject` if the result breaks the codebase's constitution or the operator's ideals.
 
-End your reply with one JSON object, and nothing after it, in exactly this shape:
+In your reply's JSON object:
 
-```json
-{
-  "verdict": "accept, rework, replan or reject",
-  "unbuilt": ["each thing the approved documents ask for that is missing"],
-  "details": ["each difference that is only an implementation detail"],
-  "requirement_changes": ["each difference that changes what is required"],
-  "reasons": ["plain sentences the operator can act on"],
-  "ideals_broken": ["each rule of the constitution or the ideals that is broken; empty if none"]
-}
-```
+- `verdict`: accept, rework, replan or reject
+- `unbuilt`: each thing the approved documents ask for that is missing
+- `details`: each difference that is only an implementation detail
+- `requirement_changes`: each difference that changes what is required
+- `reasons`: plain sentences the operator can act on
+- `ideals_broken`: each rule of the constitution or the ideals that is broken; empty if none

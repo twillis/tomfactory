@@ -15,22 +15,6 @@ directory to check what the change does.
 
 {{plan}}
 
-## The rules this work is held to, in order of precedence
-
-When two of these disagree, the earlier one wins. Say plainly where that happens.
-
-### 1. This codebase's own constitution
-
-{{constitution}}
-
-### 2. The operator's ideals
-
-{{ideals}}
-
-### 3. Spec kit's own instructions, where any are given further down
-
-These come last. Follow them where they do not conflict with the two above.
-
 ## The change, including its documentation
 
 ```diff
@@ -54,12 +38,8 @@ backlog is not, by itself, a reason to reject.
 A verdict. Accept only if the change does what the request asked, follows the plan, and
 breaks none of the ideals. If any ideal is broken, list it and reject.
 
-End your reply with one JSON object, and nothing after it, in exactly this shape:
+In your reply's JSON object:
 
-```json
-{
-  "verdict": "accept or reject",
-  "reasons": ["plain sentences the operator can act on"],
-  "ideals_broken": ["each ideal the change breaks; empty if none"]
-}
-```
+- `verdict`: accept or reject
+- `reasons`: plain sentences the operator can act on
+- `ideals_broken`: each ideal the change breaks; empty if none
