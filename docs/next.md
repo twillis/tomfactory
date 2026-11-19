@@ -16,6 +16,11 @@ No design needed. A few hours, no quota beyond a check run.
 - **Retire the comments-travel stop-gap** on the plain cycle, now that the scope rule is
   settled. (research.md R22)
 
+- **Tell the planner what kind of run it is planning.** Found on run 15 (2026-11-19): in a
+  `--tidy code` run the planner planned new tests, which the code writer may not write, so the
+  review rejected a correct change three times. The planner, and the reviewer, should be
+  given the run's kind and what it holds still.
+
 ## 2. Cost: a model per step
 
 The quickest lever on usage. A real run costs about $6; most of it is the planner, the test

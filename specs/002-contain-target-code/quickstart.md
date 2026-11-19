@@ -30,3 +30,11 @@ A small request against the viewer. **Expect**: accepted; `factory show --step <
 ## 5. Refusing (no quota)
 
 Covered by a factory test that makes containment unavailable. **Expect**: the run ends as needs-me at `baseline` with a reason naming bubblewrap, and the target's tests never ran. **Proves**: SC-015.
+
+## Results — 2026-11-19
+
+**Quickstart 1–3, 5**: the factory's suite, 290 tests including 20 for containment, passes. `doctor` reports containment ok. The traceability gate names all 78 requirements across both features.
+
+**Quickstart 4, one real run** (run 15, a `--tidy code` request on the viewer): the viewer's suite ran contained four times, 434 passed each time, about 25 s each, the same as uncontained. Every test step's record shows `contained: {"network": false}`. **Containment is proven end to end.**
+
+The run itself ended as needs-me, for a reason unrelated to containment: the planner, not told the run was a tidy that holds the tests still, planned three new tests. The code writer may not write tests in a tidy, so the reviewer rejected the result three times for the missing tests, while saying the code change itself was correct. Recorded in `docs/next.md` as a fix.

@@ -32,7 +32,7 @@
 
 - [X] T010 Run the whole suite and the traceability gate: all pass, FR-068 to FR-078 named.
 - [X] T011 [P] Update `README.md` ("What this proof of concept does not protect you from", `.factory.toml` settings), `specs/001-near-loop-factory/contracts/workflow.md` (the three test checks run contained), and `docs/next.md` (sandbox phase 1 done; phase 2 is the agent program).
-- [ ] T012 One real request against the viewer (quickstart 4): accepted; its `test` step shows `contained`. Record the result in quickstart.md.
+- [X] T012 One real request against the viewer (quickstart 4): accepted; its `test` step shows `contained`. Record the result in quickstart.md.
 
 ## Dependencies
 
