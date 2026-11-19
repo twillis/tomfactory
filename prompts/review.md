@@ -7,6 +7,10 @@ directory to check what the change does.
 
 {{request}}
 
+## What kind of run this is
+
+{{run_kind}}
+
 ## The approved plan
 
 {{plan}}

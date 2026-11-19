@@ -255,7 +255,7 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 **Keeping tests proportionate, and tidying**
 
 - **FR-065**: The tests a run adds MUST be proportionate to the change. The test-writer persona MUST be directed to test each behaviour once, at the level where it lives, and the factory MUST refuse a set of tests larger than a budget the target codebase sets, saying how large it was and what the budget is.
-- **FR-066**: The operator MUST be able to request a change that must not alter behaviour — tidying the tests, or tidying the code — without the factory demanding new failing tests. In such a run the existing tests MUST pass before and after; tidying the tests MUST NOT change the code, and tidying the code MUST NOT change the tests.
+- **FR-066**: The operator MUST be able to request a change that must not alter behaviour — tidying the tests, or tidying the code — without the factory demanding new failing tests. In such a run the existing tests MUST pass before and after; tidying the tests MUST NOT change the code, and tidying the code MUST NOT change the tests. The planner and the reviewer MUST be told which kind of run it is and what it holds still, so that a plan never asks for what the run may not change. *(Added 2026-11-19 after run 15, whose planner planned new tests in a tidy of the code.)*
 
 **Resuming**
 

@@ -215,6 +215,8 @@ def gather(name, store, run, checkout, settings) -> str:
                 + "\n".join(f"- {comment}" for comment in comments))
     if name == "ideals":
         return run.ideals or NO_IDEALS
+    if name == "run_kind":
+        return workflow.RUN_KINDS[run.workflow]
     if name == "constitution":      # the codebase's own rules; they come before the operator's ideals
         return speckit.constitution(checkout.path) or "This codebase has no constitution of its own."
     if name == "plan":

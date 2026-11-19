@@ -522,3 +522,21 @@ def test_resuming_is_refused_unless_the_run_stopped_as_needs_me_and_can_carry_on
     Workspace(gone.workspace, gone.target, gone.branch, gone.base_commit).remove()
     with pytest.raises(operations.Refused, match="checkout no longer exists"):
         operations.resume(gone.id)
+
+
+@pytest.mark.fr("FR-066")
+@pytest.mark.parametrize("kind, held_still", [("tidy-code", "The tests are held still"),
+                                              ("tidy-tests", "The code is held still")])
+def test_the_planner_and_reviewer_are_told_what_a_tidy_holds_still(home, tmp_path, fake_notify, kind, held_still):
+    """Found on run 15: told nothing, the planner planned new tests in a tidy of the code."""
+    step = TIDIED if kind == "tidy-code" else TRIMMED
+    run, fake, _, _ = tidy(home, tmp_path, fake_notify, kind, [{"envelope": PLAN}, step, REVIEW])
+    assert run.outcome == "accepted", run.reason
+    planner, reviewer = fake.calls[0]["prompt"], fake.calls[2]["prompt"]
+    assert held_still in planner and held_still in reviewer
+
+
+@pytest.mark.fr("FR-066")
+def test_a_change_tells_the_planner_it_is_a_change(cycle):
+    run, fake, _, _ = cycle(script())
+    assert "This run is a change" in fake.calls[0]["prompt"] and "held still" not in fake.calls[0]["prompt"]

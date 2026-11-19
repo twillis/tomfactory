@@ -7,6 +7,10 @@ Do not change any file.
 
 {{request}}
 
+## What kind of run this is
+
+{{run_kind}}
+
 ## The rules this work is held to, in order of precedence
 
 When two of these disagree, the earlier one wins. Say plainly where that happens.

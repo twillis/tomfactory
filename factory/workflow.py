@@ -102,7 +102,7 @@ STEPS: list[Step] = [
     # elsewhere: so in this plain cycle the planner changes no file.
     Step("plan", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass=WAIT,
          commit_after=True,
-         inputs=("request", "constitution", "ideals", "previous_plan", "comment", "failure",
+         inputs=("request", "run_kind", "constitution", "ideals", "previous_plan", "comment", "failure",
                  "speckit_instructions", "speckit_context"),
          envelope={"plan": "text", "ideals_addressed": "list", "conflicts": "list"}),
 
@@ -140,7 +140,7 @@ STEPS: list[Step] = [
 
     Step("review", "agent", persona="reviewer", on_pass="finish",
          checks=("verdict_accept",), on_fail=End("rejected"),
-         inputs=("request", "plan", "constitution", "ideals", "diff", "test_output"),
+         inputs=("request", "run_kind", "plan", "constitution", "ideals", "diff", "test_output"),
          envelope={"verdict": "verdict", "reasons": "list", "ideals_broken": "list"}),
 
     Step("finish", "code", on_pass=END_ACCEPTED),
@@ -295,6 +295,17 @@ TIDY_CODE = _tidy(Step("tidy_code", "agent", persona="code_writer", capabilities
                        envelope={"summary": "text", "files_changed": "list"}))
 
 KINDS_OF_RUN = {"tidy-tests": TIDY_TESTS, "tidy-code": TIDY_CODE}
+
+# What the planner and the reviewer are told about the kind of run, so a plan never asks for
+# what the run may not change.
+RUN_KINDS = {
+    "change": "This run is a change. Tests that describe it are written first and must fail before it is built.",
+    "tidy-tests": "This run is a tidy of the tests. The code is held still: nothing outside the test paths may "
+                  "change, and no behaviour is added or removed. Plan only changes to the tests.",
+    "tidy-code": "This run is a tidy of the code. The tests are held still: none may be changed, added or "
+                 "removed, and behaviour must stay exactly as the existing tests show it. Plan only changes to "
+                 "the code, and nothing that would need a new test.",
+}
 
 
 def table_for(spec_kit, kind="change") -> list[Step]:
