@@ -79,6 +79,19 @@ def end(gw, run_id, outcome, reason):
     return run
 
 
+def reopen(gw, run_id, state):
+    """Take back a run's needs-me ending so it can carry on. The ending it had stays in its history."""
+    with gw.transaction():
+        run = gw.get("runs", run_id)
+        if run.outcome != "needs-me":
+            raise ValueError(f"run {run_id} did not end as needs-me, so it cannot be reopened")
+        reopened = gw.update("runs", {"id": run_id}, {"state": state, "outcome": None, "reason": None,
+                                                       "ended_at": None})[0]
+        event(gw, run_id, "run_state", f"resumed at {run.current_step}",
+              {"state": state, "resumed_from": {"outcome": run.outcome, "reason": run.reason}})
+    return reopened
+
+
 # ---- plans ----
 
 def current_plan(gw, run_id):

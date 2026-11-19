@@ -232,6 +232,27 @@ def stop(run_id=None) -> dict:
     proc.stop_group(store.get("runs", run.id).child_pgid)      # in case the driver could not
     return driver.end_run(store, run.id, "needs-me", "stopped by operator")
 
+
+def resume(run_id=None, launcher=None) -> dict:
+    """Carry on a run that stopped as needs-me, from the step it stopped at. Earlier work is kept."""
+    store = _open()
+    run = _find(store, run_id)
+    if run.outcome != "needs-me":
+        now = run.outcome if run.state == "ended" else run.state.replace("_", " ")
+        raise Refused(f"run {run.id} cannot be resumed: only a run that ended as needs-me can be, and it is {now}")
+    if not pathlib.Path(run.workspace).is_dir():
+        raise Refused(f"run {run.id}'s checkout no longer exists, so there is nothing to carry on from")
+    other = records.open_run(store)
+    if other:
+        raise Refused(f"run {other.id} has not ended; let it finish, or stop or abandon it, before resuming another")
+    checkout = Workspace(run.workspace, run.target, run.branch, run.base_commit)
+    checkout.undo()                     # whatever the stopped step left half-done
+    workspace.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))   # the factory as it is now
+    state = "planning" if workflow.is_planning(run.current_step, _table(run)) else "working"
+    run = records.reopen(store, run.id, state)
+    (launcher or launch)(store, run, state, run.current_step)
+    return store.get("runs", run.id)
+
 def answer(run_id=None, text="", launcher=None) -> dict:
     """Answer the question a run is waiting on. The step that asked runs again with the answer."""
     store = _open()

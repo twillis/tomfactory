@@ -57,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     with_run(command("plan", plan, "Show the current plan.")).add_argument("--json", action="store_true")
     with_run(command("approve", approve, "Approve the waiting plan; the rest runs unattended."))
     with_run(command("abandon", abandon, "Give up on a request whose plan is waiting."))
+    with_run(command("resume", resume, "Carry on a run that stopped as needs-me, from the step it stopped at."))
     with_run(command("stop", stop, "Stop a run that is being worked; nothing it started is left running."))
 
     sub = command("revise", revise, "Send the waiting plan back with a comment.")
@@ -129,6 +130,14 @@ def abandon(args):
     print(f"Run {run.id} ended: {run.outcome} — {run.reason}")
 
 
+
+
+def resume(args):
+    run = operations.resume(args.run_id)
+    if run.state == "ended":
+        print(f"Run {run.id} ended: {run.outcome} — {run.reason}")
+    else:
+        print(f"Run {run.id} resumed at {run.current_step}. You will be notified when it next needs you or has finished.")
 
 def stop(args):
     run = operations.stop(args.run_id)

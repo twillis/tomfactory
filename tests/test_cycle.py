@@ -8,6 +8,7 @@ import pytest
 
 from factory import config, operations, records, workspace
 from factory.store import open_store
+from factory.workspace import Workspace
 from tests.conftest import PLAN, git, in_process
 from tests.fake_agent import FakeAgent
 from tests.test_workspace import tree
@@ -478,3 +479,46 @@ def test_a_review_that_rejects_a_tidy_sends_it_back_with_its_reasons(home, tmp_p
 def test_the_test_budget_is_for_new_tests_and_a_tidy_is_told_it_does_not_apply():
     text = (config.PROMPTS_DIR / "tidy_tests.md").read_text().lower()
     assert "budget" in text and "does not apply" in text
+
+
+# ---- resuming a run that stopped as needs-me (FR-067) ----
+
+@pytest.mark.fr("FR-067")
+def test_a_stopped_run_resumes_from_its_step_keeping_its_work_and_dropping_the_half_done(cycle, home):
+    """Found on real runs: a usage limit stopped two runs at their last steps, after all the costly work."""
+    half = {"error": "You've hit your 5-hour limit", "files": {"CHANGELOG.md": "- half writ"}}
+    run, _, store, target = cycle(script(document=half)[:5])
+    assert run.outcome == "needs-me" and run.current_step == "document"
+
+    fake = FakeAgent([DOCUMENT, REVIEW])
+    resumed = operations.resume(run.id, launcher=in_process(fake))
+
+    assert resumed.outcome == "accepted", resumed.reason
+    assert [c["persona"] for c in fake.calls] == [fake.calls[0]["persona"], fake.calls[1]["persona"]]
+    assert len(fake.calls) == 2                                   # only the steps not yet done
+    assert names(store, run).count("build") == 1 and names(store, run)[-3:] == ["document", "review", "finish"]
+    assert git(target, "show", f"{run.branch}:CHANGELOG.md") == "- Added a greeting."     # not the half-written one
+    history = [e for e in store.query("events", {"run_id": run.id, "kind": "run_state"}) if "resumed_from" in e.payload]
+    assert history and "5-hour limit" in history[0].payload["resumed_from"]["reason"]
+
+
+@pytest.mark.fr("FR-067")
+def test_resuming_is_refused_unless_the_run_stopped_as_needs_me_and_can_carry_on(cycle, home, monkeypatch, capsys):
+    accepted, _, _, target = cycle(script())
+    with pytest.raises(operations.Refused, match="only a run that ended as needs-me"):
+        operations.resume(accepted.id)
+
+    stopped, _, _, _ = cycle(script(build={"error": "usage limit"})[:3], target=target)
+    other = operations.request("Something else", target, launcher=in_process(FakeAgent([{"envelope": PLAN}])))
+    with pytest.raises(operations.Refused, match=f"run {other.id} has not ended"):
+        operations.resume(stopped.id)
+    operations.abandon(other.id)
+
+    from factory import cli
+    monkeypatch.setattr(operations, "launch", in_process(FakeAgent(script()[2:])))
+    assert cli.main(["resume", str(stopped.id)]) == 0 and "accepted" in capsys.readouterr().out
+
+    gone, _, _, _ = cycle(script(build={"error": "usage limit"})[:3], target=target)
+    Workspace(gone.workspace, gone.target, gone.branch, gone.base_commit).remove()
+    with pytest.raises(operations.Refused, match="checkout no longer exists"):
+        operations.resume(gone.id)

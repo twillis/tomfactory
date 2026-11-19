@@ -184,7 +184,7 @@ A live view runs it every second or so with the last id it saw. A history view r
 2. **Rows are never deleted or rewritten**, with two exceptions: a `steps` row is completed once when its step ends, and a `runs` row is updated as the run moves on.
 3. **`events.id` only increases**, so the cursor query never misses or repeats an event.
 4. **Event kinds may be added.** A reader must ignore kinds it does not know.
-5. **A run that is `ended` never changes again.**
+5. **A run that is `ended` never changes again**, with one exception: the operator may resume a run that ended as needs-me (`factory resume`). It becomes `planning` or `working` again at the step it stopped at, and its earlier ending is kept in its history as a `run_state` event with `resumed_from` in its payload.
 6. **A run can be dead without yet being marked ended.** If the driver was killed, the row stays `planning` or `working` until the next `factory` command notices and ends it as needs-me, "interrupted". A reader that wants to be exact must treat a `planning` or `working` run as stopped when no process with `driver_pid` and `driver_started` exists. The observability app's first versions may simply show the state as stored.
 
 ## Per-run files (`gateway.files`)

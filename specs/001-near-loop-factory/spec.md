@@ -257,6 +257,10 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 - **FR-065**: The tests a run adds MUST be proportionate to the change. The test-writer persona MUST be directed to test each behaviour once, at the level where it lives, and the factory MUST refuse a set of tests larger than a budget the target codebase sets, saying how large it was and what the budget is.
 - **FR-066**: The operator MUST be able to request a change that must not alter behaviour — tidying the tests, or tidying the code — without the factory demanding new failing tests. In such a run the existing tests MUST pass before and after; tidying the tests MUST NOT change the code, and tidying the code MUST NOT change the tests.
 
+**Resuming**
+
+- **FR-067**: The operator MUST be able to resume a run that ended as needs-me, from the step it stopped at. Everything the run committed before that step MUST be kept and not redone; anything the stopped step left uncommitted MUST be discarded; and the earlier ending MUST stay in the run's history. Resuming MUST be refused for a run that ended any other way, whose checkout no longer exists, or while another run is open.
+
 ### Key Entities
 
 - **Persona**: who carries out an agent step. Has a name and a written description. One persona may serve more than one step.

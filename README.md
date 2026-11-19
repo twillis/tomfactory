@@ -116,6 +116,7 @@ factory watch                       # follow it as it happens
 factory show                        # the whole run: every step, what it was asked, what it produced
 factory show --step 12              # one step in full, with everything the agent did
 factory stop                        # stop a run; nothing it started is left running
+factory resume                      # carry on a run that stopped as needs-me, from where it stopped
 ```
 
 Every command that takes a run works on the most recent run unless you give its number:
@@ -373,8 +374,8 @@ Be clear-eyed about these before pointing it at anything you care about.
   Reading the plan is your part of the job.
 - **Tests can be weak.** The test writer must state edge cases and its tests must fail
   first, but nothing proves the tests are the right ones.
-- **One machine, one run at a time, no resuming.** A run that ends as needs-me is not
-  continued; you make a new request.
+- **One machine, one run at a time.** A run that ends as needs-me can be carried on with
+  `factory resume`, which redoes only the step it stopped at.
 - **The agent program's cost figures are estimates**, reported by the program itself.
 
 ## Testing the factory
