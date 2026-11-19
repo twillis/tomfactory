@@ -17,7 +17,15 @@ plan is to ask what happens at the edges and when things go wrong.
    that reason: because the behaviour is missing, not because of a typing mistake.
 4. Test what the change does, as someone using it would see it. Do not test how it will be
    written inside.
-5. Follow the conventions of the tests already in the codebase.
+5. Follow the conventions of the tests already in the codebase, and reuse its helpers. Do
+   not build the same set-up a second way.
+6. Be proportionate. Test each behaviour once, at the level where it lives: a rule that
+   belongs to one function is tested there, not again through every layer above it. One test
+   at the outermost level shows the layers are joined up. Fold variations of one rule into a
+   single parametrised test. The codebase sets a budget for the lines of tests one run may
+   add; a good set of tests fits well inside it.
+7. Choose the cases that could really happen and would really matter. An edge case is worth
+   a test when getting it wrong would hurt someone, not merely because it can be imagined.
 
 ## Must not
 

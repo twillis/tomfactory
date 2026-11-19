@@ -40,7 +40,7 @@ def test_a_new_store_has_the_contract_schema_in_wal_mode(gw, home):
 
     assert columns("runs") == {"id", "request", "target", "base_commit", "branch", "workspace", "state",
                                "current_step", "outcome", "reason", "ideals", "attempt_limit", "driver_pid",
-                               "driver_started", "child_pgid", "created_at", "ended_at"}
+                               "driver_started", "child_pgid", "created_at", "ended_at", "workflow"}
     assert columns("steps") == {"id", "run_id", "name", "kind", "persona", "attempt", "asked", "produced",
                                 "checks", "passed", "failure", "started_at", "ended_at", "tokens", "cost_estimate"}
     assert columns("plans") == {"run_id", "version", "text", "ideals_addressed", "conflicts", "comment",
@@ -213,3 +213,19 @@ def test_per_run_files_are_reached_only_through_the_store(gw, home):
     assert gw.files.snapshot_dir(7) == home / "runs" / "7" / "snapshot"
     assert gw.files.displaced_dir(7) == home / "runs" / "7" / "displaced"
     assert gw.files.workspace_path(7) == home / "workspaces" / "7"
+
+
+@pytest.mark.fr("FR-066")
+def test_a_store_made_before_a_column_existed_gains_it_with_its_default(home):
+    first = open_store(home)
+    a_run(first)
+    first.db.execute("ALTER TABLE runs DROP COLUMN workflow")       # as an older factory left it
+    first.db.close()
+    again = open_store(home)
+    assert again.get("runs", 1).workflow == "change"
+    assert a_run_closed_then_new(again).workflow == "tidy-tests"
+
+
+def a_run_closed_then_new(gw):
+    gw.update("runs", {"id": 1}, {"state": "ended", "outcome": "rejected", "reason": "x"})
+    return a_run(gw, request="trim", workflow="tidy-tests")

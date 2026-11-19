@@ -104,6 +104,15 @@ def test_stop_is_refused_when_nothing_is_running(capsys, tmp_path, fake):
     assert code == 1 and "not running" in out
 
 
+@pytest.mark.fr("FR-066")
+def test_a_tidy_request_is_made_with_a_flag(capsys, tmp_path, fake):
+    target = tmp_path / "viewer"
+    run_cli(capsys, "init-target", str(target))
+    code, out = run_cli(capsys, "request", "Trim the tests", "--target", str(target), "--tidy", "tests")
+    assert code == 0 and operations.get_run().workflow == "tidy-tests"
+    assert run_cli(capsys, "request", "x", "--target", str(target), "--tidy", "everything")[0] == 2
+
+
 # ---- Story 3 ----
 
 @pytest.fixture

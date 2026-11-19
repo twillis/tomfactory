@@ -385,3 +385,79 @@ def test_an_architect_that_edits_code_is_undone_and_the_run_stops(cycle):
     run, _, store, _ = cycle(script(architecture_review=meddling)[:4])
     assert run.outcome == "needs-me" and "architecture_review" in run.reason and "hello.py" in run.reason
     assert git(run.workspace, "show", "HEAD:hello.py") == CODE.strip()
+
+
+# ---- tidying: a change that must not alter behaviour (FR-066) ----
+
+EXISTING = {"hello.py": CODE,
+            "tests/test_hello.py": TEST + "\n\ndef test_greets_again():\n    assert greet() == 'hello'\n"}
+TRIMMED = {"envelope": {"summary": "removed a duplicate", "removed": ["test_greets_again"], "kept": ["test_greets"]},
+           "files": {"tests/test_hello.py": TEST}}
+TIDIED = {"envelope": {"summary": "named the greeting", "files_changed": ["hello.py"]},
+          "files": {"hello.py": "GREETING = 'hello'\n\n\ndef greet(name=''):\n    return GREETING\n"}}
+
+
+def tidy(home, tmp_path, fake_notify, kind, entries, name="tidy-target"):
+    target = operations.init_target(tmp_path / name)
+    for path, text in EXISTING.items():
+        (target / path).parent.mkdir(parents=True, exist_ok=True)
+        (target / path).write_text(text)
+    git(target, "add", "-A")
+    git(target, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "existing")
+    fake = FakeAgent(entries)
+    run = operations.request("Tidy up", target, workflow=kind, launcher=in_process(fake))
+    if run.state == "awaiting_approval":
+        run = operations.approve(run.id, launcher=in_process(fake))
+    return run, fake, open_store(home), target
+
+
+@pytest.mark.fr("FR-066")
+def test_tidying_the_tests_needs_no_failing_test_and_leaves_the_code_alone(home, tmp_path, fake_notify):
+    run, fake, store, target = tidy(home, tmp_path, fake_notify, "tidy-tests", [{"envelope": PLAN}, TRIMMED, REVIEW])
+    assert run.outcome == "accepted", run.reason
+    assert names(store, run) == ["plan", "baseline", "tidy_tests", "test", "review", "finish"]
+    assert run.workflow == "tidy-tests"
+    assert "2 passed" in record(store, run, "test").produced["output"]          # down from three, all passing
+    assert "test_greets_again" not in git(target, "show", f"{run.branch}:tests/test_hello.py")
+    assert git(target, "show", f"{run.branch}:hello.py") == CODE.strip()        # the code did not change
+    assert fake.calls[1]["persona"] == fake.calls[1]["persona"] and "testing specialist" in fake.calls[1]["persona"].lower()
+
+
+@pytest.mark.fr("FR-066")
+def test_tidying_the_tests_may_not_touch_the_code_and_tidying_the_code_may_not_touch_the_tests(home, tmp_path, fake_notify):
+    sneaky = dict(TRIMMED, files={**TRIMMED["files"], "hello.py": WRONG})
+    run, _, _, _ = tidy(home, tmp_path, fake_notify, "tidy-tests", [{"envelope": PLAN}, sneaky])
+    assert run.outcome == "needs-me" and "hello.py" in run.reason
+    weakened = dict(TIDIED, files={**TIDIED["files"], "tests/test_hello.py": "def test_nothing():\n    assert True\n"})
+    run, _, _, _ = tidy(home, tmp_path, fake_notify, "tidy-code", [{"envelope": PLAN}, weakened], name="second")
+    assert run.outcome == "needs-me" and "tests/test_hello.py" in run.reason
+
+
+@pytest.mark.fr("FR-066")
+def test_tidying_the_code_must_leave_every_test_passing(home, tmp_path, fake_notify):
+    broke = dict(TIDIED, files={"hello.py": WRONG})
+    run, fake, store, target = tidy(home, tmp_path, fake_notify, "tidy-code",
+                                    [{"envelope": PLAN}, broke, TIDIED, REVIEW])
+    assert run.outcome == "accepted", run.reason
+    assert names(store, run) == ["plan", "baseline", "tidy_code", "test", "tidy_code", "test", "review", "finish"]
+    assert "assert 'goodbye' == 'hello'" in fake.calls[2]["prompt"]             # told what it broke
+    assert "GREETING" in git(target, "show", f"{run.branch}:hello.py")
+
+
+@pytest.mark.fr("FR-066")
+def test_a_tidy_run_is_refused_if_the_tests_do_not_pass_to_begin_with(home, tmp_path, fake_notify, monkeypatch):
+    monkeypatch.setitem(EXISTING, "hello.py", WRONG)
+    run, fake, _, _ = tidy(home, tmp_path, fake_notify, "tidy-tests", [{"envelope": PLAN}])
+    assert run.outcome == "needs-me" and "already failing" in run.reason and len(fake.calls) == 1
+
+
+@pytest.mark.fr("FR-065")
+def test_a_test_writer_over_budget_is_sent_back_and_told_the_numbers(cycle, monkeypatch):
+    monkeypatch.setattr(config, "DEFAULT_FACTORY_TOML", config.DEFAULT_FACTORY_TOML.replace(
+        "test_budget_lines = 300", "test_budget_lines = 12"))
+    padded = dict(WRITE_TESTS, files={"tests/test_hello.py": TEST + "\n# padding\n" * 20})
+    run, fake, store, _ = cycle(script(write_tests=[padded, WRITE_TESTS]))
+    assert run.outcome == "accepted"
+    first = record(store, run, "write_tests", 0)
+    assert first.passed is False and [c["name"] for c in first.checks if not c["passed"]] == ["tests_within_budget"]
+    assert "budget" in fake.calls[2]["prompt"] and "12" in fake.calls[2]["prompt"]

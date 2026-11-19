@@ -15,6 +15,15 @@ your tests must fail when they are run. Read the codebase in the current directo
 
 You may create or change files only under: {{test_paths}}
 
+## Keep them proportionate
+
+Test each behaviour once, at the level where it lives. If a rule belongs to one function,
+test it there; do not assert the same rule again through every layer above it. One test at
+the outermost level is enough to show the layers are joined up. Use one parametrised test
+for variations of a single rule. Reuse the helpers the tests already have. Do not re-test
+what the existing tests already cover. The codebase sets a budget for how many lines of
+tests one run may add, and the factory refuses a set that goes over it.
+
 ## If your last tests were not accepted
 
 What was wrong, if anything:

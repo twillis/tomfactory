@@ -51,6 +51,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("text")
     sub.add_argument("--target", required=True, help="the codebase to change")
     sub.add_argument("--attempts", type=int, default=3, help="how many times any one step may run (default 3)")
+    sub.add_argument("--tidy", choices=("tests", "code"),
+                     help="a change that must not alter behaviour: tidy the tests, or the code; nothing fails first")
 
     with_run(command("plan", plan, "Show the current plan.")).add_argument("--json", action="store_true")
     with_run(command("approve", approve, "Approve the waiting plan; the rest runs unattended."))
@@ -85,7 +87,8 @@ def init_target(args):
 
 
 def request(args):
-    run = operations.request(args.text, args.target, attempts=args.attempts)
+    run = operations.request(args.text, args.target, attempts=args.attempts,
+                             workflow=f"tidy-{args.tidy}" if args.tidy else "change")
     print(f"Run {run.id} started: a plan is being written. You will be notified when it is ready.")
     print(f"  then read it with:  {PROG} plan")
 

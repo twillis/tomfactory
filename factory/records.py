@@ -27,12 +27,13 @@ def slug(request) -> str:
 
 # ---- runs ----
 
-def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, current_step=None):
+def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, current_step=None, workflow="change"):
     """Start a run's record: planning, on its own branch, with its own checkout path."""
     with gw.transaction():
         run = gw.insert("runs", {
             "request": request, "target": str(target), "base_commit": base_commit, "state": "planning",
-            "current_step": current_step, "ideals": ideals, "attempt_limit": attempt_limit, "created_at": now()})
+            "current_step": current_step, "ideals": ideals, "attempt_limit": attempt_limit,
+            "workflow": workflow, "created_at": now()})
         run = gw.update("runs", {"id": run.id}, {
             "branch": f"factory/{run.id}-{slug(request)}",
             "workspace": str(gw.files.workspace_path(run.id))})[0]

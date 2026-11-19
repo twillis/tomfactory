@@ -109,7 +109,8 @@ STEPS: list[Step] = [
     Step("baseline", "code", on_pass="write_tests", checks=("baseline",)),
 
     Step("write_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
-         on_pass="red", checks=("tests_added", "edge_cases_stated"), on_fail=Rework("write_tests"),
+         on_pass="red", checks=("tests_added", "tests_within_budget", "edge_cases_stated"),
+         on_fail=Rework("write_tests"),
          inputs=("request", "plan", "test_paths", "failure", "speckit_instructions", "speckit_context"),
          envelope={"summary": "text", "test_files": "list", "edge_cases": "list"}),
 
@@ -272,9 +273,36 @@ SPEC_KIT_STEPS: list[Step] = [
 ]
 
 
-def table_for(spec_kit) -> list[Step]:
-    """The steps a run goes through: chosen by whether its codebase uses spec kit."""
-    return SPEC_KIT_STEPS if spec_kit else STEPS
+# ---- tidying: a change that must not alter behaviour, so no failing test comes first (FR-066) ----
+# The tests must pass before (baseline) and after (test). One side is held still: tidying the
+# tests may not touch the code, and tidying the code may not touch the tests.
+
+def _tidy(step: Step) -> list[Step]:
+    return [_plain["plan"], replace(_plain["baseline"], on_pass=step.name), step,
+            replace(_plain["test"], on_pass="review", on_fail=Rework(step.name)),
+            _plain["review"], _plain["finish"]]
+
+
+TIDY_TESTS = _tidy(Step("tidy_tests", "agent", persona="test_writer", capabilities="read+edit",
+                        may_change="tests", on_pass="test",
+                        inputs=("request", "plan", "test_paths", "failure"),
+                        envelope={"summary": "text", "removed": "list", "kept": "list"}))
+
+TIDY_CODE = _tidy(Step("tidy_code", "agent", persona="code_writer", capabilities="read+edit",
+                       may_change="not_tests", on_pass="test",
+                       inputs=("request", "plan", "constitution", "ideals", "failure"),
+                       envelope={"summary": "text", "files_changed": "list"}))
+
+KINDS_OF_RUN = {"tidy-tests": TIDY_TESTS, "tidy-code": TIDY_CODE}
+
+
+def table_for(spec_kit, kind="change") -> list[Step]:
+    """The steps a run goes through: chosen by what kind of run it is, and by its codebase."""
+    if kind == "change":
+        return SPEC_KIT_STEPS if spec_kit else STEPS
+    if kind not in KINDS_OF_RUN:
+        raise ValueError(f"a run is one of: change, {', '.join(KINDS_OF_RUN)}; not {kind!r}")
+    return KINDS_OF_RUN[kind]
 
 
 def is_planning(name, steps) -> bool:

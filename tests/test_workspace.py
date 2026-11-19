@@ -171,3 +171,15 @@ def test_discard_puts_back_only_the_named_files(ws):
     ws.discard({".factory.toml", "docs/backlog.md", "never-existed.txt"})
     assert set(ws.dirty()) == {"kept.py"}
     assert "test_command" in (ws.path / ".factory.toml").read_text()
+
+
+@pytest.mark.fr("FR-065")
+def test_lines_added_counts_new_lines_in_changed_and_new_files(ws):
+    (ws.path / "tests").mkdir()
+    (ws.path / "tests" / "test_old.py").write_text("a = 1\nb = 2\n")
+    ws.commit("an existing test")
+    assert ws.lines_added(["tests/test_old.py"]) == 0
+    (ws.path / "tests" / "test_old.py").write_text("a = 1\nb = 2\nc = 3\nd = 4\n")      # two lines added
+    (ws.path / "tests" / "test_new.py").write_text("x\ny\nz\n")                          # a new file: three
+    assert ws.lines_added(["tests/test_old.py", "tests/test_new.py"]) == 5
+    assert ws.lines_added(["tests/test_new.py", "tests/never.py"]) == 3

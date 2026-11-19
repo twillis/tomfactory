@@ -252,6 +252,11 @@ The factory is a proof of concept whose purpose is for the operator to see it wo
 - **FR-063**: When the lead cannot answer, the run MUST wait for the operator, who MUST be notified of the question. When the operator answers, the step that asked MUST run again with that answer. A run MUST NOT be approved past a question that is still waiting.
 - **FR-064**: Every question, who asked it, the answer, and who answered MUST be recorded and shown with the run.
 
+**Keeping tests proportionate, and tidying**
+
+- **FR-065**: The tests a run adds MUST be proportionate to the change. The test-writer persona MUST be directed to test each behaviour once, at the level where it lives, and the factory MUST refuse a set of tests larger than a budget the target codebase sets, saying how large it was and what the budget is.
+- **FR-066**: The operator MUST be able to request a change that must not alter behaviour — tidying the tests, or tidying the code — without the factory demanding new failing tests. In such a run the existing tests MUST pass before and after; tidying the tests MUST NOT change the code, and tidying the code MUST NOT change the tests.
+
 ### Key Entities
 
 - **Persona**: who carries out an agent step. Has a name and a written description. One persona may serve more than one step.

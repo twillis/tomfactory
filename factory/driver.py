@@ -42,7 +42,7 @@ def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_
     run = store.get("runs", run_id)
     checkout = Workspace(run.workspace, run.target, run.branch, run.base_commit)
     settings = config.read_target_config(run.target, run.base_commit)
-    steps = steps or workflow.table_for(speckit.available(checkout.path))
+    steps = steps or workflow.table_for(speckit.available(checkout.path), run.workflow)
     try:
         while True:
             run = store.get("runs", run_id)

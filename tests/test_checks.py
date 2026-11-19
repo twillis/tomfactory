@@ -123,3 +123,17 @@ def test_a_hanging_test_command_is_stopped_and_reported_as_a_time_out(make):
     assert not result.passed and result.timed_out and "1.5 seconds" in result.note
     assert context.groups[0] and context.groups[-1] is None
     assert not proc._signal_group(context.groups[0], 0)
+
+
+@pytest.mark.fr("FR-065")
+def test_a_set_of_tests_larger_than_the_codebases_budget_is_refused(make):
+    import dataclasses
+    context = make({"tests/test_ok.py": PASSING}, changed=["tests/test_big.py"])
+    (context.checkout.path / "tests" / "test_big.py").write_text("x = 1\n" * 40)
+    context.target_config = dataclasses.replace(context.target_config, test_budget_lines=30)
+    over = run("tests_within_budget", context)
+    assert not over.passed and "40" in over.note and "30" in over.note and "once" in over.note
+    context.target_config = dataclasses.replace(context.target_config, test_budget_lines=40)
+    assert run("tests_within_budget", context).passed
+    context.target_config = dataclasses.replace(context.target_config, test_budget_lines=0)      # 0: no limit
+    assert run("tests_within_budget", context).passed

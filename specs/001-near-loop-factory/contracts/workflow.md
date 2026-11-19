@@ -34,7 +34,7 @@ A code step has no persona, capabilities, inputs or envelope. Its work is its ch
 |---|--------|--------|-----------|----------------|--------------|----------|-----------|-----------|----------------|
 | 1 | `plan` | agent | `planner` | read+edit | spec | — | `WAIT` | — | yes |
 | 2 | `baseline` | code | — | — | nothing | `baseline` | `write_tests` | `End("needs-me")` | no |
-| 3 | `write_tests` | agent | `test_writer` | read+edit | tests | `tests_added`, `edge_cases_stated` | `red` | `Rework("write_tests")` | no |
+| 3 | `write_tests` | agent | `test_writer` | read+edit | tests | `tests_added`, `tests_within_budget`, `edge_cases_stated` | `red` | `Rework("write_tests")` | no |
 | 4 | `red` | code | — | — | nothing | `tests_fail_first` | `build` | `Rework("write_tests")` | yes |
 | 5 | `build` | agent | `code_writer` | read+edit | not_tests | — | `test` | — | no |
 | 6 | `test` | code | — | — | nothing | `tests_pass` | `architecture_review` | `Rework("build")` | yes |
@@ -91,6 +91,18 @@ On `Replan`, the driver commits whatever is in the checkout, puts a branch `<run
 
 Any step may have `on_pass=WAIT`. `after_wait("approve", …)` continues at the next entry in the table; `after_wait("revise", …)` returns to the step's `revise_from`. A run's state is `planning` up to and including the last waiting step, and `working` after it.
 
+## Kinds of run (FR-066)
+
+`workflow.table_for(spec_kit, kind)` chooses the table. A run's kind is stored on it (`runs.workflow`).
+
+| Kind | Table | For |
+|------|-------|-----|
+| `change` (the default) | the plain table, or the spec kit table where the codebase uses spec kit | Anything that changes behaviour. Tests are written and seen to fail first. |
+| `tidy-tests` | `plan` → *wait* → `baseline` → `tidy_tests` (test writer; may change tests only) → `test` → `review` → `finish` | Making the tests smaller or clearer. The code is held still. |
+| `tidy-code` | `plan` → *wait* → `baseline` → `tidy_code` (code writer; may change anything but tests) → `test` → `review` → `finish` | Reshaping the code. The tests are held still. |
+
+In a tidy run nothing is required to fail first. The tests must pass before (`baseline`; a failure ends the run) and after (`test`; a failure sends the work back to the tidy step, within the attempt limit).
+
 ## Checks
 
 A check is a named function in `factory/checks.py`, registered by name, with the signature `check(context) -> CheckResult`. Types are in "Types" below.
@@ -109,6 +121,7 @@ A check is a named function in `factory/checks.py`, registered by name, with the
 |-------|-------------|
 | `baseline` | the test command exits 0, or exits with the target's `no_tests_exit_code` (recorded as "no prior tests") |
 | `tests_added` | the step changed at least one file under the target's `test_paths` |
+| `tests_within_budget` | the lines the step added under the test paths are no more than the target's `test_budget_lines`; 0 means no limit (FR-065) |
 | `edge_cases_stated` | the envelope's `edge_cases` list has at least one entry (FR-045) |
 | `tests_fail_first` | the test command exits non-zero **and** not with `no_tests_exit_code` (FR-007). "No tests found" is not a failing test. |
 | `tests_pass` | the test command exits 0 (FR-008) |

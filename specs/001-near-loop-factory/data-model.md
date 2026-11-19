@@ -122,6 +122,7 @@ A small file, `.factory.toml`, committed in the target codebase. It is read from
 | test_paths | Where tests live | `["tests/"]` |
 | docs_paths | Where the document step may write | `["docs/", "CHANGELOG.md"]` |
 | step_timeout_seconds | Time limit per step (FR-014) | `900` |
+| test_budget_lines | The most lines of tests one run may add; 0 means no limit (FR-065) | `300` |
 
 **How the test command is run**: it is split into words the way a shell would split them (no shell is started), run with the checkout as the working directory, in its own process group, under the step's time limit, with the driver's environment plus `PYTHONDONTWRITEBYTECODE=1`. `python` therefore means the Python that is running the factory, which has `pytest` available. A target that needs its own environment is a next-stage concern.
 

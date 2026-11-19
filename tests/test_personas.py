@@ -43,6 +43,9 @@ def test_the_test_writer_is_directed_to_edge_and_failure_cases_and_away_from_imp
     writer = sections("test_writer")
     assert "edge case" in writer["priorities"].lower() and "failure case" in writer["priorities"].lower()
     assert "implementation" in writer["must_not"].lower()
+    priorities = writer["priorities"].lower()
+    assert "once" in priorities and "level" in priorities and "parametri" in priorities     # FR-065: proportionate
+    assert "budget" in priorities
     assert "test" in sections("code_writer")["must_not"].lower()
 
 

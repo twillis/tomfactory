@@ -20,6 +20,7 @@ no_tests_exit_code = 5          # the test command's exit code for "no tests fou
 test_paths = ["tests/"]         # where tests live; only the test writer may change these
 docs_paths = ["docs/", "CHANGELOG.md"]   # where the documenter may write
 step_timeout_seconds = 900      # the time limit for any one step
+test_budget_lines = 300         # the most lines of tests one run may add; 0 means no limit
 '''
 
 DEFAULT_GITIGNORE = "__pycache__/\n.pytest_cache/\n*.pyc\n.venv/\n"
@@ -36,6 +37,7 @@ class TargetConfig:
     test_paths: tuple = ("tests/",)
     docs_paths: tuple = ("docs/", "CHANGELOG.md")
     step_timeout_seconds: int = 900
+    test_budget_lines: int = 300
 
 
 def home() -> pathlib.Path:

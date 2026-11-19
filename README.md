@@ -95,6 +95,8 @@ one `init-target` writes is the example to copy.
 factory request "Add a page that says hello." --target ../my-app
 ```
 
+Add `--tidy tests` or `--tidy code` for a change that must not alter behaviour; see below.
+
 This returns at once. A plan is written in the background, and a desktop notification tells
 you when it is ready.
 
@@ -166,6 +168,28 @@ is still spec kit's blank template is treated as having none, so your ideals are
 No agent runs anything to do this. Spec kit's scripts are run by the factory's own code,
 and each persona is handed its stage's instructions and what the scripts set up. A codebase
 without spec kit runs the plain cycle, exactly as before.
+
+### Tidying: a change that must not alter behaviour
+
+The normal cycle insists on tests that fail first, which is right for a change and wrong
+for a tidy-up: trimming tests or reshaping code should make nothing fail. For that:
+
+```bash
+factory request "Cut the duplicate tests." --target ../my-app --tidy tests
+factory request "Give the greeting text one home." --target ../my-app --tidy code
+```
+
+A tidy run goes: plan, your approval, the existing tests (which must pass), the tidy step,
+the tests again (which must still pass), review. One side is held still: tidying the tests
+may not touch the code, and tidying the code may not touch the tests. The architect's
+backlog is the natural source of tidy requests.
+
+### Keeping tests proportionate
+
+Left alone, a test writer told to cover edge cases will keep finding more. Two things hold
+it back. Its persona tells it to test each behaviour once, at the level where it lives. And
+each codebase sets a budget, `test_budget_lines` in `.factory.toml` (300 by default; 0 for
+no limit): a run whose new tests add more lines than that is sent back and told the numbers.
 
 ### When an agent has a question
 

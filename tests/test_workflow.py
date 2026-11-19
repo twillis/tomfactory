@@ -28,8 +28,8 @@ def failed(check, note="it failed"):
 TABLE = [
     ("plan", "agent", "planner", "read+edit", "spec", (), WAIT, End("needs-me"), True),
     ("baseline", "code", None, "read", "nothing", ("baseline",), "write_tests", End("needs-me"), False),
-    ("write_tests", "agent", "test_writer", "read+edit", "tests", ("tests_added", "edge_cases_stated"),
-     "red", Rework("write_tests"), False),
+    ("write_tests", "agent", "test_writer", "read+edit", "tests",
+     ("tests_added", "tests_within_budget", "edge_cases_stated"), "red", Rework("write_tests"), False),
     ("red", "code", None, "read", "nothing", ("tests_fail_first",), "build", Rework("write_tests"), True),
     ("build", "agent", "code_writer", "read+edit", "not_tests", (), "test", End("needs-me"), False),
     ("test", "code", None, "read", "nothing", ("tests_pass",), "architecture_review", Rework("build"), True),
@@ -243,3 +243,23 @@ def test_an_advisory_step_that_changes_what_it_may_not_still_stops_the_run():
 def test_the_plain_cycle_names_no_spec_kit_command():
     assert {s.name: s.speckit for s in workflow.STEPS if s.speckit} == {}       # the plain cycle uses none
     assert Step("x", "code", on_pass="y").speckit == ()
+
+
+@pytest.mark.fr("FR-066")
+def test_a_tidy_run_has_no_failing_tests_first_step_and_holds_one_side_still():
+    tests, code = workflow.table_for(False, "tidy-tests"), workflow.table_for(False, "tidy-code")
+    assert [s.name for s in tests] == ["plan", "baseline", "tidy_tests", "test", "review", "finish"]
+    assert [s.name for s in code] == ["plan", "baseline", "tidy_code", "test", "review", "finish"]
+    for table in (tests, code):
+        assert "red" not in [s.name for s in table] and "write_tests" not in [s.name for s in table]
+        assert workflow.get("plan", table).on_pass == WAIT                      # still approved first
+        assert workflow.get("baseline", table).on_fail == End("needs-me")       # the tests must pass before
+    tidy_tests, tidy_code = workflow.get("tidy_tests", tests), workflow.get("tidy_code", code)
+    assert (tidy_tests.persona, tidy_tests.may_change) == ("test_writer", "tests")      # the code is held still
+    assert (tidy_code.persona, tidy_code.may_change) == ("code_writer", "not_tests")    # the tests are held still
+    assert workflow.get("test", tests).on_fail == Rework("tidy_tests")                  # and must pass after
+    assert workflow.get("test", code).on_fail == Rework("tidy_code")
+    assert workflow.table_for(True, "tidy-tests") is tests                              # the same on a spec kit codebase
+    assert workflow.table_for(False) is workflow.STEPS and workflow.table_for(False, "change") is workflow.STEPS
+    with pytest.raises(ValueError, match="tidy-tests"):
+        workflow.table_for(False, "rewrite-everything")

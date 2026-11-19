@@ -163,6 +163,19 @@ def tests_added(ctx) -> CheckResult:
     return CheckResult("tests_added", added, "" if added else f"no test file was written under {paths}")
 
 
+@register("tests_within_budget")
+def tests_within_budget(ctx) -> CheckResult:
+    """The tests this run added are proportionate: no more lines than the codebase's budget (FR-065)."""
+    budget = ctx.target_config.test_budget_lines
+    added = ctx.checkout.lines_added([n for n in ctx.changed if under(n, ctx.target_config.test_paths)])
+    if not budget or added <= budget:
+        return CheckResult("tests_within_budget", True, f"{added} lines of tests added")
+    return CheckResult("tests_within_budget", False,
+                       f"the tests added {added} lines; this codebase's budget for one run is {budget}. Test each"
+                       " behaviour once, at the level where it lives; use parametrised cases for variations of one"
+                       " rule; reuse the helpers already there; do not re-test what existing tests cover.")
+
+
 @register("edge_cases_stated")
 def edge_cases_stated(ctx) -> CheckResult:
     """The test writer listed at least one edge or failure case it covered (FR-045)."""

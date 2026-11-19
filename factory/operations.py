@@ -12,6 +12,7 @@ import sys
 from dataclasses import dataclass, field
 
 from factory import agent, config, driver, proc, records, speckit, workflow, workspace
+from factory import workflow as flow     # for the one function that takes an argument named workflow
 from factory.store import open_store
 from factory.workspace import Workspace
 
@@ -130,7 +131,7 @@ def init_target(path, spec_kit=False) -> pathlib.Path:
     return path
 
 
-def request(text, target, attempts=3, launcher=None) -> dict:
+def request(text, target, attempts=3, workflow="change", launcher=None) -> dict:
     """Hand the factory a request. A plan is written in the background; then the run waits."""
     store = _open()
     if not text.strip():
@@ -148,9 +149,12 @@ def request(text, target, attempts=3, launcher=None) -> dict:
         raise Refused(f"run {open_run.id} has not ended ({open_run.state.replace('_', ' ')});"
                       " let it finish, or stop or abandon it, before making another request")
 
-    first = workflow.table_for(speckit.available(target))[0].name
+    try:
+        first = flow.table_for(speckit.available(target), workflow)[0].name
+    except ValueError as problem:
+        raise Refused(str(problem)) from None
     run = records.new_run(store, text.strip(), target, base, ideals=config.read_ideals(),
-                            attempt_limit=attempts, current_step=first)
+                            attempt_limit=attempts, current_step=first, workflow=workflow)
     try:
         Workspace.create(target, run.workspace, run.branch)
         workspace.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))
@@ -173,7 +177,7 @@ def plan(run_id=None) -> dict:
 
 def _table(run) -> list:
     """The steps this run goes through, chosen by its codebase."""
-    return workflow.table_for(speckit.available(run.workspace))
+    return workflow.table_for(speckit.available(run.workspace), run.workflow)
 
 
 def _carry_on(store, run, decision, launcher) -> dict:

@@ -65,6 +65,20 @@ class Workspace:
         _git(self.path, "reset", "-q", "--hard", "HEAD")
         _git(self.path, "clean", "-fdq")
 
+    def lines_added(self, names) -> int:
+        """How many lines these files have gained since the last commit. A new file counts in full."""
+        total = 0
+        for name in names:
+            file = self.path / name
+            if not file.is_file():
+                continue
+            if _git(self.path, "ls-files", "--error-unmatch", name, ok=(0, 1))[0] != 0:
+                total += len(file.read_text().splitlines())         # git does not know it: all of it is new
+                continue
+            counted = _git(self.path, "diff", "--numstat", "HEAD", "--", name)[1].split()
+            total += int(counted[0]) if counted and counted[0].isdigit() else 0
+        return total
+
     def head(self) -> str:
         return _git(self.path, "rev-parse", "HEAD")[1].strip()
 

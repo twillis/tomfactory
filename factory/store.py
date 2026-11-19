@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS runs (
     child_pgid      INTEGER,
     created_at      TEXT    NOT NULL,
     ended_at        TEXT,
+    workflow        TEXT    NOT NULL DEFAULT 'change',
     CHECK ((state = 'ended') = (outcome IS NOT NULL))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_open_run ON runs ((state != 'ended')) WHERE state != 'ended';
@@ -104,6 +105,9 @@ CREATE TABLE IF NOT EXISTS questions (
 CREATE INDEX IF NOT EXISTS events_by_run ON events (run_id, id);
 CREATE INDEX IF NOT EXISTS steps_by_run  ON steps  (run_id, id);
 """
+
+
+ADDED_SINCE = [("runs", "workflow", "TEXT NOT NULL DEFAULT 'change'")]      # (table, column, definition)
 
 
 def now() -> str:
@@ -183,6 +187,9 @@ class Gateway:
             raise RuntimeError(f"{self.home / 'factory.db'} was made by an earlier version of the factory."
                                " Move it aside, or point TOMFACTORY_HOME at a new directory.")
         self.db.executescript(SCHEMA)
+        for table, column, definition in ADDED_SINCE:      # columns a store made earlier does not have yet
+            if column not in [row["name"] for row in self.db.execute(f"PRAGMA table_info({table})")]:
+                self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
         self.db.execute(f"PRAGMA user_version = {VERSION}")
         self.files = Files(self.home)
         self._catalog: dict = {}
