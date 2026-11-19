@@ -224,3 +224,15 @@ Eight commits on the run's branch, one per stage that wrote something.
 - The planner does not know the factory will add a changelog and a backlog, so its plan says it will not. The plan prompt should tell it.
 
 SC-011 (three consecutive real requests through the same cycle) is still not met as written; real runs have been made one at a time between changes.
+
+### SC-011 met: three consecutive real requests — 2026-11-19
+
+Three requests against the viewer, one after another, with nothing from the operator beyond approving each plan. Plain cycle, after the test budget, tidy runs and resume went in.
+
+| Run | Request | Outcome | Time | Est. cost | Tests added | Retries | Questions |
+|-----|---------|---------|------|-----------|-------------|---------|-----------|
+| 12 | Run page refreshes while a run is going; shows the current step | accepted | 6m 44s | $5.54 | 137 lines | none | none |
+| 13 | "Latest activity" on the run page | accepted | 7m 16s | $6.24 | 127 lines | none | none |
+| 14 | Home page leads with the run in progress; `/runs` marks it | accepted | 8m 13s | $6.19 | 165 lines | none | none |
+
+**SC-011 is met.** Every step of all three passed first time. Each stayed well inside the 300-line test budget; before the budget, one comparable feature added about 3,300 lines and took 20 minutes.
