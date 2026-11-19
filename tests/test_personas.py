@@ -30,7 +30,7 @@ def test_all_six_personas_exist_with_the_three_headings():
     from factory import workflow
     named = {step.persona for step in workflow.STEPS if step.kind == "agent"}
     assert named == {"planner", "test_writer", "code_writer", "architect", "reviewer", "documenter"}
-    with_spec_kit = {step.persona for step in workflow.table_for(True) if step.kind == "agent"}
+    with_spec_kit = {step.persona for step in workflow.table_for(True, "change") if step.kind == "agent"}
     assert with_spec_kit == named | {"analyst"}             # spec kit's specify and clarify have their own persona
     for name in with_spec_kit:
         sections(name)

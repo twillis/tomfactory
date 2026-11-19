@@ -12,7 +12,6 @@ import sys
 from dataclasses import dataclass, field
 
 from factory import agent, config, driver, proc, records, sandbox, speckit, workflow, workspace
-from factory import workflow as flow     # for the one function that takes an argument named workflow
 from factory.store import open_store
 from factory.workspace import Workspace
 
@@ -78,8 +77,7 @@ def _waiting(store, run_id, with_question=False) -> dict:
     """The run, if it is waiting for the operator's decision; refused otherwise."""
     run = _find(store, run_id)
     if run.state != "awaiting_approval":
-        described = run.outcome or run.state.replace("_", " ")
-        raise Refused(f"run {run.id} is not waiting for a decision; it is {described}")
+        raise Refused(f"run {run.id} is not waiting for a decision; it is {records.described(run)}")
     asked = records.pending_question(store, run.id)
     if asked and not with_question:     # a run is not approved past a question that is still waiting
         raise Refused(f"run {run.id} is waiting for the answer to a question, not for approval: "
@@ -95,6 +93,18 @@ def launch(store, run, state, step) -> None:
     # State, step and process are written together, so the run is never "working" with no driver.
     records.set_state(store, run.id, state, current_step=step, driver_pid=pid,
                          driver_started=proc.started_at(pid))
+
+
+def _launch_at(store, run, step) -> dict:
+    """Hand the run to a driver at this step, in the state the step implies."""
+    state = "planning" if workflow.is_planning(step, driver.table_of(run)) else "working"
+    launch(store, run, state, step)
+    return store.get("runs", run.id)
+
+
+def run_kinds() -> list[str]:
+    """The kinds of run a request can be."""
+    return list(workflow.RUN_KINDS)
 
 
 def get_run(run_id=None) -> dict:
@@ -131,7 +141,7 @@ def init_target(path, spec_kit=False) -> pathlib.Path:
     return path
 
 
-def request(text, target, attempts=3, workflow="change", launcher=None) -> dict:
+def request(text, target, attempts=3, run_kind="change") -> dict:
     """Hand the factory a request. A plan is written in the background; then the run waits."""
     store = _open()
     if not text.strip():
@@ -146,23 +156,20 @@ def request(text, target, attempts=3, workflow="change", launcher=None) -> dict:
         raise Refused(str(problem)) from None
     open_run = records.open_run(store)
     if open_run:    # one run at a time (FR-033)
-        raise Refused(f"run {open_run.id} has not ended ({open_run.state.replace('_', ' ')});"
+        raise Refused(f"run {open_run.id} has not ended ({records.described(open_run)});"
                       " let it finish, or stop or abandon it, before making another request")
+    if run_kind not in workflow.RUN_KINDS:
+        raise Refused(f"a run is one of: {', '.join(workflow.RUN_KINDS)}; not {run_kind!r}")
 
-    try:
-        first = flow.table_for(speckit.available(target), workflow)[0].name
-    except ValueError as problem:
-        raise Refused(str(problem)) from None
     run = records.new_run(store, text.strip(), target, base, ideals=config.read_ideals(),
-                            attempt_limit=attempts, current_step=first, workflow=workflow)
+                          attempt_limit=attempts, run_kind=run_kind)
     try:
-        Workspace.create(target, run.workspace, run.branch)
+        Workspace.create(target, run.workspace, run.branch, base)
         workspace.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))
     except Exception as problem:
         driver.end_run(store, run.id, "needs-me", f"the run's checkout could not be created: {problem}")
         raise Refused(f"the run's checkout could not be created: {problem}") from None
-    (launcher or launch)(store, run, "planning", first)
-    return store.get("runs", run.id)
+    return _launch_at(store, run, driver.table_of(run)[0].name)    # the table of its own checkout
 
 
 def plan(run_id=None) -> dict:
@@ -175,38 +182,30 @@ def plan(run_id=None) -> dict:
     return current
 
 
-def _table(run) -> list:
-    """The steps this run goes through, chosen by its codebase."""
-    return workflow.table_for(speckit.available(run.workspace), run.workflow)
-
-
-def _carry_on(store, run, decision, launcher) -> dict:
+def _carry_on(store, run, decision) -> dict:
     """After a decision at a wait: launch a driver at whatever step that decision leads to."""
-    table = _table(run)
-    then = workflow.after_wait(decision, workflow.get(run.current_step, table), table)
-    state = "planning" if workflow.is_planning(then.step, table) else "working"
-    (launcher or launch)(store, run, state, then.step)
-    return store.get("runs", run.id)
+    then = workflow.after_wait(decision, workflow.get(run.current_step, driver.table_of(run)))
+    return _launch_at(store, run, then.step)
 
 
-def approve(run_id=None, launcher=None) -> dict:
+def approve(run_id=None) -> dict:
     """Approve what is waiting. The run carries on to its next wait, or to its end, unattended."""
     store = _open()
     run = _waiting(store, run_id)
     records.decide(store, run.id, "approved")
-    approved = Workspace(run.workspace, run.target, run.branch, run.base_commit).head()
+    approved = Workspace.of(run).head()
     records.event(store, run.id, "approved", f"approved at {run.current_step}", {"commit": approved})
-    return _carry_on(store, run, "approve", launcher)
+    return _carry_on(store, run, "approve")
 
 
-def revise(run_id=None, comment="", launcher=None) -> dict:
+def revise(run_id=None, comment="") -> dict:
     """Send what is waiting back with a comment. Its stage is done again, in the background."""
     store = _open()
     run = _waiting(store, run_id)
     if not comment.strip():
         raise Refused("say what to change: a plan is sent back with a comment")
     records.decide(store, run.id, "revised", comment=comment.strip())
-    return _carry_on(store, run, "revise", launcher)
+    return _carry_on(store, run, "revise")
 
 
 def abandon(run_id=None) -> dict:
@@ -215,45 +214,40 @@ def abandon(run_id=None) -> dict:
     run = _waiting(store, run_id, with_question=True)
     if records.current_plan(store, run.id):
         records.decide(store, run.id, "abandoned")
-    table = _table(run)
-    then = workflow.after_wait("abandon", workflow.get(run.current_step, table), table)
-    Workspace(run.workspace, run.target, run.branch, run.base_commit).remove()
+    then = workflow.after_wait("abandon", workflow.get(run.current_step, driver.table_of(run)))
+    Workspace.of(run).remove()
     return driver.end_run(store, run.id, then.outcome, then.reason)
-
-
 
 def stop(run_id=None) -> dict:
     """Stop a run that is being worked. Nothing it started is left running; its record is kept."""
     store = _open()
     run = _find(store, run_id)
     if run.state not in ("planning", "working"):
-        raise Refused(f"run {run.id} is not running; it is {run.outcome or run.state.replace('_', ' ')}")
+        raise Refused(f"run {run.id} is not running; it is {records.described(run)}")
     proc.terminate(run.driver_pid, run.driver_started)     # the driver stops its step and ends the run
     proc.stop_group(store.get("runs", run.id).child_pgid)      # in case the driver could not
     return driver.end_run(store, run.id, "needs-me", "stopped by operator")
 
 
-def resume(run_id=None, launcher=None) -> dict:
+def resume(run_id=None) -> dict:
     """Carry on a run that stopped as needs-me, from the step it stopped at. Earlier work is kept."""
     store = _open()
     run = _find(store, run_id)
     if run.outcome != "needs-me":
-        now = run.outcome if run.state == "ended" else run.state.replace("_", " ")
-        raise Refused(f"run {run.id} cannot be resumed: only a run that ended as needs-me can be, and it is {now}")
+        raise Refused(f"run {run.id} cannot be resumed: only a run that ended as needs-me can be, "
+                      f"and it is {records.described(run)}")
     if not pathlib.Path(run.workspace).is_dir():
         raise Refused(f"run {run.id}'s checkout no longer exists, so there is nothing to carry on from")
     other = records.open_run(store)
     if other:
         raise Refused(f"run {other.id} has not ended; let it finish, or stop or abandon it, before resuming another")
-    checkout = Workspace(run.workspace, run.target, run.branch, run.base_commit)
-    checkout.undo()                     # whatever the stopped step left half-done
+    Workspace.of(run).undo()            # whatever the stopped step left half-done
     workspace.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))   # the factory as it is now
-    state = "planning" if workflow.is_planning(run.current_step, _table(run)) else "working"
-    run = records.reopen(store, run.id, state)
-    (launcher or launch)(store, run, state, run.current_step)
-    return store.get("runs", run.id)
+    state = "planning" if workflow.is_planning(run.current_step, driver.table_of(run)) else "working"
+    return _launch_at(store, records.reopen(store, run.id, state), run.current_step)
 
-def answer(run_id=None, text="", launcher=None) -> dict:
+
+def answer(run_id=None, text="") -> dict:
     """Answer the question a run is waiting on. The step that asked runs again with the answer."""
     store = _open()
     run = _find(store, run_id)
@@ -263,9 +257,7 @@ def answer(run_id=None, text="", launcher=None) -> dict:
     if not text.strip():
         raise Refused(f"give an answer to: {asked.question}")
     records.answer(store, asked.id, text.strip(), "operator")
-    state = "planning" if workflow.is_planning(run.current_step, _table(run)) else "working"
-    (launcher or launch)(store, run, state, run.current_step)
-    return store.get("runs", run.id)
+    return _launch_at(store, run, run.current_step)
 
 
 def status(limit=10) -> list[RunView]:

@@ -9,80 +9,8 @@ import pytest
 from factory import config, operations, records, workspace
 from factory.store import open_store
 from factory.workspace import Workspace
-from tests.conftest import PLAN, git, in_process
+from tests.conftest import commit_files, to_the_end, ARCHITECT, BUILD, CODE, DOCUMENT, drive_with, git, in_process, names, ORDER, PLAN, record, REVIEW, script, TEST, WRITE_TESTS, WRONG
 from tests.fake_agent import FakeAgent
-from tests.test_workspace import tree
-
-TEST = ("from hello import greet\n\n\ndef test_greets():\n    assert greet() == 'hello'\n\n\n"
-        "def test_empty_name_still_greets():\n    assert greet('') == 'hello'\n")
-CODE = "def greet(name=''):\n    return 'hello'\n"
-WRONG = "def greet(name=''):\n    return 'goodbye'\n"
-
-WRITE_TESTS = {"envelope": {"summary": "greeting tests", "test_files": ["tests/test_hello.py"],
-                            "edge_cases": ["an empty name"]},
-               "files": {"tests/test_hello.py": TEST}}
-BUILD = {"envelope": {"summary": "added greet", "files_changed": ["hello.py"]}, "files": {"hello.py": CODE},
-         "events": [("agent_text", "BUILDER-PRIVATE-THOUGHT", {"text": "BUILDER-PRIVATE-THOUGHT"})]}
-ARCHITECT = {"envelope": {"summary": "sound, with one thing to tidy later",
-                          "suggestions": ["the greeting text is repeated; give it one home"], "warnings": []},
-             "files": {"docs/backlog.md": "- the greeting text is repeated; give it one home\n"}}
-REVIEW = {"envelope": {"verdict": "accept", "reasons": ["it matches the request"], "ideals_broken": []}}
-DOCUMENT = {"envelope": {"summary": "Added a greeting.", "files_changed": ["CHANGELOG.md"]},
-            "files": {"CHANGELOG.md": "- Added a greeting.\n"}}
-ORDER = ["plan", "baseline", "write_tests", "red", "build", "test", "architecture_review", "document",
-         "review", "finish"]
-
-
-def script(**changes):
-    """The happy script, with any step's entry replaced. A list gives one entry per attempt."""
-    entries = {"plan": {"envelope": PLAN}, "write_tests": WRITE_TESTS, "build": BUILD,
-               "architecture_review": ARCHITECT, "review": REVIEW, "document": DOCUMENT}
-    entries.update(changes)
-    flat = []
-    for name in ("plan", "write_tests", "build", "architecture_review", "document", "review"):
-        value = entries[name]
-        flat += value if isinstance(value, list) else [value]
-    return flat
-
-
-@pytest.fixture
-def cycle(home, tmp_path, fake_notify, monkeypatch):
-    """Run a request to its end and return (run, fake, store, target). Checks FR-019 and FR-030 every time."""
-    personas = tmp_path / "personas"
-    shutil.copytree(config.PERSONAS_DIR, personas)      # so a test may tamper with them safely
-    monkeypatch.setattr(config, "PERSONAS_DIR", personas)
-
-    def go(entries, target=None, files=None, attempts=3, request="Add a greeting"):
-        if target is None:
-            target = operations.init_target(tmp_path / "target")
-            for name, text in (files or {}).items():
-                (target / name).parent.mkdir(parents=True, exist_ok=True)
-                (target / name).write_text(text)
-            if files:
-                git(target, "add", "-A")
-                git(target, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "files")
-        before, fingerprint = tree(target), workspace.fingerprint(config.factory_paths())
-        fake = FakeAgent(entries)
-        run = operations.request(request, target, attempts=attempts, launcher=in_process(fake))
-        if run.state == "awaiting_approval":
-            run = operations.approve(run.id, launcher=in_process(fake))
-        assert run.state == "ended", f"the run did not end: {run.state} at {run.current_step}"
-        assert tree(target) == before, "the operator's working copy changed"                      # FR-019
-        assert workspace.fingerprint(config.factory_paths()) == fingerprint, "the factory changed"  # FR-030
-        assert (run.driver_pid, run.child_pgid) == (None, None)
-        return run, fake, open_store(home), target
-
-    go.notify = fake_notify
-    return go
-
-
-def names(store, run):
-    return [s.name for s in store.query("steps", {"run_id": run.id})]
-
-
-def record(store, run, name, attempt=-1):
-    return [s for s in store.query("steps", {"run_id": run.id}) if s.name == name][attempt]
-
 
 @pytest.mark.fr("FR-034")
 @pytest.mark.fr("FR-006")
@@ -399,16 +327,9 @@ TIDIED = {"envelope": {"summary": "named the greeting", "files_changed": ["hello
 
 
 def tidy(home, tmp_path, fake_notify, kind, entries, name="tidy-target"):
-    target = operations.init_target(tmp_path / name)
-    for path, text in EXISTING.items():
-        (target / path).parent.mkdir(parents=True, exist_ok=True)
-        (target / path).write_text(text)
-    git(target, "add", "-A")
-    git(target, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "existing")
+    target = commit_files(operations.init_target(tmp_path / name), EXISTING)
     fake = FakeAgent(entries)
-    run = operations.request("Tidy up", target, workflow=kind, launcher=in_process(fake))
-    if run.state == "awaiting_approval":
-        run = operations.approve(run.id, launcher=in_process(fake))
+    run, _ = to_the_end(target, fake, "Tidy up", run_kind=kind)
     return run, fake, open_store(home), target
 
 
@@ -417,7 +338,7 @@ def test_tidying_the_tests_needs_no_failing_test_and_leaves_the_code_alone(home,
     run, fake, store, target = tidy(home, tmp_path, fake_notify, "tidy-tests", [{"envelope": PLAN}, TRIMMED, REVIEW])
     assert run.outcome == "accepted", run.reason
     assert names(store, run) == ["plan", "baseline", "tidy_tests", "test", "review", "finish"]
-    assert run.workflow == "tidy-tests"
+    assert run.run_kind == "tidy-tests"
     assert "2 passed" in record(store, run, "test").produced["output"]          # down from three, all passing
     assert "test_greets_again" not in git(target, "show", f"{run.branch}:tests/test_hello.py")
     assert git(target, "show", f"{run.branch}:hello.py") == CODE.strip()        # the code did not change
@@ -491,7 +412,8 @@ def test_a_stopped_run_resumes_from_its_step_keeping_its_work_and_dropping_the_h
     assert run.outcome == "needs-me" and run.current_step == "document"
 
     fake = FakeAgent([DOCUMENT, REVIEW])
-    resumed = operations.resume(run.id, launcher=in_process(fake))
+    drive_with(fake)
+    resumed = operations.resume(run.id)
 
     assert resumed.outcome == "accepted", resumed.reason
     assert [c["persona"] for c in fake.calls] == [fake.calls[0]["persona"], fake.calls[1]["persona"]]
@@ -509,7 +431,8 @@ def test_resuming_is_refused_unless_the_run_stopped_as_needs_me_and_can_carry_on
         operations.resume(accepted.id)
 
     stopped, _, _, _ = cycle(script(build={"error": "usage limit"})[:3], target=target)
-    other = operations.request("Something else", target, launcher=in_process(FakeAgent([{"envelope": PLAN}])))
+    drive_with(FakeAgent([{"envelope": PLAN}]))
+    other = operations.request("Something else", target)
     with pytest.raises(operations.Refused, match=f"run {other.id} has not ended"):
         operations.resume(stopped.id)
     operations.abandon(other.id)

@@ -13,8 +13,7 @@ from factory import checks, config, operations, proc, sandbox
 from factory.checks import CheckContext
 from factory.workflow import Step
 from factory.workspace import Workspace
-from tests.conftest import git
-from tests.test_cycle import cycle, record, script  # noqa: F401  (cycle is a fixture)
+from tests.conftest import git, record, script
 
 PROBE = pathlib.Path(__file__).parent / "fixtures" / "probe" / "test_probe.py"
 MARKER = "tomfactory-escape-probe"
@@ -74,7 +73,7 @@ def probe(tmp_path, operator_home, monkeypatch):
                                                                                   "test_network = true"))
         git(target, "add", "-A")
         git(target, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "probe")
-        checkout = Workspace.create(target, tmp_path / f"ws-{len(made)}", f"factory/{len(made)}-probe")
+        checkout = Workspace.create(target, tmp_path / f"ws-{len(made)}", f"factory/{len(made)}-probe", git(target, "rev-parse", "HEAD"))
         groups = []
         context = CheckContext(run=None, step=Step("test", "code", on_pass="x"), checkout=checkout,
                                target_config=config.read_target_config(target, checkout.base_commit), changed=set(),

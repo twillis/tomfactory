@@ -44,11 +44,11 @@ def test_an_agent_step_must_name_a_persona_and_a_code_step_has_none():
 def test_checks_are_registered_and_found_by_name():
     @checks.register("always_fine")
     def always_fine(ctx):
-        return checks.CheckResult("always_fine", True)
+        return checks.CheckResult(True)
 
     try:
-        assert checks.get("always_fine") is always_fine
-        assert checks.get("always_fine")(context(agent_step())).passed
+        found = checks.get("always_fine")(context(agent_step()))
+        assert found.passed and found.name == "always_fine"         # the registry stamps the name
         with pytest.raises(LookupError, match="no_such_check"):
             checks.get("no_such_check")
     finally:
@@ -57,7 +57,7 @@ def test_checks_are_registered_and_found_by_name():
     assert checks.ALWAYS == ("factory_untouched", "changes_allowed")
 
 
-SHAPE = {"summary": "text", "files": "list", "verdict": "verdict"}
+SHAPE = {"summary": "text", "files": "list", "verdict": ("accept", "reject")}
 
 
 @pytest.mark.fr("FR-015")
@@ -76,16 +76,23 @@ def test_envelope_valid_checks_keys_and_types(envelope, passes, note_has):
     assert note_has in result.note
 
 
+@pytest.mark.fr("FR-012")
 @pytest.mark.fr("FR-022")
-def test_a_broken_ideal_with_verdict_accept_is_malformed():
-    shape = {"verdict": "verdict", "reasons": "list", "ideals_broken": "list"}
-    check = checks.get("envelope_valid")
-    bad = {"verdict": "accept", "reasons": ["fine"], "ideals_broken": ["layers"]}
-    result = check(context(agent_step(envelope=shape), envelope=bad))
-    assert not result.passed and "layers" in result.note and "accept" in result.note
-    for good in ({"verdict": "reject", "reasons": ["x"], "ideals_broken": ["layers"]},
-                 {"verdict": "accept", "reasons": ["x"], "ideals_broken": []}):
-        assert check(context(agent_step(envelope=shape), envelope=good)).passed
+@pytest.mark.fr("FR-058")
+@pytest.mark.parametrize("envelope, passes, said", [
+    ({"verdict": "accept", "reasons": ["fine"], "ideals_broken": []}, True, []),
+    ({"verdict": "accept", "reasons": ["fine"], "ideals_broken": ["layers"]}, False, ["accept", "layers"]),
+    ({"verdict": "reject", "reasons": ["no heading", "wrong file"], "ideals_broken": ["layers are mixed"]}, False,
+     ["no heading", "wrong file", "layers are mixed"]),
+    ({"verdict": "replan", "requirement_changes": ["a new page"], "unbuilt": ["T009"]}, False, ["a new page", "T009"]),
+    ({"verdict": "reject", "reasons": []}, False, ["no reason"]),
+])
+def test_a_judging_step_passes_only_on_an_accept_that_agrees_with_itself(envelope, passes, said):
+    review = workflow.get("review", workflow.STEPS)
+    result = checks.get("verdict")(context(review, envelope=envelope))
+    assert result.passed is passes and all(words in result.note for words in said), result.note
+    assert checks.get("envelope_valid")(context(review, envelope={**envelope, "verdict": "maybe",
+                                                                 "reasons": [], "ideals_broken": []})).passed is False
 
 
 @pytest.mark.fr("FR-032")

@@ -27,6 +27,11 @@ test_network = false            # true lets this codebase's tests reach the netw
 DEFAULT_GITIGNORE = "__pycache__/\n.pytest_cache/\n*.pyc\n.venv/\n"
 
 
+def under(name, paths) -> bool:
+    """Is a file one of these paths, or inside one of these folders?"""
+    return any(name == p.rstrip("/") or name.startswith(p.rstrip("/") + "/") for p in paths)
+
+
 class ConfigError(Exception):
     """Something about the target or the home directory is not usable; the message says what."""
 

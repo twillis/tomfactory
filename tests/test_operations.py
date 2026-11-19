@@ -6,15 +6,14 @@ import pytest
 from factory import operations, records
 from factory.operations import Refused
 from factory.store import open_store
-from tests.conftest import PLAN, git, in_process
+from tests.conftest import drive_with, git, PLAN, tree
 from tests.fake_agent import FakeAgent
-from tests.test_workspace import tree
 
 
 def planned(target, fake_notify, script=None, **kw):
     """Make a request and carry it to the point where its plan is waiting."""
-    fake = FakeAgent(script or [{"envelope": PLAN}])
-    run = operations.request("Create a hello page", target, launcher=in_process(fake), **kw)
+    fake = drive_with(FakeAgent(script or [{"envelope": PLAN}]))
+    run = operations.request("Create a hello page", target, **kw)
     return run, fake
 
 
@@ -32,19 +31,19 @@ def test_init_target_makes_a_committed_repository_with_the_defaults(tmp_path):
 
 @pytest.mark.fr("FR-001")
 def test_a_request_is_refused_with_a_reason_when_it_cannot_start(home, target, tmp_path, fake_notify):
-    launcher = in_process(FakeAgent([]))
+    drive_with(FakeAgent([]))
     with pytest.raises(Refused, match="empty"):
-        operations.request("   ", target, launcher=launcher)
+        operations.request("   ", target)
     with pytest.raises(Refused, match="not a git repository"):
-        operations.request("Do something", tmp_path / "nowhere", launcher=launcher)
+        operations.request("Do something", tmp_path / "nowhere")
     (tmp_path / "plain").mkdir()
     git(tmp_path / "plain", "init", "-q")
     with pytest.raises(Refused, match="not a git repository with at least one commit"):
-        operations.request("Do something", tmp_path / "plain", launcher=launcher)
+        operations.request("Do something", tmp_path / "plain")
     git(target, "rm", "-q", ".factory.toml")
     git(target, "commit", "-q", "-m", "remove settings")
     with pytest.raises(Refused, match=".factory.toml"):
-        operations.request("Do something", target, launcher=launcher)
+        operations.request("Do something", target)
     assert open_store(home).query("runs", order="-id", limit=20) == []  # nothing was recorded for any of them
 
 
@@ -52,7 +51,8 @@ def test_a_request_is_refused_with_a_reason_when_it_cannot_start(home, target, t
 def test_a_second_request_is_declined_while_a_run_is_open(home, target, fake_notify):
     first, _ = planned(target, fake_notify)
     with pytest.raises(Refused, match=f"run {first.id}"):
-        operations.request("Another thing", target, launcher=in_process(FakeAgent([])))
+        drive_with(FakeAgent([]))
+        operations.request("Another thing", target)
     store = open_store(home)
     assert [r.id for r in store.query("runs", order="-id", limit=20)] == [first.id]
     assert store.get("runs", first.id) == first  # untouched
@@ -63,7 +63,8 @@ def test_the_attempt_limit_can_be_set_when_making_the_request(home, target, fake
     run, _ = planned(target, fake_notify, attempts=2)
     assert run.attempt_limit == 2
     with pytest.raises(Refused, match="at least 1"):
-        operations.request("x", target, attempts=0, launcher=in_process(FakeAgent([])))
+        drive_with(FakeAgent([]))
+        operations.request("x", target, attempts=0)
 
 
 @pytest.mark.fr("FR-002")
@@ -114,13 +115,12 @@ def test_a_plan_sent_back_is_revised_with_the_comment_and_both_are_kept(home, ta
     second = dict(PLAN, plan="Add hello.py; also show the end time.")
     third = dict(PLAN, plan="Third version.")
     run, fake = planned(target, fake_notify, script=[{"envelope": PLAN}, {"envelope": second}, {"envelope": third}])
-    launcher = in_process(fake)
 
-    revised = operations.revise(run.id, "Also show when the run ended.", launcher=launcher)
+    revised = operations.revise(run.id, "Also show when the run ended.")
     assert revised.state == "awaiting_approval"
     prompt = fake.calls[1]["prompt"]
     assert PLAN["plan"] in prompt and "Also show when the run ended." in prompt
-    operations.revise(run.id, "Shorter.", launcher=launcher)
+    operations.revise(run.id, "Shorter.")
 
     store = open_store(home)
     assert [(p.version, p.decision, p.comment) for p in store.query("plans", {"run_id": run.id})] == [
@@ -130,14 +130,15 @@ def test_a_plan_sent_back_is_revised_with_the_comment_and_both_are_kept(home, ta
     assert store.get("runs", run.id).state == "awaiting_approval"      # revisions are not limited
     assert len(fake_notify) == 3
     with pytest.raises(Refused, match="comment"):
-        operations.revise(run.id, "  ", launcher=launcher)
+        operations.revise(run.id, "  ")
 
 
 @pytest.mark.fr("FR-003")
-def test_approve_moves_the_run_on_and_is_refused_unless_a_plan_is_waiting(home, target, fake_notify):
+def test_approve_moves_the_run_on_and_is_refused_unless_a_plan_is_waiting(home, target, fake_notify, monkeypatch):
     run, _ = planned(target, fake_notify)
     launched = []
-    approved = operations.approve(run.id, launcher=lambda store, r, state, step: launched.append((state, step)))
+    monkeypatch.setattr(operations, "launch", lambda store, r, state, step: launched.append((state, step)))
+    approved = operations.approve(run.id)
     assert launched == [("working", "baseline")]
     assert records.current_plan(open_store(home), run.id).decision == "approved"
     assert approved.id == run.id
@@ -162,7 +163,8 @@ def test_abandon_ends_the_run_rejected_and_removes_its_checkout(home, target, fa
     assert run.branch not in git(target, "branch", "--list", "factory/*")
     assert records.current_plan(open_store(home), run.id).decision == "abandoned"
     assert fake_notify[-1] == (f"Run {run.id}: rejected", "abandoned by operator")
-    assert operations.request("Next thing", target, launcher=in_process(FakeAgent([{"envelope": PLAN}]))).id == run.id + 1
+    drive_with(FakeAgent([{"envelope": PLAN}]))
+    assert operations.request("Next thing", target).id == run.id + 1
 
 
 @pytest.mark.fr("FR-011")
@@ -204,9 +206,10 @@ def finished(target, fake_notify, entries=None):
     from tests.test_cycle import script
     entries = entries or ([{"envelope": PLAN}] + script())
     fake = FakeAgent(entries)
-    run = operations.request("Add a greeting", target, launcher=in_process(fake))
-    operations.revise(run.id, "Keep it small.", launcher=in_process(fake))
-    return operations.approve(run.id, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.request("Add a greeting", target)
+    operations.revise(run.id, "Keep it small.")
+    return operations.approve(run.id)
 
 
 @pytest.mark.fr("FR-026")
@@ -222,7 +225,7 @@ def test_show_returns_the_whole_run_as_typed_records(home, target, fake_notify):
                                             "architecture_review", "document", "review", "finish"]
     for step in view.steps:
         assert step.started_at and step.ended_at and step.ended_at >= step.started_at
-        assert step.checks and all(set(c) == {"name", "passed", "note", "timed_out", "contained"} for c in step.checks)
+        assert step.checks and all(set(c) == {"name", "passed", "note", "output", "timed_out", "contained"} for c in step.checks)
         assert (step.persona is not None) == (step.kind == "agent")
         assert bool(step.asked) == (step.kind == "agent")
     assert view.steps[3].produced["edge_cases"] == ["an empty name"]
@@ -285,9 +288,10 @@ def test_the_operators_comments_travel_with_the_request_to_every_later_step(home
     """Found on a real run: the reviewer called the operator's own revision 'not asked for'."""
     from tests.test_cycle import script
     fake = FakeAgent([{"envelope": PLAN}] + script())
-    run = operations.request("Add a greeting", target, launcher=in_process(fake))
-    operations.revise(run.id, "Also greet in French.", launcher=in_process(fake))
-    done = operations.approve(run.id, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.request("Add a greeting", target)
+    operations.revise(run.id, "Also greet in French.")
+    done = operations.approve(run.id)
     assert done.outcome == "accepted"
     later = {name: call["prompt"] for name, call in
              zip(["write_tests", "build", "architecture_review", "document", "review"], fake.calls[2:])}
@@ -304,7 +308,7 @@ def test_a_home_made_by_an_earlier_version_is_refused_in_words(home, target):
     old.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY, request TEXT)")     # no version stamp
     old.commit()
     old.close()
-    with pytest.raises(Refused, match="earlier version"):
+    with pytest.raises(Refused, match="cannot\s+read"):
         operations.status()
-    with pytest.raises(Refused, match="earlier version"):
+    with pytest.raises(Refused, match="cannot\s+read"):
         operations.request("Do something", target)

@@ -8,6 +8,7 @@ It holds no rules about runs, plans or steps: those live in factory/records.py.
 The schema is the contract with the observability app (contracts/run-store.md).
 """
 import json
+import re
 import sqlite3
 
 import pytest
@@ -40,7 +41,7 @@ def test_a_new_store_has_the_contract_schema_in_wal_mode(gw, home):
 
     assert columns("runs") == {"id", "request", "target", "base_commit", "branch", "workspace", "state",
                                "current_step", "outcome", "reason", "ideals", "attempt_limit", "driver_pid",
-                               "driver_started", "child_pgid", "created_at", "ended_at", "workflow"}
+                               "driver_started", "child_pgid", "created_at", "ended_at", "run_kind"}
     assert columns("steps") == {"id", "run_id", "name", "kind", "persona", "attempt", "asked", "produced",
                                 "checks", "passed", "failure", "started_at", "ended_at", "tokens", "cost_estimate"}
     assert columns("plans") == {"run_id", "version", "text", "ideals_addressed", "conflicts", "comment",
@@ -216,16 +217,28 @@ def test_per_run_files_are_reached_only_through_the_store(gw, home):
 
 
 @pytest.mark.fr("FR-066")
-def test_a_store_made_before_a_column_existed_gains_it_with_its_default(home):
-    first = open_store(home)
-    a_run(first)
-    first.db.execute("ALTER TABLE runs DROP COLUMN workflow")       # as an older factory left it
-    first.db.close()
-    again = open_store(home)
-    assert again.get("runs", 1).workflow == "change"
-    assert a_run_closed_then_new(again).workflow == "tidy-tests"
+@pytest.mark.fr("FR-061")
+@pytest.mark.parametrize("left_by", ["a home made at version 2", "a version 2 home that gained `workflow`"])
+def test_an_older_home_is_brought_up_to_date_and_keeps_its_runs(home, left_by):
+    db = sqlite3.connect(home / "factory.db")
+    db.executescript(store_module.BASE)
+    if "workflow" in left_by:           # what the factory of 2026-11-18 added to a home it opened
+        db.execute("ALTER TABLE runs ADD COLUMN workflow TEXT NOT NULL DEFAULT 'tidy-code'")
+    db.execute("INSERT INTO runs (request, target, base_commit, state, created_at) VALUES ('r', '/t', 'c', 'planning', 'now')")
+    db.execute("PRAGMA user_version = 2")
+    db.commit()
+    db.close()
+    gw = open_store(home)
+    assert gw.db.execute("PRAGMA user_version").fetchone()[0] == store_module.VERSION
+    assert gw.get("runs", 1).run_kind == ("tidy-code" if "workflow" in left_by else "change")
+    gw.insert("steps", {"run_id": 1, "name": "build", "kind": "agent", "attempt": 1, "asked": "",
+                        "failure": "question", "started_at": "now"})          # a question is now a failure kind
+    assert open_store(home).get("runs", 1).request == "r"                   # opening again changes nothing
 
 
-def a_run_closed_then_new(gw):
-    gw.update("runs", {"id": 1}, {"state": "ended", "outcome": "rejected", "reason": "x"})
-    return a_run(gw, request="trim", workflow="tidy-tests")
+@pytest.mark.fr("FR-061")
+def test_the_store_accepts_exactly_the_failure_kinds_the_rules_name(gw):
+    from factory import workflow
+    made = gw.db.execute("SELECT sql FROM sqlite_master WHERE name = 'steps'").fetchone()[0]
+    listed = re.search(r"failure\s+TEXT\s+CHECK \(failure IN \(([^)]*)\)\)", made).group(1)
+    assert tuple(name.strip(" '") for name in listed.split(",")) == workflow.FAILURES

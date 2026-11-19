@@ -8,9 +8,8 @@ from factory.checks import CheckResult
 from factory.operations import Refused
 from factory.store import open_store
 from factory.workflow import Ask, StepResult, next_step
-from tests.conftest import PLAN, in_process
+from tests.conftest import ARCHITECT, BUILD, DOCUMENT, drive_with, in_process, PLAN, REVIEW, WRITE_TESTS
 from tests.fake_agent import FakeAgent
-from tests.test_cycle import ARCHITECT, BUILD, DOCUMENT, REVIEW, WRITE_TESTS
 
 QUESTION = {"envelope": {"question": "Should the greeting end with an exclamation mark?"}}
 LEAD_KNOWS = {"envelope": {"answer": "No. The plan says to return exactly 'hello'.", "confident": "yes"}}
@@ -20,23 +19,23 @@ AFTER_BUILD = [ARCHITECT, DOCUMENT, REVIEW]
 
 def start(target, entries):
     fake = FakeAgent(entries)
-    run = operations.request("Add a greeting", target, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.request("Add a greeting", target)
     return run, fake
 
 
 def asked(result_note="Tabs or spaces?"):
-    return StepResult(False, "question", CheckResult("question", False, result_note))
+    return StepResult(False, "question", CheckResult(False, result_note, name="question"))
 
 
 @pytest.mark.fr("FR-061")
 def test_a_question_is_one_of_the_ways_a_step_can_end():
-    build = workflow.get("build")
+    build = workflow.get("build", workflow.STEPS)
     assert next_step(build, asked(), {"build": 1}, 3) == Ask("Tabs or spaces?")
     ended = next_step(build, asked(), {"build": 3}, 3)                  # it cannot ask for ever
     assert ended.outcome == "needs-me" and "build" in ended.reason and "Tabs or spaces?" in ended.reason
     lead = workflow.LEAD
-    assert (lead.persona, lead.capabilities, lead.may_change) == ("lead", "read", "nothing")
-    assert lead.envelope == {"answer": "text", "confident": ("yes", "no")}
+    assert (lead.capabilities, lead.may_change, lead.may_ask) == ("read", "nothing", False)   # it answers; it cannot ask
 
 
 @pytest.mark.fr("FR-061")
@@ -44,7 +43,8 @@ def test_a_question_is_one_of_the_ways_a_step_can_end():
 @pytest.mark.fr("FR-064")
 def test_the_lead_answers_and_the_step_that_asked_runs_again_with_the_answer(home, target, fake_notify):
     run, fake = start(target, [{"envelope": PLAN}, WRITE_TESTS, QUESTION, LEAD_KNOWS, BUILD, *AFTER_BUILD])
-    run = operations.approve(run.id, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.approve(run.id)
     assert run.outcome == "accepted", run.reason                        # the operator was never involved
 
     names = [s.name for s in open_store(home).query("steps", {"run_id": run.id})]
@@ -66,7 +66,8 @@ def test_the_lead_answers_and_the_step_that_asked_runs_again_with_the_answer(hom
 @pytest.mark.fr("FR-064")
 def test_a_question_the_lead_cannot_answer_comes_to_the_operator(home, target, fake_notify):
     run, fake = start(target, [{"envelope": PLAN}, WRITE_TESTS, QUESTION, LEAD_UNSURE, BUILD, *AFTER_BUILD])
-    run = operations.approve(run.id, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.approve(run.id)
 
     assert (run.state, run.current_step, run.outcome) == ("awaiting_approval", "build", None)
     assert fake_notify[-1] == (f"Run {run.id}: a question for you", "Should the greeting end with an exclamation mark?")
@@ -76,7 +77,7 @@ def test_a_question_the_lead_cannot_answer_comes_to_the_operator(home, target, f
         with pytest.raises(Refused, match="question"):
             refused(run.id)
 
-    run = operations.answer(run.id, "Yes, end it with one.", launcher=in_process(fake))
+    run = operations.answer(run.id, "Yes, end it with one.")
     assert run.outcome == "accepted", run.reason
     assert "Yes, end it with one." in fake.calls[4]["prompt"]
     answered = operations.show(run.id).questions[-1]
@@ -93,7 +94,8 @@ def test_a_question_during_planning_waits_and_then_the_plan_still_needs_approval
         operations.plan(run.id)
     with pytest.raises(Refused, match="answer"):
         operations.answer(run.id, "   ")
-    run = operations.answer(run.id, "No exclamation mark.", launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.answer(run.id, "No exclamation mark.")
     assert (run.state, run.current_step) == ("awaiting_approval", "plan")       # now the plan itself is waiting
     assert operations.plan(run.id).text == PLAN["plan"] and not [q for q in operations.show(run.id).questions if q.answer is None]
 
@@ -101,7 +103,8 @@ def test_a_question_during_planning_waits_and_then_the_plan_still_needs_approval
 @pytest.mark.fr("FR-061")
 def test_a_step_that_only_ever_asks_ends_needs_me(home, target, fake_notify):
     run, fake = start(target, [{"envelope": PLAN}, WRITE_TESTS, QUESTION, LEAD_KNOWS, QUESTION, LEAD_KNOWS, QUESTION])
-    run = operations.approve(run.id, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.approve(run.id)
     assert run.outcome == "needs-me" and "build" in run.reason and "3 times" in run.reason
     assert len(operations.show(run.id).questions) == 3
 
@@ -109,14 +112,16 @@ def test_a_step_that_only_ever_asks_ends_needs_me(home, target, fake_notify):
 @pytest.mark.fr("FR-062")
 def test_a_lead_that_fails_or_asks_back_is_treated_as_unable_to_answer(home, target, fake_notify):
     run, fake = start(target, [{"envelope": PLAN}, WRITE_TESTS, QUESTION, {"text": "no json at all"}])
-    run = operations.approve(run.id, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.approve(run.id)
     assert (run.state, run.current_step) == ("awaiting_approval", "build")      # it came to the operator
 
 
 @pytest.mark.fr("FR-061")
 def test_every_agent_is_told_how_to_ask_and_given_its_earlier_answers(home, target, fake_notify):
     run, fake = start(target, [{"envelope": PLAN}, WRITE_TESTS, BUILD, *AFTER_BUILD])
-    operations.approve(run.id, launcher=in_process(fake))
+    drive_with(fake)
+    operations.approve(run.id)
     for call in fake.calls:
         assert '"question"' in call["prompt"] and "If you cannot go on" in call["prompt"]
 

@@ -17,6 +17,7 @@ import re
 from factory.store import gt, is_null, ne, now
 
 MOVING = ("current_step", "driver_pid", "driver_started", "child_pgid")    # what changes as a run is carried on
+NOT_RUNNING = {"driver_pid": None, "driver_started": None, "child_pgid": None}   # no process carries the run
 
 
 def slug(request) -> str:
@@ -27,13 +28,13 @@ def slug(request) -> str:
 
 # ---- runs ----
 
-def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, current_step=None, workflow="change"):
+def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, current_step=None, run_kind="change"):
     """Start a run's record: planning, on its own branch, with its own checkout path."""
     with gw.transaction():
         run = gw.insert("runs", {
             "request": request, "target": str(target), "base_commit": base_commit, "state": "planning",
             "current_step": current_step, "ideals": ideals, "attempt_limit": attempt_limit,
-            "workflow": workflow, "created_at": now()})
+            "run_kind": run_kind, "created_at": now()})
         run = gw.update("runs", {"id": run.id}, {
             "branch": f"factory/{run.id}-{slug(request)}",
             "workspace": str(gw.files.workspace_path(run.id))})[0]
@@ -66,14 +67,23 @@ def set_state(gw, run_id, state, **fields):
     return run
 
 
+def await_operator(gw, run_id):
+    """The run now waits for the operator: no process carries it until they decide."""
+    return set_state(gw, run_id, "awaiting_approval", **NOT_RUNNING)
+
+
+def described(run) -> str:
+    """How a run is described in one word or two: its outcome if it has ended, else its state."""
+    return run.outcome or run.state.replace("_", " ")
+
+
 def end(gw, run_id, outcome, reason):
     """End a run: outcome, reason and end time together, exactly once, with nothing left recorded as running."""
     with gw.transaction():
         if gw.get("runs", run_id).state == "ended":
             raise ValueError(f"run {run_id} has already ended")
         run = gw.update("runs", {"id": run_id}, {
-            "state": "ended", "outcome": outcome, "reason": reason, "ended_at": now(),
-            "driver_pid": None, "driver_started": None, "child_pgid": None})[0]
+            "state": "ended", "outcome": outcome, "reason": reason, "ended_at": now(), **NOT_RUNNING})[0]
         event(gw, run_id, "run_state", f"ended: {outcome}",
               {"state": "ended", "outcome": outcome, "reason": reason})
     return run

@@ -35,12 +35,16 @@ class Workspace:
         self.base_commit = base_commit
 
     @classmethod
-    def create(cls, target, path, branch) -> "Workspace":
-        """Make a new checkout on a new branch, starting from the target's current commit."""
-        base = _git(target, "rev-parse", "HEAD")[1].strip()
+    def create(cls, target, path, branch, base) -> "Workspace":
+        """Make a new checkout on a new branch, starting from the given commit of the target."""
         pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
         _git(target, "worktree", "add", "-q", "-b", branch, str(path), base)
         return cls(path, target, branch, base)
+
+    @classmethod
+    def of(cls, run) -> "Workspace":
+        """A run's checkout, as its record describes it."""
+        return cls(run.workspace, run.target, run.branch, run.base_commit)
 
     def dirty(self) -> dict[str, str]:
         """Every file that differs from the last commit, with a digest of its content.

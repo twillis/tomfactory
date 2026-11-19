@@ -1,0 +1,1 @@
+This run is a tidy of the code. The tests are held still: none may be changed, added or removed, and behaviour must stay exactly as the existing tests show it. Plan only changes to the code, and nothing that would need a new test.

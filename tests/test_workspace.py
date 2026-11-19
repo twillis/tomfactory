@@ -8,7 +8,7 @@ from tests.conftest import git
 
 @pytest.fixture
 def ws(target, tmp_path):
-    return Workspace.create(target, tmp_path / "home" / "workspaces" / "1", "factory/1-hello")
+    return Workspace.create(target, tmp_path / "home" / "workspaces" / "1", "factory/1-hello", git(target, "rev-parse", "HEAD"))
 
 
 def tree(path):
@@ -23,7 +23,7 @@ def test_creating_a_checkout_leaves_the_operators_working_copy_untouched(target,
     (target / "scratch.txt").write_text("untracked\n")
     before, head, branch = tree(target), git(target, "rev-parse", "HEAD"), git(target, "branch", "--show-current")
 
-    ws = Workspace.create(target, tmp_path / "ws", "factory/1-hello")
+    ws = Workspace.create(target, tmp_path / "ws", "factory/1-hello", git(target, "rev-parse", "HEAD"))
 
     assert tree(target) == before
     assert git(target, "rev-parse", "HEAD") == head and git(target, "branch", "--show-current") == branch
@@ -149,12 +149,12 @@ def test_snapshot_then_restore_returns_everything_to_the_snapshot(tmp_path):
 
 @pytest.mark.fr("FR-003")
 def test_remove_deletes_the_checkout_and_an_empty_branch_only(target, tmp_path):
-    empty = Workspace.create(target, tmp_path / "ws1", "factory/1-empty")
+    empty = Workspace.create(target, tmp_path / "ws1", "factory/1-empty", git(target, "rev-parse", "HEAD"))
     empty.remove()
     assert not empty.path.exists()
     assert "factory/1-empty" not in git(target, "branch", "--list", "factory/*")
 
-    worked = Workspace.create(target, tmp_path / "ws2", "factory/2-worked")
+    worked = Workspace.create(target, tmp_path / "ws2", "factory/2-worked", git(target, "rev-parse", "HEAD"))
     (worked.path / "app.py").write_text("x\n")
     worked.commit("work")
     worked.remove()

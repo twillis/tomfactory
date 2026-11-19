@@ -6,7 +6,7 @@ import pathlib
 import pytest
 
 from factory import cli, operations, records
-from tests.conftest import PLAN, in_process
+from tests.conftest import in_process, PLAN, script
 from tests.fake_agent import FakeAgent
 
 
@@ -105,12 +105,12 @@ def test_stop_is_refused_when_nothing_is_running(capsys, tmp_path, fake):
 
 
 @pytest.mark.fr("FR-066")
-def test_a_tidy_request_is_made_with_a_flag(capsys, tmp_path, fake):
+def test_the_kind_of_run_is_chosen_with_a_flag(capsys, tmp_path, fake):
     target = tmp_path / "viewer"
     run_cli(capsys, "init-target", str(target))
-    code, out = run_cli(capsys, "request", "Trim the tests", "--target", str(target), "--tidy", "tests")
-    assert code == 0 and operations.get_run().workflow == "tidy-tests"
-    assert run_cli(capsys, "request", "x", "--target", str(target), "--tidy", "everything")[0] == 2
+    code, out = run_cli(capsys, "request", "Trim the tests", "--target", str(target), "--kind", "tidy-tests")
+    assert code == 0 and operations.get_run().run_kind == "tidy-tests"
+    assert run_cli(capsys, "request", "x", "--target", str(target), "--kind", "everything")[0] == 2
 
 
 # ---- Story 3 ----

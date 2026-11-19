@@ -11,9 +11,8 @@ import pytest
 from factory import operations, speckit
 from factory.store import open_store
 from factory.workspace import Workspace
-from tests.conftest import PLAN, git, in_process
+from tests.conftest import ARCHITECT, BUILD, DOCUMENT, drive_with, git, PLAN, WRITE_TESTS
 from tests.fake_agent import FakeAgent
-from tests.test_cycle import script
 
 pytestmark = pytest.mark.skipif(shutil.which("specify") is None, reason="the specify command is not installed")
 
@@ -60,10 +59,11 @@ def kit_script(**changes):
 
 def to_the_end(target, fake, request=REQUEST):
     """Request, then approve whenever the run waits, until it ends. Returns the run and how often it waited."""
-    run, waits = operations.request(request, target, launcher=in_process(fake)), 0
+    drive_with(fake)
+    run, waits = operations.request(request, target), 0
     while run.state == "awaiting_approval":
         waits += 1
-        run = operations.approve(run.id, launcher=in_process(fake))
+        run = operations.approve(run.id)
     return run, waits
 
 
@@ -80,7 +80,7 @@ def test_init_target_can_set_spec_kit_up(kit_target, tmp_path):
 @pytest.mark.fr("FR-051")
 @pytest.mark.fr("FR-053")
 def test_prepare_runs_the_scripts_and_returns_the_targets_own_instructions(kit_target, tmp_path):
-    checkout = Workspace.create(kit_target, tmp_path / "ws", "factory/1-test")
+    checkout = Workspace.create(kit_target, tmp_path / "ws", "factory/1-test", git(kit_target, "rev-parse", "HEAD"))
     kit = speckit.prepare(("specify", "plan"), checkout, REQUEST)
 
     assert kit["context"]["feature_directory"] == FEATURE
@@ -111,7 +111,7 @@ def test_prepare_runs_the_scripts_and_returns_the_targets_own_instructions(kit_t
     assert sorted(p.name for p in (checkout.path / "specs").iterdir()) == ["001-add-a-greeting-page"]
 
     checkout.commit("first feature")
-    later = Workspace.create(kit_target, tmp_path / "ws2", "factory/2-test")
+    later = Workspace.create(kit_target, tmp_path / "ws2", "factory/2-test", git(kit_target, "rev-parse", "HEAD"))
     git(later.path, "merge", "-q", "--ff-only", "factory/1-test")
     later.base_commit = git(later.path, "rev-parse", "HEAD")
     assert speckit.prepare(("specify",), later, "Another thing entirely")["context"]["feature_directory"] \
@@ -121,21 +121,13 @@ def test_prepare_runs_the_scripts_and_returns_the_targets_own_instructions(kit_t
 @pytest.mark.fr("FR-056")
 def test_each_spec_kit_stage_has_the_persona_that_uses_it():
     from factory import workflow
-    kit = workflow.table_for(True)
-    assert {s.name: (s.persona, s.speckit) for s in kit if s.speckit} == {
-        "specify": ("analyst", ("specify",)),
-        "clarify": ("analyst", ("clarify",)),
-        "plan": ("planner", ("plan",)),
-        "tasks": ("planner", ("tasks",)),
-        "analyze": ("reviewer", ("analyze", "checklist")),
-        "write_tests": ("test_writer", ("implement",)),
-        "build": ("code_writer", ("implement",)),
-        "converge": ("reviewer", ("converge",)),
-    }
-    assert [s.name for s in kit] == ["specify", "clarify", "plan", "tasks", "analyze", "baseline", "write_tests",
-                                     "red", "build", "test", "architecture_review", "document", "converge", "finish"]
-    assert [s.name for s in kit if s.on_pass == "WAIT"] == ["clarify", "analyze"]           # two approvals
-    assert "review" not in [s.name for s in kit]                                            # converge takes its place
+    kit = workflow.table_for(True, "change")
+    used = {command for s in kit for command in s.speckit}
+    assert {"specify", "clarify", "plan", "tasks", "analyze", "implement", "converge"} <= used
+    assert all(s.kind == "agent" and s.persona for s in kit if s.speckit)        # a persona follows each one
+    assert [s.name for s in kit if s.on_pass == workflow.WAIT] == ["clarify", "analyze"]   # two approvals
+    names = [s.name for s in kit]
+    assert "converge" in names and "review" not in names                       # converge takes the review's place
 
 
 @pytest.mark.fr("FR-055")
@@ -143,7 +135,8 @@ def test_each_spec_kit_stage_has_the_persona_that_uses_it():
 @pytest.mark.fr("FR-057")
 def test_a_whole_run_on_a_spec_kit_target_follows_spec_kits_stages(home, kit_target, fake_notify):
     fake = FakeAgent(kit_script())
-    run = operations.request(REQUEST, kit_target, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.request(REQUEST, kit_target)
 
     assert (run.state, run.current_step) == ("awaiting_approval", "clarify")                # first: the specification
     assert FEATURE in operations.plan(run.id).text
@@ -151,13 +144,13 @@ def test_a_whole_run_on_a_spec_kit_target_follows_spec_kits_stages(home, kit_tar
     assert f"{FEATURE}/spec.md" in on_branch and f"{FEATURE}/plan.md" not in on_branch
     assert "Clarifications" in git(kit_target, "show", f"{run.branch}:{FEATURE}/spec.md")
 
-    run = operations.approve(run.id, launcher=in_process(fake))
+    run = operations.approve(run.id)
     assert (run.state, run.current_step) == ("awaiting_approval", "analyze")                # second: plan and tasks
     on_branch = git(kit_target, "ls-tree", "-r", "--name-only", run.branch).split()
     assert f"{FEATURE}/plan.md" in on_branch and f"{FEATURE}/tasks.md" in on_branch
     assert "agree with the specification" in operations.plan(run.id).text
 
-    run = operations.approve(run.id, launcher=in_process(fake))
+    run = operations.approve(run.id)
     assert run.outcome == "accepted", run.reason
     steps = open_store(home).query("steps", {"run_id": run.id})
     assert [s.name for s in steps] == ["specify", "clarify", "plan", "tasks", "analyze", "baseline", "write_tests",
@@ -185,13 +178,14 @@ def test_sending_back_returns_to_the_start_of_the_stage_that_is_waiting(home, ki
     script = kit_script()
     spec, clar, plan, tasks, analyze = script[:5]
     fake = FakeAgent([spec, clar, spec, clar, plan, tasks, analyze, plan, tasks, analyze])
-    run = operations.request(REQUEST, kit_target, launcher=in_process(fake))
-    run = operations.revise(run.id, "Say what happens for a missing name.", launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.request(REQUEST, kit_target)
+    run = operations.revise(run.id, "Say what happens for a missing name.")
     assert (run.state, run.current_step) == ("awaiting_approval", "clarify")
     assert "missing name" in fake.calls[2]["prompt"] and fake.calls[2]["persona"] == fake.calls[0]["persona"]
 
-    run = operations.approve(run.id, launcher=in_process(fake))
-    run = operations.revise(run.id, "Fewer tasks.", launcher=in_process(fake))
+    run = operations.approve(run.id)
+    run = operations.revise(run.id, "Fewer tasks.")
     assert (run.state, run.current_step) == ("awaiting_approval", "analyze")
     names = [s.name for s in open_store(home).query("steps", {"run_id": run.id})]
     assert names == ["specify", "clarify", "specify", "clarify", "plan", "tasks", "analyze", "plan", "tasks", "analyze"]
@@ -230,7 +224,8 @@ def test_a_requirement_change_returns_a_spec_kit_run_to_the_operator(home, kit_t
     assert "hello.py" not in kept and f"{FEATURE}/plan.md" in kept              # the build is set aside; the plan stays
 
     while run.state == "awaiting_approval":
-        run = operations.approve(run.id, launcher=in_process(fake))
+        drive_with(fake)
+        run = operations.approve(run.id)
     assert run.outcome == "accepted"
     assert "hello.py" in git(kit_target, "ls-tree", "-r", "--name-only", run.branch).split()   # built again, tests first
     reds = [s for s in open_store(home).query("steps", {"run_id": run.id}) if s.name == "red"]
@@ -238,16 +233,18 @@ def test_a_requirement_change_returns_a_spec_kit_run_to_the_operator(home, kit_t
 
 
 def to_the_end_of_first_build(target, fake):
-    run = operations.request(REQUEST, target, launcher=in_process(fake))
-    run = operations.approve(run.id, launcher=in_process(fake))
-    return operations.approve(run.id, launcher=in_process(fake)), 2
+    drive_with(fake)
+    run = operations.request(REQUEST, target)
+    run = operations.approve(run.id)
+    return operations.approve(run.id), 2
 
 
 @pytest.mark.fr("FR-053")
 def test_an_analyst_that_writes_outside_the_specification_folder_is_undone(home, kit_target, fake_notify):
     sneaky = kit_script()[0]
     fake = FakeAgent([dict(sneaky, files={**sneaky["files"], "app.py": "print('sneaky')\n"})])
-    run = operations.request(REQUEST, kit_target, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.request(REQUEST, kit_target)
     assert run.outcome == "needs-me" and "app.py" in run.reason
     assert git(run.workspace, "status", "--porcelain") == ""
 
@@ -256,7 +253,8 @@ def test_an_analyst_that_writes_outside_the_specification_folder_is_undone(home,
 def test_without_spec_kit_the_plain_cycle_runs_and_the_planner_may_change_nothing(home, target, fake_notify):
     plan = kit_script()[2]                              # tries to write under specs/ in a plain target
     fake = FakeAgent([plan])
-    run = operations.request(REQUEST, target, launcher=in_process(fake))
+    drive_with(fake)
+    run = operations.request(REQUEST, target)
     assert open_store(home).query("steps", {"run_id": run.id})[0].name == "plan"
     assert run.outcome == "needs-me" and "specs/" in run.reason
     assert "(none)" in fake.calls[0]["prompt"] and "### /speckit-" not in fake.calls[0]["prompt"]
@@ -302,6 +300,7 @@ def test_the_targets_constitution_comes_first_then_the_operators_ideals_then_spe
 def test_with_no_constitution_the_ideals_stand_alone(home, target, fake_notify):
     (home / "ideals.md").write_text(FACTORY_IDEAL + "\n")
     fake = FakeAgent([{"envelope": PLAN}])
-    operations.request(REQUEST, target, launcher=in_process(fake))
+    drive_with(fake)
+    operations.request(REQUEST, target)
     prompt = fake.calls[0]["prompt"]
     assert FACTORY_IDEAL in prompt and "This codebase has no constitution of its own." in prompt

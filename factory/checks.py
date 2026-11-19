@@ -2,27 +2,19 @@
 
 A check is a plain function, registered by name, that looks at what a step did and says
 whether it passed and why not. Checks are how code, not an agent, decides whether work is
-acceptable. A new check is a function with `@register("name")` above it.
+acceptable. A new check is a function with `@register("name")` above it; the registry
+stamps the name on what it returns. Which checks a step gets is a rule: workflow.checks_for.
 """
-from dataclasses import dataclass, field
-
-import os
+from dataclasses import dataclass, field, replace
 
 from factory import config, proc, sandbox, speckit, workspace
+from factory.config import under
+from factory.workflow import ACCEPT, CheckResult, verdicts
 
 REGISTRY: dict = {}
 
 # Applied by the driver to every step, whatever its entry says. A step cannot leave these out.
-ALWAYS = ("factory_untouched", "changes_allowed")   # plus envelope_valid for agent steps
-
-
-@dataclass
-class CheckResult:
-    name: str
-    passed: bool
-    note: str = ""      # why it failed, or a short remark; may hold test output
-    timed_out: bool = False     # the check ran a command that hit the time limit
-    contained: dict | None = None   # the check ran the target's code, contained: {"network": bool}
+ALWAYS = ("factory_untouched", "changes_allowed")
 
 
 @dataclass
@@ -44,7 +36,8 @@ class CheckContext:
 def register(name):
     """Make a check available to step entries under `name`."""
     def add(function):
-        REGISTRY[name] = function
+        REGISTRY[name] = lambda ctx: replace(function(ctx), name=name)
+        REGISTRY[name].__doc__ = function.__doc__
         return function
     return add
 
@@ -61,8 +54,7 @@ def get(name):
 def factory_untouched(ctx) -> CheckResult:
     """The factory's own code, personas, prompts and the ideals are as they were (FR-030)."""
     same = workspace.fingerprint(ctx.factory_paths) == ctx.before
-    return CheckResult("factory_untouched", same,
-                       "" if same else "the factory's own code, personas, prompts or ideals were changed")
+    return CheckResult(same, "" if same else "the factory's own code, personas, prompts or ideals were changed")
 
 
 @register("changes_allowed")
@@ -72,18 +64,12 @@ def changes_allowed(ctx) -> CheckResult:
                        if not _allowed(ctx.step.may_change, name, ctx.target_config, ctx.checkout))
     note = (f"this step may change {ctx.step.may_change.replace('_', ' ')} only; it changed: "
             + ", ".join(offending)) if offending else ""
-    return CheckResult("changes_allowed", not offending, note)
+    return CheckResult(not offending, note)
 
 
-def under(name, paths) -> bool:
-    """Is a file one of these paths, or inside one of these folders?"""
-    return any(name == p.rstrip("/") or name.startswith(p.rstrip("/") + "/") for p in paths)
-
-
-def _allowed(scope, name, settings, checkout=None) -> bool:
+def _allowed(scope, name, settings, checkout) -> bool:
     if scope == "spec":     # spec kit's documents, and only where the target uses spec kit
-        return (checkout is not None and speckit.available(checkout.path)
-                and (under(name, ("specs/",)) or name == speckit.FEATURE_FILE))
+        return speckit.available(checkout.path) and speckit.owns(name)
     if scope == "tests":
         return under(name, settings.test_paths)
     if scope == "not_tests":
@@ -96,33 +82,73 @@ def _allowed(scope, name, settings, checkout=None) -> bool:
 @register("envelope_valid")
 def envelope_valid(ctx) -> CheckResult:
     """An agent's reply ended with a JSON object that has every required key, rightly typed."""
-    def result(note=""):
-        return CheckResult("envelope_valid", not note, note)
-
     envelope = ctx.envelope
     if not isinstance(envelope, dict):
-        return result("the reply did not end with a JSON object")
+        return CheckResult(False, "the reply did not end with a JSON object")
     for key, kind in ctx.step.envelope.items():
         if key not in envelope:
-            return result(f"the envelope has no `{key}`")
+            return CheckResult(False, f"the envelope has no `{key}`")
         value = envelope[key]
         if kind == "text" and not isinstance(value, str):
-            return result(f"`{key}` must be text")
+            return CheckResult(False, f"`{key}` must be text")
         if kind == "list" and not isinstance(value, list):
-            return result(f"`{key}` must be a list")
-        allowed = ("accept", "reject") if kind == "verdict" else kind if isinstance(kind, tuple) else None
+            return CheckResult(False, f"`{key}` must be a list")
+        allowed = verdicts(ctx.step) if kind == "verdict" else kind if isinstance(kind, tuple) else None
         if allowed and value not in allowed:
-            return result(f"`{key}` must be one of: {', '.join(allowed)}")
-    if envelope.get("ideals_broken") and envelope.get("verdict") == "accept":
-        broken = ", ".join(str(item) for item in envelope["ideals_broken"])
-        return result(f"the review named broken ideals ({broken}) but gave the verdict accept")
-    return result()
+            return CheckResult(False, f"`{key}` must be one of: {', '.join(allowed)}")
+    return CheckResult(True)
 
 
-# ---- the steps' own checks ----
+# ---- a judging step's verdict ----
 
-OUTPUT_LIMIT = 6000     # how much of a test run's output is kept and passed on
+@register("verdict")
+def verdict(ctx) -> CheckResult:
+    """A judging step accepted the work, and its reply agrees with itself. Otherwise the note says why.
 
+    Where a failed verdict leads is the step's routes; a reply that contradicts itself (accept,
+    while naming broken ideals) is its on_fail.
+    """
+    envelope = ctx.envelope or {}
+    broken = [str(item) for item in envelope.get("ideals_broken") or []]
+    if envelope.get("verdict") == ACCEPT:
+        return CheckResult(not broken, f"the verdict was accept, but these ideals were named as broken: "
+                                       f"{', '.join(broken)}" if broken else "")
+    said = [str(item) for key in ("requirement_changes", "unbuilt", "reasons", "ideals_broken")
+            for item in envelope.get(key) or []]
+    return CheckResult(False, "; ".join(said) or f"the verdict was {envelope.get('verdict')}, with no reason given")
+
+
+# ---- what the test writer produced ----
+
+@register("tests_added")
+def tests_added(ctx) -> CheckResult:
+    """The step changed at least one file under the test paths."""
+    added = any(under(name, ctx.target_config.test_paths) for name in ctx.changed)
+    return CheckResult(added, "" if added else
+                       f"no test file was written under {', '.join(ctx.target_config.test_paths)}")
+
+
+@register("tests_within_budget")
+def tests_within_budget(ctx) -> CheckResult:
+    """The tests this run added are proportionate: no more lines than the codebase's budget (FR-065)."""
+    budget = ctx.target_config.test_budget_lines
+    added = ctx.checkout.lines_added([n for n in ctx.changed if under(n, ctx.target_config.test_paths)])
+    if not budget or added <= budget:
+        return CheckResult(True, f"{added} lines of tests added")
+    return CheckResult(False, f"the tests added {added} lines; this codebase's budget for one run is {budget}."
+                              " Keep them proportionate, as your priorities say.")
+
+
+@register("edge_cases_stated")
+def edge_cases_stated(ctx) -> CheckResult:
+    """The test writer listed at least one edge or failure case it covered (FR-045)."""
+    cases = (ctx.envelope or {}).get("edge_cases")
+    stated = isinstance(cases, list) and len(cases) > 0
+    return CheckResult(stated, "" if stated else
+                       "the tests must state the edge cases and failure cases they cover; none were listed")
+
+
+# ---- running the target's tests ----
 
 def run_tests(ctx) -> tuple[int | None, str, dict]:
     """Run the target's test command in the checkout, contained. Returns (exit code, output, containment).
@@ -139,98 +165,41 @@ def run_tests(ctx) -> tuple[int | None, str, dict]:
     return (None if done.timed_out else done.exit_code), output, {"network": network}
 
 
-def _timed_out(name, ctx) -> CheckResult:
-    return CheckResult(name, False, f"the test command did not finish within {ctx.timeout:g} seconds",
-                       timed_out=True)
+OUTPUT_LIMIT = 6000     # how much of a test run's output is kept and passed on
+SUMMARY_LINES = 5       # how many of its last lines a failure's note carries
+
+
+def _tests_judged(ctx, judge) -> CheckResult:
+    """Run the tests, then let `judge(exit code)` say (passed, note). Output and containment are kept."""
+    code, output, contained = run_tests(ctx)
+    if code is None:
+        return CheckResult(False, f"the test command did not finish within {ctx.timeout:g} seconds",
+                           output=output, timed_out=True, contained=contained)
+    passed, note = judge(code)
+    if not passed and output.strip():       # the reason a person reads ends with what the tests last said
+        note += ":\n" + "\n".join([line for line in output.splitlines() if line.strip()][-SUMMARY_LINES:])
+    return CheckResult(passed, note, output=output, contained=contained)
 
 
 @register("baseline")
 def baseline(ctx) -> CheckResult:
     """Before anything changes: the existing tests pass, or there are none."""
-    code, output, contained = run_tests(ctx)
-    if code is None:
-        return _timed_out("baseline", ctx)
-    if code == ctx.target_config.no_tests_exit_code:
-        return CheckResult("baseline", True, "no prior tests", contained=contained)
-    if code == 0:
-        return CheckResult("baseline", True, output, contained=contained)
-    return CheckResult("baseline", False, f"the existing tests were already failing:\n{output}", contained=contained)
-
-
-@register("tests_added")
-def tests_added(ctx) -> CheckResult:
-    """The step changed at least one file under the test paths."""
-    added = any(under(name, ctx.target_config.test_paths) for name in ctx.changed)
-    paths = ", ".join(ctx.target_config.test_paths)
-    return CheckResult("tests_added", added, "" if added else f"no test file was written under {paths}")
-
-
-@register("tests_within_budget")
-def tests_within_budget(ctx) -> CheckResult:
-    """The tests this run added are proportionate: no more lines than the codebase's budget (FR-065)."""
-    budget = ctx.target_config.test_budget_lines
-    added = ctx.checkout.lines_added([n for n in ctx.changed if under(n, ctx.target_config.test_paths)])
-    if not budget or added <= budget:
-        return CheckResult("tests_within_budget", True, f"{added} lines of tests added")
-    return CheckResult("tests_within_budget", False,
-                       f"the tests added {added} lines; this codebase's budget for one run is {budget}. Test each"
-                       " behaviour once, at the level where it lives; use parametrised cases for variations of one"
-                       " rule; reuse the helpers already there; do not re-test what existing tests cover.")
-
-
-@register("edge_cases_stated")
-def edge_cases_stated(ctx) -> CheckResult:
-    """The test writer listed at least one edge or failure case it covered (FR-045)."""
-    cases = (ctx.envelope or {}).get("edge_cases")
-    stated = isinstance(cases, list) and len(cases) > 0
-    return CheckResult("edge_cases_stated", stated, "" if stated else
-                       "the tests must state the edge cases and failure cases they cover; none were listed")
+    none = ctx.target_config.no_tests_exit_code
+    return _tests_judged(ctx, lambda code: (True, "no prior tests") if code == none else
+                         (True, "") if code == 0 else (False, "the existing tests were already failing"))
 
 
 @register("tests_fail_first")
 def tests_fail_first(ctx) -> CheckResult:
     """The new tests fail before the change is built. "No tests found" is not a failing test."""
-    code, output, contained = run_tests(ctx)
-    if code is None:
-        return _timed_out("tests_fail_first", ctx)
-    if code == 0:
-        return CheckResult("tests_fail_first", False,
-                           "the new tests pass before anything was built, so they do not describe the change",
-                           contained=contained)
-    if code == ctx.target_config.no_tests_exit_code:
-        return CheckResult("tests_fail_first", False,
-                           "the test command found no tests to run; the new tests were not collected",
-                           contained=contained)
-    return CheckResult("tests_fail_first", True, output, contained=contained)
+    none = ctx.target_config.no_tests_exit_code
+    return _tests_judged(ctx, lambda code: (
+        (False, "the new tests pass before anything was built, so they do not describe the change") if code == 0
+        else (False, "the test command found no tests to run; the new tests were not collected") if code == none
+        else (True, "")))
 
 
 @register("tests_pass")
 def tests_pass(ctx) -> CheckResult:
     """Every test passes: the new ones and the ones that were already there."""
-    code, output, contained = run_tests(ctx)
-    if code is None:
-        return _timed_out("tests_pass", ctx)
-    return CheckResult("tests_pass", code == 0, output, contained=contained)
-
-
-@register("verdict_accept")
-def verdict_accept(ctx) -> CheckResult:
-    """The review's verdict is accept. Otherwise the note carries its reasons."""
-    envelope = ctx.envelope or {}
-    if envelope.get("verdict") == "accept":
-        return CheckResult("verdict_accept", True)
-    reasons = [str(reason) for reason in envelope.get("reasons") or []]
-    broken = [str(ideal) for ideal in envelope.get("ideals_broken") or []]
-    note = "; ".join(reasons) + (f" — ideals broken: {'; '.join(broken)}" if broken else "")
-    return CheckResult("verdict_accept", False, note or "the review rejected the result without giving a reason")
-
-
-@register("verdict")
-def verdict(ctx) -> CheckResult:
-    """A judging step accepted the work. Otherwise the note says why, and the step's routes say where next."""
-    envelope = ctx.envelope or {}
-    if envelope.get("verdict") == "accept":
-        return CheckResult("verdict", True)
-    said = [str(item) for key in ("requirement_changes", "unbuilt", "reasons", "ideals_broken")
-            for item in envelope.get(key) or []]
-    return CheckResult("verdict", False, "; ".join(said) or f"the verdict was {envelope.get('verdict')}, with no reason given")
+    return _tests_judged(ctx, lambda code: (code == 0, "" if code == 0 else "the tests fail"))

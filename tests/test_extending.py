@@ -3,16 +3,16 @@
 These tests change nothing on disk in the factory: they register a check and swap in a
 longer step table from the outside, which is exactly what editing workflow.py would do.
 """
+import ast
 import dataclasses
 import pathlib
-import re
 import shutil
 
 import pytest
 
 from factory import checks, config, workflow, workspace
 from factory.workflow import Step
-from tests.test_cycle import BUILD, cycle, script  # noqa: F401  (cycle is a fixture)
+from tests.conftest import script
 
 
 def table_with(monkeypatch, after, new, **replace_previous):
@@ -21,7 +21,7 @@ def table_with(monkeypatch, after, new, **replace_previous):
     index = [s.name for s in steps].index(after)
     steps[index] = dataclasses.replace(steps[index], on_pass=new.name, **replace_previous)
     steps.insert(index + 1, new)
-    monkeypatch.setattr(workflow, "STEPS", steps)
+    monkeypatch.setattr(workflow, "table_for", lambda spec_kit, run_kind: steps)
     return steps
 
 
@@ -39,9 +39,9 @@ def test_a_new_code_step_is_one_check_and_one_entry(cycle, monkeypatch):
     @checks.register("count_files")
     def count_files(ctx):
         files = [f for f in pathlib.Path(ctx.checkout.path).rglob("*.py")]
-        return checks.CheckResult("count_files", True, f"{len(files)} python files")
+        return checks.CheckResult(True, f"{len(files)} python files")
 
-    monkeypatch.setitem(checks.REGISTRY, "count_files", count_files)
+    monkeypatch.setitem(checks.REGISTRY, "count_files", checks.REGISTRY["count_files"])    # removed afterwards
     table_with(monkeypatch, "test", Step("count_files", "code", on_pass="architecture_review", checks=("count_files",)))
     source_before = workspace.fingerprint([config.PACKAGE_DIR])
 
@@ -65,7 +65,7 @@ def test_a_new_persona_is_one_file_named_on_an_entry(cycle, monkeypatch):
         steps = list(workflow.STEPS)
         index = [s.name for s in steps].index("build")
         steps[index] = dataclasses.replace(steps[index], persona="careful_coder")
-        monkeypatch.setattr(workflow, "STEPS", steps)
+        monkeypatch.setattr(workflow, "table_for", lambda spec_kit, run_kind: steps)
 
     install()
     run, fake, store, _ = cycle(script())
@@ -95,20 +95,21 @@ def test_a_prompt_may_only_use_the_inputs_its_entry_lists(cycle, monkeypatch, pr
     (prompts_copy / "second_opinion.md").write_text("Opinion on {{request}} given {{diff}}\n")
     table_with(monkeypatch, "review", Step("second_opinion", "agent", persona="reviewer", on_pass="finish",
                                              inputs=("request",)))
-    with pytest.raises(LookupError, match="diff"):
+    with pytest.raises(ValueError, match="second_opinion's prompt uses {{diff}}"):     # before any agent is asked
         cycle(script() + [{"envelope": {}}])
 
 
 @pytest.mark.fr("FR-037")
-def test_the_data_layer_the_driver_and_the_command_line_name_no_step_and_no_persona():
-    steps = [s.name for s in workflow.STEPS if s.name != "plan"]     # "plan" is also the thing the operator approves
-    personas = [s.persona for s in workflow.STEPS if s.persona]
-    for file in ("store.py", "driver.py", "cli.py", "operations.py", "checks.py"):
-        text = (config.PACKAGE_DIR / file).read_text()
-        literals = set(re.findall(r"""["']([a-z_]+)["']""", text))
-        named = sorted(literals & set(steps + personas))
-        if file == "checks.py":
-            named = [n for n in named if n not in ("baseline",)]      # a check may share a step's name
-        if file == "cli.py":
-            named = [n for n in named if n not in ("test",)]
-        assert named == [], f"{file} names steps or personas: {named}"
+@pytest.mark.parametrize("file", ["store.py", "records.py", "driver.py", "cli.py", "operations.py", "checks.py"])
+def test_no_module_but_the_rules_decides_by_a_steps_or_personas_name(file):
+    """No comparison with, or lookup by, a step's or persona's name outside workflow.py."""
+    names = {s.name for t in workflow.TABLES for s in t} | {s.persona for t in workflow.TABLES for s in t if s.persona}
+    tree = ast.parse((config.PACKAGE_DIR / file).read_text())
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare):
+            found += [c.value for c in ast.walk(node) if isinstance(c, ast.Constant) and c.value in names]
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "workflow.get" and node.args \
+                and isinstance(node.args[0], ast.Constant) and node.args[0].value in names:
+            found.append(node.args[0].value)
+    assert found == [], f"{file} decides by the name of a step or persona: {found}"

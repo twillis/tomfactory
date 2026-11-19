@@ -3,8 +3,8 @@ import pytest
 
 from factory import cli, config, operations, records
 from factory.store import open_store
-from tests.conftest import PLAN
-from tests.test_cycle import REVIEW, cycle, script  # noqa: F401  (cycle is a fixture)
+from tests.conftest import drive_with, PLAN, script
+from tests.fake_agent import FakeAgent
 
 IDEAL = "Well-defined layers with explicit interfaces between them."
 NONE_STATED = "No ideals have been stated."
@@ -69,17 +69,16 @@ def test_a_broken_ideal_can_never_be_accepted(cycle, home):
                                   "ideals_broken": ["layers are mixed"]}}
     run, fake, store, _ = cycle(script(review=[contradictory] * 3))
     assert run.outcome == "needs-me" and "review" in run.reason and "layers are mixed" in run.reason
-    assert [s.failure for s in store.query("steps", {"run_id": run.id}) if s.name == "review"] == ["malformed"] * 3
+    assert [s.failure for s in store.query("steps", {"run_id": run.id}) if s.name == "review"] == ["check"] * 3
     assert "finish" not in [s.name for s in store.query("steps", {"run_id": run.id})]
 
 
 @pytest.mark.fr("FR-021")
 def test_conflicts_the_plan_states_are_shown_to_the_operator(cycle, home, capsys, monkeypatch):
-    from tests.conftest import in_process
-    from tests.fake_agent import FakeAgent
     conflicted = dict(PLAN, conflicts=["The request wants one file; the ideals want layers."])
     target = operations.init_target(home.parent / "conflict-target")
-    run = operations.request("One file please", target, launcher=in_process(FakeAgent([{"envelope": conflicted}])))
+    drive_with(FakeAgent([{"envelope": conflicted}]))
+    run = operations.request("One file please", target)
     assert operations.plan(run.id).conflicts == conflicted["conflicts"]
     assert cli.main(["plan"]) == 0
     assert "The request wants one file; the ideals want layers." in capsys.readouterr().out

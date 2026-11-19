@@ -1,30 +1,30 @@
 """Control: execution. Carries one run forward, a step at a time, until it must wait or has ended.
 
-The driver is general. It names no step and no persona: it runs whatever step the run is
-on, in the way that step's entry in the workflow table says, and asks `workflow.next_step`
-what to do with the result. What each step is, and what follows it, live in workflow.py.
+The driver is general. It names no step and no persona, and decides nothing: it runs
+whatever step the run is on, in the way that step's entry says, and asks workflow.py what
+each result means and what happens next.
 
-For each step it does eight things, in order:
+One execution of a step has three stages:
 
-  1. takes a fingerprint of the factory's own files, and notes what git reports
-  2. starts a step record, so the step is visible while it runs
-  3. for an agent step: loads the persona and the prompt, fills in the inputs, calls the adapter
-  4. runs the checks: the always-applied ones first, then the step's own
-  5. if a guard check failed, undoes the change
-  6. if the step passed and its entry says so, commits
-  7. completes the step record
-  8. asks next_step: carry on, wait for the operator, or end
+  prompt   for an agent step: the persona, the prompt with its inputs filled in, and how to ask
+  execute  the agent program runs it, if it is an agent step
+  verify   the always-applied checks, undoing a change the step was not allowed to make;
+           then whether it asked a question; then the step's own checks
+
+and then the step is committed if its entry says so, and its record completed.
 """
+import functools
 import json
 import os
 import pathlib
 import re
 import signal
 import time
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 
 from factory import agent, checks, config, notify, proc, records, sandbox, speckit, workflow, workspace
-from factory.workflow import Ask, End, Replan, StepResult, Wait
+from factory.config import under
+from factory.workflow import Ask, CheckResult, End, Replan, StepResult, Wait
 from factory.workspace import Workspace
 
 NO_IDEALS = "No ideals have been stated."
@@ -34,16 +34,22 @@ class Stopped(BaseException):
     """Raised inside the driver when it is told to stop."""
 
 
-def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_dir=None) -> None:
+def table_of(run) -> list:
+    """The steps a run goes through. Decided here only: by its kind, and by its checkout's codebase."""
+    return workflow.table_for(speckit.available(run.workspace), run.run_kind)
+
+
+def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) -> None:
     """Carry a run forward from its current step until it waits or ends."""
     adapter = adapter or agent.get_adapter()
     personas_dir = pathlib.Path(personas_dir or config.PERSONAS_DIR)
     prompts_dir = pathlib.Path(prompts_dir or config.PROMPTS_DIR)
     run = store.get("runs", run_id)
-    checkout = Workspace(run.workspace, run.target, run.branch, run.base_commit)
+    checkout = Workspace.of(run)
     settings = config.read_target_config(run.target, run.base_commit)
-    steps = steps or workflow.table_for(speckit.available(checkout.path), run.workflow)
     try:
+        steps = table_of(run)
+        validate(steps, personas_dir, prompts_dir)      # a wrong name is found now, before any paid step
         while True:
             run = store.get("runs", run_id)
             if run.state == "ended":        # ended from outside while we were working
@@ -66,11 +72,10 @@ def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_
             if isinstance(then, Ask):           # the lead answers if it can; otherwise the operator is asked
                 answered, said = run_step(store, run, workflow.LEAD, checkout, settings, adapter,
                                           personas_dir, prompts_dir)
-                if answered.passed and (said or {}).get("confident") == "yes":
+                if workflow.lead_answered(answered, said):
                     records.answer(store, asked.id, said["answer"], "lead")
                     continue                    # the step that asked runs again, with the answer
-                records.set_state(store, run_id, "awaiting_approval", driver_pid=None, driver_started=None,
-                                  child_pgid=None)
+                records.await_operator(store, run_id)
                 tell(store, run_id, f"Run {run_id}: a question for you", then.question)
                 return
             records.move(store, run_id, current_step=then.step)
@@ -82,171 +87,283 @@ def advance(store, run_id, adapter=None, steps=None, personas_dir=None, prompts_
         raise
 
 
+# ---- one execution of one step ----
+
+@dataclass
+class Doing:
+    """One execution of one step: what it works on, and where what happens is recorded."""
+    store: object
+    run: object
+    step: object
+    checkout: Workspace
+    settings: object
+    timeout: float
+    record: object = None
+    errors: object = None
+
+    def emit(self, kind, summary, payload=None):
+        records.event(self.store, self.run.id, kind, summary, payload, step_id=self.record.id)
+
+    def on_child(self, group):
+        records.move(self.store, self.run.id, child_pgid=group)
+
+
 def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompts_dir):
     """Run one step once. Returns (how it went, the agent's envelope if there was one)."""
     paths = config.factory_paths()
-    before, dirty_before = workspace.fingerprint(paths), checkout.dirty()               # 1
-    timeout = step.timeout or settings.step_timeout_seconds
-    asked = ""
-    if step.kind == "agent":
-        kit = None      # where the target uses spec kit, run its scripts for the agent, who has no shell
-        if step.speckit and speckit.available(checkout.path):
-            kit = speckit.prepare(step.speckit, checkout, run.request)
-        given = {"speckit_instructions": kit["instructions"] if kit else "",
-                 "speckit_context": json.dumps(kit["context"], indent=2) if kit else ""}
-        inputs = {name: given[name] if name in given else gather(name, store, run, checkout, settings)
-                  for name in step.inputs}
-        asked = fill((prompts_dir / f"{step.name}.md").read_text(), inputs)
-        if step is not workflow.LEAD:           # every agent is told how to ask, and what it was answered
-            earlier = store.query("questions", {"run_id": run.id, "step": step.name})
-            answers = "\n\n".join(f"You asked: {q.question}\nThe {q.answered_by} answered: {q.answer}"
-                                   for q in earlier if q.answer is not None)
-            asked += "\n" + fill((prompts_dir / "asking.md").read_text(), {"answers": answers})
-    record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)       # 2
-
-    def emit(kind, summary, payload=None):
-        records.event(store, run.id, kind, summary, payload, step_id=record.id)
-
-    def on_child(group):
-        records.move(store, run.id, child_pgid=group)
-
-    emit("step_start", step.name, {"attempt": record.attempt, "persona": step.persona})
-    result, reply = StepResult(passed=True), None
-    with store.files.stderr_file(run.id, record.id) as errors:
-        if step.kind == "agent":                                                         # 3
-            reply = adapter(
-                persona=(personas_dir / f"{step.persona}.md").read_text(), prompt=asked,
-                cwd=checkout.path, capabilities=step.capabilities, timeout=timeout, on_event=emit,
-                raw_sink=store.files.raw_sink(run.id, record.id), stderr_file=errors,
-                on_child=on_child, model=step.model)
-            for denial in reply.denials:
-                emit("denied", f"{denial.get('action')}: {denial.get('path')}", denial)
-            blocked = [d["path"] for d in reply.denials
-                       if pathlib.Path(d.get("path") or "/").is_relative_to(checkout.path)]
-            if reply.timed_out:
-                result = StepResult(False, "timeout", message=f"{timeout:g} seconds")
-            elif not reply.ok:
-                result = StepResult(False, "error", message=reply.error or "no message")
-            elif blocked:       # trying again cannot help: the program will refuse again
-                result = StepResult(False, "error", message="it refused to let the agent work inside the"
-                                    f" run's own checkout: {', '.join(blocked)}")
-
-        context = checks.CheckContext(
-            run=run, step=step, checkout=checkout, target_config=settings,
-            changed=workspace.changed(dirty_before, checkout.dirty()),
-            envelope=reply.envelope if reply else None, before=before, factory_paths=paths,
-            stderr_file=errors, on_child=on_child, timeout=timeout)
-        done = []
-
-        def check(name):
-            outcome = checks.get(name)(context)
-            done.append(outcome)
-            emit("check", f"{name}: {'passed' if outcome.passed else 'failed'}", asdict(outcome))
-            return outcome
-
-        guards = [check(name) for name in checks.ALWAYS]                                 # 4
-        for outcome in guards:
-            if not outcome.passed:                                                       # 5
-                if outcome.name == "changes_allowed":
-                    checkout.undo()
-                else:       # keep the changed versions, in case it was the operator who changed them
-                    kept = store.files.displaced_dir(run.id)
-                    workspace.snapshot(paths, kept)
-                    workspace.restore(paths, store.files.snapshot_dir(run.id))
-                    outcome.note += f"; they were put back, and the changed versions are kept in {kept}"
-                emit("guard", f"undone: {outcome.note}", {"check": outcome.name, "files": sorted(context.changed)})
-                if result.passed:
-                    result = StepResult(False, "guard", outcome)
-        question = reply.envelope.get("question") if reply and isinstance(reply.envelope, dict) else None
-        if result.passed and question and set(reply.envelope) == {"question"} and step is not workflow.LEAD:
-            outcome = checks.CheckResult("question", False, str(question))      # it asked instead of finishing
-            done.append(outcome)
-            emit("check", "question: asked", asdict(outcome))
-            result = StepResult(False, "question", outcome)
-        if result.passed:
-            own = ((["envelope_valid"] if step.kind == "agent" else []) + list(step.checks)
-                   + (["verdict"] if step.routes else []))
-            try:
-                for name in own:
-                    outcome = check(name)
-                    if not outcome.passed:
-                        if outcome.timed_out:
-                            result = StepResult(False, "timeout", outcome, message=f"{timeout:g} seconds")
-                        else:
-                            result = StepResult(False, "malformed" if name == "envelope_valid" else "check", outcome)
-                        break
-            except sandbox.Unavailable as refused:      # not run at all, rather than run uncontained
-                result = StepResult(False, "error", message=str(refused))
-        if reply is not None and isinstance(reply.envelope, dict):
-            result.verdict = reply.envelope.get("verdict")
+    before, dirty_before = workspace.fingerprint(paths), checkout.dirty()
+    doing = Doing(store, run, step, checkout, settings, step.timeout or settings.step_timeout_seconds)
+    asked = prompt(doing, prompts_dir) if step.kind == "agent" else ""
+    doing.record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)
+    doing.emit("step_start", step.name, {"attempt": doing.record.attempt, "persona": step.persona})
+    with store.files.stderr_file(run.id, doing.record.id) as errors:
+        doing.errors = errors
+        reply = execute(doing, asked, adapter, personas_dir) if step.kind == "agent" else None
+        result, done, changed = verify(doing, reply, before, dirty_before, paths)
 
     if step.advisory and result.failure not in (None, "guard"):
-        checkout.discard(context.changed)   # a failed advisory step leaves nothing behind for the next to commit
-
-    if result.passed and step.commit_after:                                              # 6
+        checkout.discard(changed)       # a failed advisory step leaves nothing behind for the next to commit
+    if result.passed and step.commit_after:
         commit = checkout.commit(f"factory: {step.name} (run {run.id})")
         if commit:
-            emit("commit", f"{step.name}: {commit[:10]}", {"commit": commit})
+            doing.emit("commit", f"{step.name}: {commit[:10]}", {"commit": commit})
 
-    if reply is not None:
-        produced = reply.envelope if reply.envelope is not None else {"text": reply.text[:2000]}
-    else:
-        produced = {"output": done[-1].note} if step.checks and done else {}
-        if step.checks and done and done[-1].contained is not None:
-            produced["contained"] = done[-1].contained
-    records.finish_step(store, record.id, produced, [asdict(outcome) for outcome in done], result.passed,   # 7
-                       "check" if result.failure == "question" else result.failure,
-                       reply.tokens if reply else None,
-                       reply.cost_estimate if reply else None)
-    emit("step_end", f"{step.name}: {'passed' if result.passed else result.failure}",
-         {"passed": result.passed, "failure": result.failure})
+    records.finish_step(store, doing.record.id, produced(reply, done), [asdict(outcome) for outcome in done],
+                        result.passed, result.failure, reply.tokens if reply else None,
+                        reply.cost_estimate if reply else None)
+    doing.emit("step_end", f"{step.name}: {'passed' if result.passed else result.failure}",
+               {"passed": result.passed, "failure": result.failure})
     return result, reply.envelope if reply else None
 
 
-def gather(name, store, run, checkout, settings) -> str:
-    """The text for one named input of a prompt. See contracts/workflow.md, "Inputs and prompts"."""
-    plans = store.query("plans", {"run_id": run.id})
-    finished = [record for record in store.query("steps", {"run_id": run.id}) if record.ended_at]
-    if name == "request":       # the request as the operator has amended it when sending plans back
-        comments = [plan.comment for plan in plans if plan.decision == "revised" and plan.comment]
-        if not comments:
-            return run.request
-        return (run.request + "\n\nThe operator added, when sending an earlier plan back:\n"
-                + "\n".join(f"- {comment}" for comment in comments))
-    if name == "ideals":
-        return run.ideals or NO_IDEALS
-    if name == "run_kind":
-        return workflow.RUN_KINDS[run.workflow]
-    if name == "constitution":      # the codebase's own rules; they come before the operator's ideals
-        return speckit.constitution(checkout.path) or "This codebase has no constitution of its own."
-    if name == "plan":
-        approved = [plan for plan in plans if plan.decision == "approved"]
-        return (approved or plans)[-1].text if plans else ""
-    if name in ("previous_plan", "comment"):
-        if not plans or plans[-1].decision != "revised":
-            return ""
-        return plans[-1].text if name == "previous_plan" else (plans[-1].comment or "")
-    if name == "test_paths":
-        return ", ".join(settings.test_paths)
-    if name == "docs_paths":
-        return ", ".join(settings.docs_paths)
-    if name == "test_files":
-        touched = set(checkout.files_changed_since_base()) | set(checkout.dirty())
-        return "\n".join(sorted(f for f in touched if checks.under(f, settings.test_paths)))
-    if name == "failure":
-        if not finished or finished[-1].passed:
-            return ""
-        failed = next((c for c in finished[-1].checks or [] if not c["passed"]), None)
-        return f"{failed['name']}: {failed['note']}" if failed else str(finished[-1].failure)
-    if name == "question":
-        waiting = records.pending_question(store, run.id)
-        return waiting.question if waiting else ""
-    if name == "diff":
-        return checkout.diff_since_base()
-    if name == "test_output":
-        outputs = [r.produced["output"] for r in finished if r.kind == "code" and (r.produced or {}).get("output")]
-        return outputs[-1] if outputs else ""
-    raise LookupError(f"there is no input named {name}")
+def prompt(doing, prompts_dir) -> str:
+    """An agent step's prompt: its file with the inputs filled in, then how to ask a question."""
+    step, run = doing.step, doing.run
+    kit = (speckit.prepare(step.speckit, doing.checkout, run.request)    # spec kit's scripts, run for the agent
+           if step.speckit and speckit.available(doing.checkout.path) else None)
+    sources = Sources(doing.store, run, doing.checkout, doing.settings, kit, prompts_dir)
+    asked = fill((prompts_dir / f"{step.name}.md").read_text(),
+                 {name: INPUTS[name](sources) for name in step.inputs})
+    if step.may_ask:            # every agent that may ask is told how, and what it was answered
+        earlier = doing.store.query("questions", {"run_id": run.id, "step": step.name})
+        answers = "\n\n".join(f"You asked: {q.question}\nThe {q.answered_by} answered: {q.answer}"
+                              for q in earlier if q.answer is not None)
+        asked += "\n" + fill((prompts_dir / "asking.md").read_text(), {"answers": answers})
+    return asked
+
+
+def execute(doing, asked, adapter, personas_dir):
+    """The agent program runs the step. Every refusal it reports goes on the record."""
+    reply = adapter(persona=(personas_dir / f"{doing.step.persona}.md").read_text(), prompt=asked,
+                    cwd=doing.checkout.path, capabilities=doing.step.capabilities, timeout=doing.timeout,
+                    on_event=doing.emit, raw_sink=doing.store.files.raw_sink(doing.run.id, doing.record.id),
+                    stderr_file=doing.errors, on_child=doing.on_child, model=doing.step.model)
+    for denial in reply.denials:
+        doing.emit("denied", f"{denial.get('action')}: {denial.get('path')}", denial)
+    return reply
+
+
+def verify(doing, reply, before, dirty_before, paths):
+    """Apply the checks. Returns (how the step went, every check's result, the files it changed)."""
+    result = workflow.reply_failure(reply, doing.checkout.path, doing.timeout) if reply else StepResult(True)
+    envelope = reply.envelope if reply else None
+    context = checks.CheckContext(
+        run=doing.run, step=doing.step, checkout=doing.checkout, target_config=doing.settings,
+        changed=workspace.changed(dirty_before, doing.checkout.dirty()), envelope=envelope, before=before,
+        factory_paths=paths, stderr_file=doing.errors, on_child=doing.on_child, timeout=doing.timeout)
+    done = []
+
+    def check(name):
+        outcome = checks.get(name)(context)
+        done.append(outcome)
+        doing.emit("check", f"{name}: {'passed' if outcome.passed else 'failed'}", asdict(outcome))
+        return outcome
+
+    for outcome in [check(name) for name in checks.ALWAYS]:
+        if not outcome.passed:
+            UNDO[outcome.name](doing, outcome, paths)
+            doing.emit("guard", f"undone: {outcome.note}", {"check": outcome.name, "files": sorted(context.changed)})
+            if result.passed:
+                result = StepResult(False, "guard", outcome)
+    question = workflow.question_in(doing.step, envelope)
+    if result.passed and question:      # it asked instead of finishing
+        outcome = CheckResult(False, question, name="question")
+        done.append(outcome)
+        doing.emit("check", "question: asked", asdict(outcome))
+        result = StepResult(False, "question", outcome)
+    if result.passed:
+        try:
+            for name in workflow.checks_for(doing.step):
+                outcome = check(name)
+                if not outcome.passed:
+                    result = workflow.failed(name, outcome, doing.timeout)
+                    break
+        except sandbox.Unavailable as refused:      # not run at all, rather than run uncontained
+            result = StepResult(False, "error", message=str(refused))
+    if doing.step.routes and isinstance(envelope, dict):
+        result.verdict = envelope.get("verdict")
+    return result, done, context.changed
+
+
+# How a guard's failure is put right: the step's change undone, or the factory's files put back.
+
+def _undo_change(doing, outcome, paths):
+    doing.checkout.undo()
+
+
+def _restore_factory(doing, outcome, paths):
+    """Put the factory's files back, keeping the changed versions in case the operator made them."""
+    kept = doing.store.files.displaced_dir(doing.run.id)
+    workspace.snapshot(paths, kept)
+    workspace.restore(paths, doing.store.files.snapshot_dir(doing.run.id))
+    outcome.note += f"; they were put back, and the changed versions are kept in {kept}"
+
+
+UNDO = {"changes_allowed": _undo_change, "factory_untouched": _restore_factory}
+
+
+def produced(reply, done) -> dict:
+    """What a step produced, for its record: the agent's envelope, or what its command printed."""
+    if reply is not None:
+        return reply.envelope if reply.envelope is not None else {"text": reply.text[:2000]}
+    ran = next((outcome for outcome in reversed(done) if outcome.contained is not None), None)
+    return {"output": ran.output or ran.note, "contained": ran.contained} if ran else {}
+
+
+# ---- the inputs a prompt may use, by name ----
+
+@dataclass
+class Sources:
+    """What an input is made from. Plans and finished steps are read once, when first needed."""
+    store: object
+    run: object
+    checkout: Workspace
+    settings: object
+    kit: dict | None
+    prompts_dir: pathlib.Path
+
+    @functools.cached_property
+    def plans(self):
+        return self.store.query("plans", {"run_id": self.run.id})
+
+    @functools.cached_property
+    def finished(self):
+        return [record for record in self.store.query("steps", {"run_id": self.run.id}) if record.ended_at]
+
+
+INPUTS: dict = {}
+
+
+def given(name):
+    """Make an input available to step entries and prompts under `name`."""
+    def add(function):
+        INPUTS[name] = function
+        return function
+    return add
+
+
+@given("request")
+def _request(src):
+    """The request, as the operator has amended it when sending plans back."""
+    comments = [plan.comment for plan in src.plans if plan.decision == "revised" and plan.comment]
+    if not comments:
+        return src.run.request
+    return (src.run.request + "\n\nThe operator added, when sending an earlier plan back:\n"
+            + "\n".join(f"- {comment}" for comment in comments))
+
+
+@given("run_kind")
+def _run_kind(src):
+    return (src.prompts_dir / "run_kinds" / f"{src.run.run_kind}.md").read_text()
+
+
+@given("ideals")
+def _ideals(src):
+    return src.run.ideals or NO_IDEALS
+
+
+@given("constitution")
+def _constitution(src):
+    """The codebase's own rules; they come before the operator's ideals."""
+    return speckit.constitution(src.checkout.path) or "This codebase has no constitution of its own."
+
+
+@given("plan")
+def _plan(src):
+    approved = [plan for plan in src.plans if plan.decision == "approved"]
+    return (approved or src.plans)[-1].text if src.plans else ""
+
+
+def _sent_back(src):
+    """The latest plan, if the operator sent it back."""
+    return src.plans[-1] if src.plans and src.plans[-1].decision == "revised" else None
+
+
+@given("previous_plan")
+def _previous_plan(src):
+    return _sent_back(src).text if _sent_back(src) else ""
+
+
+@given("comment")
+def _comment(src):
+    return (_sent_back(src).comment or "") if _sent_back(src) else ""
+
+
+@given("test_paths")
+def _test_paths(src):
+    return ", ".join(src.settings.test_paths)
+
+
+@given("docs_paths")
+def _docs_paths(src):
+    return ", ".join(src.settings.docs_paths)
+
+
+@given("test_files")
+def _test_files(src):
+    touched = set(src.checkout.files_changed_since_base()) | set(src.checkout.dirty())
+    return "\n".join(sorted(name for name in touched if under(name, src.settings.test_paths)))
+
+
+@given("failure")
+def _failure(src):
+    """What went wrong last time, with what the command printed if one ran."""
+    if not src.finished or src.finished[-1].passed:
+        return ""
+    failed = next((c for c in src.finished[-1].checks or [] if not c["passed"]), None)
+    if not failed:
+        return str(src.finished[-1].failure)
+    return f"{failed['name']}: {failed['note']}" + (f"\n{failed['output']}" if failed.get("output") else "")
+
+
+@given("question")
+def _question(src):
+    waiting = records.pending_question(src.store, src.run.id)
+    return waiting.question if waiting else ""
+
+
+@given("diff")
+def _diff(src):
+    return src.checkout.diff_since_base()
+
+
+@given("test_output")
+def _test_output(src):
+    outputs = [r.produced["output"] for r in src.finished if r.kind == "code" and (r.produced or {}).get("output")]
+    return outputs[-1] if outputs else ""
+
+
+@given("speckit_instructions")
+def _speckit_instructions(src):
+    return src.kit["instructions"] if src.kit else ""
+
+
+@given("speckit_context")
+def _speckit_context(src):
+    return json.dumps(src.kit["context"], indent=2) if src.kit else ""
+
+
+PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 
 
 def fill(prompt_text, inputs) -> str:
@@ -256,20 +373,55 @@ def fill(prompt_text, inputs) -> str:
         if name not in inputs:
             raise LookupError(f"the prompt uses {{{{{name}}}}}, which this step's entry does not list as an input")
         return inputs[name].strip() or "(none)"
-    return re.sub(r"\{\{(\w+)\}\}", replace, prompt_text)
+    return PLACEHOLDER.sub(replace, prompt_text)
 
+
+# ---- a table is checked before a run uses it ----
+
+def validate(table, personas_dir=None, prompts_dir=None) -> None:
+    """Refuse a table that names a step, check, input, persona or prompt that does not exist."""
+    personas_dir = pathlib.Path(personas_dir or config.PERSONAS_DIR)
+    prompts_dir = pathlib.Path(prompts_dir or config.PROMPTS_DIR)
+    names = {step.name for step in table}
+    problems = []
+    for step in [*table, workflow.LEAD]:
+        leads = [step.on_pass, step.on_approve, step.revise_from, step.on_fail, *step.routes.values()]
+        for target in leads:
+            target = getattr(target, "step", target)
+            if isinstance(target, str) and target and target not in (workflow.WAIT, workflow.END_ACCEPTED) \
+                    and target not in names:
+                problems.append(f"{step.name} leads to {target}, which is not in the table")
+        problems += [f"{step.name} uses the check {name}, which is not registered"
+                     for name in workflow.checks_for(step) if name not in checks.REGISTRY]
+        if step.kind != "agent":
+            continue
+        problems += [f"{step.name} uses the input {name}, which is not defined"
+                     for name in step.inputs if name not in INPUTS]
+        if not (personas_dir / f"{step.persona}.md").is_file():
+            problems.append(f"{step.name}'s persona {step.persona} has no file in {personas_dir}")
+        prompt_file = prompts_dir / f"{step.name}.md"
+        if not prompt_file.is_file():
+            problems.append(f"{step.name} has no prompt file {prompt_file}")
+            continue
+        problems += [f"{step.name}'s prompt uses {{{{{name}}}}}, which its entry does not list"
+                     for name in PLACEHOLDER.findall(prompt_file.read_text()) if name not in step.inputs]
+    if problems:
+        raise ValueError("the step table is not sound: " + "; ".join(problems))
+
+
+# ---- the run's state, outside any one step ----
 
 def wait_for_operator(store, run, step, envelope) -> None:
     """Store what the operator must decide on, mark the run as waiting, and say so."""
     records.add_plan(store, run.id, envelope.get("plan") or envelope.get("summary") or json.dumps(envelope),
-                    envelope.get("ideals_addressed") or [], envelope.get("conflicts") or [])
-    records.set_state(store, run.id, "awaiting_approval", driver_pid=None, driver_started=None, child_pgid=None)
+                     envelope.get("ideals_addressed") or [], envelope.get("conflicts") or [])
+    records.await_operator(store, run.id)
     tell(store, run.id, f"Run {run.id}: {step.name} ready — waiting for you", " ".join(run.request.split()[:12]))
 
 
 def set_aside(store, run, checkout) -> None:
     """Keep what this run built on a side branch, and put its checkout back to what was last approved."""
-    approvals = [event for event in store.query("events", {"run_id": run.id, "kind": "approved"})]
+    approvals = store.query("events", {"run_id": run.id, "kind": "approved"})
     back_to = approvals[-1].payload["commit"] if approvals else run.base_commit
     aside = checkout.set_aside(back_to)
     records.event(store, run.id, "set_aside", f"the build so far is kept on {aside}",

@@ -26,11 +26,17 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-VERSION = 2     # of the schema's column types; an older home is refused, not misread
 
+# ---- the schema: where it started, and every change since, each in one place ----
+#
+# A new home is made at version 2 and brought up to date like any other. A home at an
+# earlier version than 2 is refused, not misread.
+#
 # A column typed "JSON TEXT" is stored as JSON text and handed back parsed.
 # A column typed "BOOLEAN" is stored as 1 or 0 and handed back as True or False.
-SCHEMA = """
+
+OLDEST = 2
+BASE = """
 CREATE TABLE IF NOT EXISTS runs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     request         TEXT    NOT NULL,
@@ -49,7 +55,6 @@ CREATE TABLE IF NOT EXISTS runs (
     child_pgid      INTEGER,
     created_at      TEXT    NOT NULL,
     ended_at        TEXT,
-    workflow        TEXT    NOT NULL DEFAULT 'change',
     CHECK ((state = 'ended') = (outcome IS NOT NULL))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_open_run ON runs ((state != 'ended')) WHERE state != 'ended';
@@ -64,7 +69,6 @@ CREATE TABLE IF NOT EXISTS plans (
     created_at        TEXT    NOT NULL,
     PRIMARY KEY (run_id, version)
 );
-DROP INDEX IF EXISTS one_approved_plan;     -- a run may now be approved more than once: spec, then plan
 CREATE TABLE IF NOT EXISTS steps (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id         INTEGER NOT NULL REFERENCES runs(id),
@@ -107,7 +111,28 @@ CREATE INDEX IF NOT EXISTS steps_by_run  ON steps  (run_id, id);
 """
 
 
-ADDED_SINCE = [("runs", "workflow", "TEXT NOT NULL DEFAULT 'change'")]      # (table, column, definition)
+def _v3_kind_of_run(db) -> None:
+    """Every run has a kind (FR-066). Homes made before this version may have it as `workflow`."""
+    columns = [row["name"] for row in db.execute("PRAGMA table_info(runs)")]
+    if "workflow" in columns:
+        db.execute("ALTER TABLE runs RENAME COLUMN workflow TO run_kind")
+    else:
+        db.execute("ALTER TABLE runs ADD COLUMN run_kind TEXT NOT NULL DEFAULT 'change'")
+
+
+def _v4_question_is_a_failure(db) -> None:
+    """A step that asked a question is recorded as such, not as a failed check."""
+    made = db.execute("SELECT sql FROM sqlite_master WHERE name = 'steps'").fetchone()["sql"]
+    widened = made.replace("'malformed','check')", "'malformed','check','question')")
+    db.execute(widened.replace("CREATE TABLE steps", "CREATE TABLE steps_widened", 1))
+    db.execute("INSERT INTO steps_widened SELECT * FROM steps")
+    db.execute("DROP TABLE steps")
+    db.execute("ALTER TABLE steps_widened RENAME TO steps")
+    db.execute("CREATE INDEX IF NOT EXISTS steps_by_run ON steps (run_id, id)")
+
+
+MIGRATIONS = [_v3_kind_of_run, _v4_question_is_a_failure]     # each takes a home up one version
+VERSION = OLDEST + len(MIGRATIONS)
 
 
 def now() -> str:
@@ -182,18 +207,24 @@ class Gateway:
                                   check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode = WAL")
-        is_new = not self.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'runs'").fetchone()
-        if not is_new and self.db.execute("PRAGMA user_version").fetchone()[0] != VERSION:
-            raise RuntimeError(f"{self.home / 'factory.db'} was made by an earlier version of the factory."
-                               " Move it aside, or point TOMFACTORY_HOME at a new directory.")
-        self.db.executescript(SCHEMA)
-        for table, column, definition in ADDED_SINCE:      # columns a store made earlier does not have yet
-            if column not in [row["name"] for row in self.db.execute(f"PRAGMA table_info({table})")]:
-                self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-        self.db.execute(f"PRAGMA user_version = {VERSION}")
         self.files = Files(self.home)
         self._catalog: dict = {}
         self._depth = 0
+        self._bring_up_to_date()
+
+    def _bring_up_to_date(self) -> None:
+        version = self.db.execute("PRAGMA user_version").fetchone()[0]
+        if not self.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'runs'").fetchone():
+            self.db.executescript(BASE)
+            version = OLDEST
+        elif version < OLDEST or version > VERSION:
+            raise RuntimeError(f"{self.home / 'factory.db'} was made by a version of the factory this one cannot"
+                               " read. Move it aside, or point TOMFACTORY_HOME at a new directory.")
+        for number, migrate in enumerate(MIGRATIONS, start=OLDEST + 1):
+            if number > version:
+                with self.transaction():
+                    migrate(self.db)
+                    self.db.execute(f"PRAGMA user_version = {number}")
 
     # -- the five operations --
 

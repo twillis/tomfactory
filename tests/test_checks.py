@@ -7,7 +7,7 @@ from factory import checks, config, operations
 from factory.checks import CheckContext
 from factory.workflow import Step
 from factory.workspace import Workspace
-from tests.conftest import git
+from tests.conftest import commit_files, git
 
 PASSING = "def test_ok():\n    assert True\n"
 FAILING = "def test_bad():\n    assert 1 == 2, 'one is not two'\n"
@@ -22,14 +22,8 @@ def make(tmp_path):
         made.append(1)      # a test may build several; each gets its own folders
         tmp = tmp_path / str(len(made))
         tmp.mkdir()
-        target = operations.init_target(tmp / "target")
-        for name, text in (files or {}).items():
-            (target / name).parent.mkdir(parents=True, exist_ok=True)
-            (target / name).write_text(text)
-        if files:
-            git(target, "add", "-A")
-            git(target, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "files")
-        checkout = Workspace.create(target, tmp / "ws", "factory/1-test")
+        target = commit_files(operations.init_target(tmp / "target"), files)
+        checkout = Workspace.create(target, tmp / "ws", "factory/1-test", git(target, "rev-parse", "HEAD"))
         settings = config.read_target_config(target, checkout.base_commit)
         groups = []
         context = CheckContext(run=None, step=Step("x", "code", on_pass="y"), checkout=checkout,
@@ -47,13 +41,26 @@ def run(name, context):
     return result
 
 
+NO_TESTS = {"tests/helper.py": "x = 1\n"}
+
+
+@pytest.mark.fr("FR-007")
 @pytest.mark.fr("FR-008")
-def test_baseline_passes_on_green_and_on_no_tests_and_fails_otherwise(make, tmp_path):
-    none = run("baseline", make())
-    assert none.passed and "no prior tests" in none.note
-    assert run("baseline", make({"tests/test_ok.py": PASSING})).passed
-    broken = run("baseline", make({"tests/test_bad.py": FAILING}))
-    assert not broken.passed and "already failing" in broken.note and "one is not two" in broken.note
+@pytest.mark.parametrize("check, files, passes, note, output", [
+    ("baseline", None, True, "no prior tests", ""),
+    ("baseline", {"tests/test_ok.py": PASSING}, True, "", "1 passed"),
+    ("baseline", {"tests/test_bad.py": FAILING}, False, "already failing", "one is not two"),
+    ("tests_fail_first", {"tests/test_bad.py": FAILING}, True, "", "one is not two"),
+    ("tests_fail_first", {"tests/test_ok.py": PASSING}, False, "pass before", ""),
+    ("tests_fail_first", NO_TESTS, False, "no tests", ""),
+    ("tests_pass", {"tests/test_ok.py": PASSING}, True, "", "1 passed"),
+    ("tests_pass", {"tests/test_bad.py": FAILING}, False, "fail", "test_bad"),
+])
+def test_a_check_that_runs_the_tests_judges_by_its_exit_code_and_keeps_what_they_printed(
+        make, check, files, passes, note, output):
+    result = run(check, make(files))
+    assert result.passed is passes and note in result.note and output in result.output
+    assert result.contained == {"network": False}
 
 
 @pytest.mark.fr("FR-006")
@@ -69,33 +76,6 @@ def test_edge_cases_must_be_stated(make):
     assert not run("edge_cases_stated", make(envelope={})).passed
     result = run("edge_cases_stated", make(envelope={"edge_cases": ["empty name"]}))
     assert result.passed
-
-
-@pytest.mark.fr("FR-007")
-def test_tests_fail_first_needs_a_real_failure_not_an_empty_run(make):
-    red = run("tests_fail_first", make({"tests/test_bad.py": FAILING}))
-    assert red.passed and "one is not two" in red.note
-    green = run("tests_fail_first", make({"tests/test_ok.py": PASSING}))
-    assert not green.passed and "pass before" in green.note
-    empty = run("tests_fail_first", make({"tests/helper.py": "x = 1\n"}))
-    assert not empty.passed and "no tests" in empty.note
-
-
-@pytest.mark.fr("FR-008")
-def test_tests_pass_only_on_a_clean_run_and_carries_the_output(make):
-    good = run("tests_pass", make({"tests/test_ok.py": PASSING}))
-    assert good.passed and "1 passed" in good.note
-    bad = run("tests_pass", make({"tests/test_bad.py": FAILING}))
-    assert not bad.passed and "one is not two" in bad.note and "test_bad" in bad.note
-
-
-@pytest.mark.fr("FR-012")
-def test_verdict_accept_passes_only_for_accept_and_carries_the_reasons(make):
-    assert run("verdict_accept", make(envelope={"verdict": "accept", "reasons": ["fine"], "ideals_broken": []})).passed
-    rejected = run("verdict_accept", make(envelope={"verdict": "reject", "reasons": ["no heading", "wrong file"],
-                                                    "ideals_broken": ["layers are mixed"]}))
-    assert not rejected.passed
-    assert "no heading" in rejected.note and "wrong file" in rejected.note and "layers are mixed" in rejected.note
 
 
 @pytest.mark.fr("FR-009")
@@ -132,7 +112,7 @@ def test_a_set_of_tests_larger_than_the_codebases_budget_is_refused(make):
     (context.checkout.path / "tests" / "test_big.py").write_text("x = 1\n" * 40)
     context.target_config = dataclasses.replace(context.target_config, test_budget_lines=30)
     over = run("tests_within_budget", context)
-    assert not over.passed and "40" in over.note and "30" in over.note and "once" in over.note
+    assert not over.passed and "40" in over.note and "30" in over.note and "proportionate" in over.note
     context.target_config = dataclasses.replace(context.target_config, test_budget_lines=40)
     assert run("tests_within_budget", context).passed
     context.target_config = dataclasses.replace(context.target_config, test_budget_lines=0)      # 0: no limit

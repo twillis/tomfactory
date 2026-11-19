@@ -26,6 +26,11 @@ def available(root) -> bool:
     return (pathlib.Path(root) / SCRIPTS / "setup-plan.sh").is_file()
 
 
+def owns(name) -> bool:
+    """Is this file, by its path in a codebase, one of spec kit's documents?"""
+    return name == FEATURE_FILE or name == "specs" or name.startswith("specs/")
+
+
 def constitution(root) -> str:
     """The codebase's own constitution, or "" if it has none. An unfilled template is none."""
     path = pathlib.Path(root) / ".specify" / "memory" / "constitution.md"
