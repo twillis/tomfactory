@@ -33,6 +33,13 @@ The containment the factory promises therefore stops at the agents and does not 
 - **Contained**: running so that only the run's own checkout, and the read-only tools the code needs, are visible, with the further limits in the requirements.
 - **Stand-in test**: a harmless test that tries each of the things in the table above and reports which it could do, without doing harm.
 
+## Clarifications
+
+### Session 2026-11-19
+
+- Q: When a codebase allows its tests the network, should they get the whole network, or only the specific hosts the codebase names? → A: The whole network, for a codebase that allows it; off for everyone else. Named hosts are deferred to phase 2.
+- Q: Beyond the machine's own system tools and the Python the factory runs on, may a codebase name further folders of tools its tests need, to be visible read-only? → A: No. Only the system tools and the factory's Python are visible; a per-codebase list is added when a codebase needs it.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Target code cannot reach the operator's things (Priority: P1)
@@ -118,7 +125,7 @@ Every kind of run the factory has today — changes, tidy runs, spec kit codebas
 
 - **The operator's environment carries secrets.** Tokens and keys are often in environment variables. Target code must not receive the operator's environment wholesale; it gets only what it needs to run.
 - **Tests need a temporary folder.** They get one, private to the step, discarded afterwards.
-- **Tests need tools installed under the operator's home**, such as a language runtime or its libraries. Those are visible, read-only, and nothing else of the home is.
+- **Tests need tools installed under the operator's home.** The Python the factory runs on, and its libraries, are visible read-only. Other tools there, such as another language's runtime, are not: such a codebase's tests fail contained until a per-codebase list of tool folders is added (out of scope).
 - **A codebase with the network allowed**: local services reached over the machine's own network become reachable too. That is part of what the operator accepts by allowing it, and the run's record says so.
 - **The factory's own code-running steps** that run git, or the notification command, are not target code and are not contained by this feature.
 - **A step stopped by the operator or a time limit** while target code is running: nothing it started survives.
@@ -133,7 +140,7 @@ Requirement numbers continue the factory's single sequence from feature 001, so 
 **Containment**
 
 - **FR-068**: Every time the factory executes target code, that code MUST run contained.
-- **FR-069**: Contained code MUST be able to read and write the run's checkout, and to read the tools it needs to run. It MUST NOT be able to read the operator's home directory otherwise, the factory's code, the factory's records, or the operator's credentials.
+- **FR-069**: Contained code MUST be able to read and write the run's checkout, and to read the tools it needs to run. The tools it may read are the machine's own system tools and the Python the factory runs on, with its libraries, and nothing else. It MUST NOT be able to read the operator's home directory otherwise, the factory's code, the factory's records, or the operator's credentials.
 - **FR-070**: Contained code MUST NOT be able to make any write outside the checkout that lasts beyond the step. A private temporary folder MUST be available to it and discarded when the step ends.
 - **FR-071**: Contained code MUST NOT be able to reach the network, unless its codebase allows it (FR-075), and MUST NOT be able to reach local services through the filesystem, such as the container daemon's socket, in either case.
 - **FR-072**: Nothing contained code starts MUST outlive its step, whether the step ends normally, at its time limit, or because the run was stopped.
@@ -145,7 +152,7 @@ Requirement numbers continue the factory's single sequence from feature 001, so 
 
 **The network, per codebase**
 
-- **FR-075**: A target codebase MAY allow network access for its tests in its committed settings, read from the commit the run started at. Without that setting its tests MUST NOT reach the network.
+- **FR-075**: A target codebase MAY allow network access for its tests in its committed settings, read from the commit the run started at. The allowance is all or nothing: a codebase that allows it gets the whole network, including services on the local network. Without that setting its tests MUST NOT reach the network.
 - **FR-076**: Each step record that ran target code MUST show that it ran contained and whether the network was allowed.
 
 **Keeping it in place**
@@ -186,6 +193,7 @@ Requirement numbers continue the factory's single sequence from feature 001, so 
 ## Out of Scope (later)
 
 - Containing the agent program itself (phase 2).
-- Per-codebase allowances beyond the network.
+- Per-codebase allowances beyond the network, and allowing only named hosts (phase 2).
+- A per-codebase list of extra read-only tool folders.
 - Resource limits.
 - Other operating systems.
