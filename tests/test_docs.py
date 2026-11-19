@@ -30,4 +30,5 @@ def test_the_readme_names_every_command_and_every_step():
         assert f"factory {command}" in readme, f"README.md does not show `factory {command}`"
     for step in workflow.STEPS:
         assert f"`{step.name}`" in readme, f"README.md does not mention the {step.name} step"
-    assert "permissions" in readme and "sandbox" in readme.lower()
+    for limit in ("contained", "bubblewrap", "kernel", "not contained by the factory"):     # the limits, stated
+        assert limit in readme, f"README.md does not state: {limit}"
