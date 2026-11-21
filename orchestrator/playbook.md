@@ -52,7 +52,8 @@ specification already exists in its own documents.
 
 - Never change the factory's code while a run is open: each step puts back the factory as it was
   when the run began. Write a change record instead, and build it after.
-- Watch with a background loop on `factory status`; do not poll by hand.
+- Watch with `factory watch` as a background command: it follows the run's events and exits within a
+  second of the run stopping for him or ending. Do not poll `factory status` in a sleep loop.
 - Usage limits stop runs mid-step as needs-me. `factory resume <n>` after the reset.
 
 ## At the approval

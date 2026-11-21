@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 386 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 387 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -167,7 +167,9 @@ documents under `specs/` hold the plan, and the record is written at the end onl
 
 ## Using the factory
 
-Commands are run from this folder as `uv run python -m factory <command>`. Below they are
+Commands are run from this folder as `uv run python -m factory <command>`, or from any directory as
+`uv run --project /path/to/tomfactory python -m factory <command>`: `uv sync` installs the factory into
+its own environment. Below they are
 written `factory <command>` for short; an alias makes that literal:
 
 ```bash

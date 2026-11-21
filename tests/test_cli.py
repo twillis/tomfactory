@@ -214,3 +214,12 @@ def test_doctor_reports_each_thing_the_factory_needs(capsys, home, monkeypatch):
     code, out = run_cli(capsys, "doctor")
     assert code == 1 and "you are not signed in" in out
     assert [line[:2] for line in out.splitlines() if line.strip()].count("ok") == 4
+
+
+@pytest.mark.fr("FR-001")
+def test_runs_from_any_directory(tmp_path):
+    """The factory is installed in its own environment, so its commands work from outside its folder."""
+    import subprocess
+    import sys
+    result = subprocess.run([sys.executable, "-m", "factory", "--help"], cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
