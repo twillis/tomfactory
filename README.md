@@ -46,8 +46,56 @@ not guide, no way to tidy without a failing test first, and work lost to a usage
 became a change to the factory, made test first. The record of each is in
 `specs/001-near-loop-factory/changes/`.
 
-About 2,500 lines of Python, 314 tests, standard library plus pytest. What is next is in
+Then it was used on something bigger: **thirteen runs (18 to 30)** built the first layers of
+bttr_erp, a schema-driven, multi-tenant system like an ERP, in Python, from a specification the
+operator wrote first. Its first package needed SQLAlchemy, Pyramid and a PostgreSQL driver, and
+containment let in none of them, so a codebase can now name its tools and a setup command. The
+runs on Opus and Fable showed planning took two-thirds of the time, so a run now waits once, at
+the plan, and then goes to the end as a sprint, reporting what deviated instead of going back to
+planning. Every run ends with a retro by the agents and a time-and-cost table, and the retros
+drove most of what followed: a plan check before the approval, the tests before and after the
+build in every record, and a `sprint` cycle for a codebase whose specification already exists,
+since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
+
+About 3,500 lines of Python, 386 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
+
+## Driving it from Claude Code: `/factory`
+
+You can run the factory by hand with the commands below. Or let Claude Code drive it for you:
+write the requests, prepare what the agents need, watch the runs, read every plan and result,
+and bring you only the decisions that are yours. That is the `/factory` command, and it is how
+the bttr_erp runs (18 to 30) were done.
+
+It is two files in `orchestrator/`:
+
+- `playbook.md` is what the orchestrator does: starting a session, writing a request, what to
+  do at the approval and when a run ends, improving the factory between runs, recording your
+  rulings, and how to talk to you. It is the lessons of those thirteen runs, written down.
+- `factory.md` is the command itself, which loads the playbook.
+
+To install it on a machine, after the steps under "What it needs" below:
+
+```bash
+git clone https://github.com/twillis/tomfactory.git
+cd tomfactory
+uv sync
+uv run python -m factory doctor
+orchestrator/install.sh              # /factory in every project, as ~/.claude/commands/factory.md
+orchestrator/install.sh ~/my-app     # or in one project only, as ~/my-app/.claude/commands/factory.md
+```
+
+The installer writes the command with this clone's path filled in; run it again if you move the
+clone. Then, in Claude Code, in the codebase you want built:
+
+```text
+/factory status
+/factory the next capability in the run order
+/factory retro
+```
+
+The orchestrator approves nothing and merges nothing without your word. When you change how you
+want it to work, change `orchestrator/playbook.md`.
 
 ## How a run flows
 
