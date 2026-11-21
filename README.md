@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 387 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 388 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -239,6 +239,10 @@ factory show --step 12              # one step in full, with everything the agen
 factory stop                        # stop a run; nothing it started is left running
 factory resume                      # carry on a run that stopped as needs-me, from where it stopped
 ```
+
+Resuming puts back whatever a stopped agent left half-done. Where the step that stopped is the factory's
+own (the tests failing after the build used its attempts), the build's work is kept: mend what was
+wrong, commit it in the run's checkout, and the resumed step checks the work again.
 
 Every command that takes a run works on the most recent run unless you give its number:
 `factory show 3`. `factory plan`, `factory status` and `factory show` take `--json`.

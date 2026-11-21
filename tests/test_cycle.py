@@ -2,6 +2,7 @@
 
 Each test scripts what the five personas "do" and asserts what the factory makes of it.
 """
+import pathlib
 import shutil
 
 import pytest
@@ -308,6 +309,27 @@ def test_a_stopped_run_resumes_from_its_step_keeping_its_work_and_dropping_the_h
     assert git(target, "show", f"{run.branch}:CHANGELOG.md") == "- Added a greeting."     # not the half-written one
     history = [e for e in store.query("events", {"run_id": run.id, "kind": "run_state"}) if "resumed_from" in e.payload]
     assert history and "5-hour limit" in history[0].payload["resumed_from"]["reason"]
+
+
+@pytest.mark.fr("FR-067")
+def test_resuming_after_failed_tests_keeps_what_the_build_wrote(cycle, home):
+    """Found on bttr_erp's run 43: the build was right and a test was wrong, the builder may not change tests,
+    and resuming after the operator mended the test threw the build's work away, so the tests failed again."""
+    mistaken = dict(WRITE_TESTS, files={"tests/test_hello.py": TEST.replace("'hello'", "'hullo'")})
+    run, _, store, target = cycle(script(write_tests=mistaken, build=[BUILD, BUILD])[:4], attempts=2)
+    assert run.outcome == "needs-me" and run.current_step == "test"
+
+    checkout = pathlib.Path(run.workspace)
+    (checkout / "tests" / "test_hello.py").write_text(TEST)             # the operator mends the test, and commits it
+    git(checkout, "add", "-A", "tests")
+    git(checkout, "commit", "-q", "-m", "the operator's fix to a test")
+    fake = FakeAgent([ARCHITECT, DOCUMENT, REVIEW])
+    drive_with(fake)
+    resumed = operations.resume(run.id)
+
+    assert resumed.outcome == "accepted", resumed.reason
+    assert names(store, run).count("build") == 2                        # the build is not asked again
+    assert git(target, "show", f"{run.branch}:hello.py") == CODE.strip()
 
 
 STOPPED = script(build={"error": "usage limit"})[:3]

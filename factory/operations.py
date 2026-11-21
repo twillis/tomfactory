@@ -243,9 +243,14 @@ def resume(run_id=None) -> dict:
     other = records.open_run(store)
     if other:
         raise Refused(f"run {other.id} has not ended; let it finish, or stop or abandon it, before resuming another")
-    Workspace.of(run).undo()            # whatever the stopped step left half-done
+    steps = driver.table_of(run)
+    stopped_at = next(entry for entry in steps if entry.name == run.current_step)
+    if stopped_at.kind == "agent":
+        Workspace.of(run).undo()        # whatever the stopped agent left half-done
+    # A code step writes nothing of its own: what is uncommitted when one stops is the work it was
+    # checking (the build's, when the tests failed), and the step that carries on checks it again.
     own_files.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))   # the factory as it is now
-    state = "planning" if workflow.is_planning(run.current_step, driver.table_of(run)) else "working"
+    state = "planning" if workflow.is_planning(run.current_step, steps) else "working"
     reopened = records.reopen(store, run.id, state)
     run_record.write(store, reopened, Workspace.of(reopened), f"factory: resumed (run {run.id})")    # FR-094
     return _launch_at(store, reopened, run.current_step)
