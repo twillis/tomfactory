@@ -35,3 +35,11 @@ In your reply's JSON object:
 - `summary`: your overall view of the change, in a sentence or two
 - `suggestions`: things that would make the code better; empty if none
 - `warnings`: things that will cause trouble if left; empty if none
+
+## The tests before the build
+
+What the new tests said when they were first run, before anything was built:
+
+```text
+{{red_output}}
+```

@@ -29,6 +29,10 @@ CAPABILITIES = {
     "read+edit": ["--tools", "Read,Glob,Grep,Edit,Write", "--permission-mode", "acceptEdits"],
 }
 
+# A step asks for a grade (workflow.GRADES); only this table knows which model that is (FR-088).
+# Without it every step ran on the program's own default, which was the costliest model there is.
+MODELS = {"standard": "claude-opus-5-5", "strongest": "claude-fable-5-2"}
+
 # Keep the operator's own settings, hooks and connected tools out of factory runs.
 ISOLATION = ["--setting-sources", "", "--strict-mcp-config", "--no-session-persistence"]
 
@@ -56,8 +60,8 @@ def run_agent(persona, prompt, cwd, capabilities, timeout, on_event, raw_sink, s
         raise ValueError(f"capabilities must be one of {', '.join(CAPABILITIES)}; got {capabilities!r}")
     command = [PROGRAM, "-p", "--output-format", "stream-json", "--verbose", *ISOLATION,
                "--append-system-prompt", persona, *CAPABILITIES[capabilities]]
-    if model:
-        command += ["--model", model]
+    if model:       # a grade, or for a one-off call the program's own name for a model
+        command += ["--model", MODELS.get(model, model)]
 
     reader = _Reader(cwd, on_event, raw_sink)
     with tempfile.TemporaryFile("w+") as task:

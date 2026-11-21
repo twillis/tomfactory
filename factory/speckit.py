@@ -9,9 +9,8 @@ This applies only to a target codebase that has spec kit set up. It decides noth
 """
 import json
 import pathlib
-import re
 
-from factory import agent, proc, workspace
+from factory import agent, proc
 
 SCRIPTS = pathlib.Path(".specify") / "scripts" / "bash"
 FEATURE_FILE = ".specify/feature.json"
@@ -97,12 +96,15 @@ def _feature_of_this_run(checkout):
 
 
 def _specify(checkout, request) -> dict:
-    """What /speckit-specify's scripts do: a numbered feature folder holding the spec template."""
+    """What /speckit-specify's scripts do: a feature folder holding the spec template.
+
+    The folder carries the run's branch name, which is made from when the run was requested,
+    so two people specifying at once never make the same folder (FR-087). Spec kit's own
+    script would number it from the folders it can see.
+    """
     feature = _feature_of_this_run(checkout)        # a plan sent back revises the same documents
     if feature is None:
-        specs = checkout.path / "specs"
-        numbers = [int(p.name[:3]) for p in specs.iterdir() if re.match(r"\d{3}-", p.name)] if specs.is_dir() else []
-        feature = f"specs/{max(numbers, default=0) + 1:03d}-{workspace.slug(request, words=4) or 'feature'}"
+        feature = f"specs/{pathlib.PurePosixPath(checkout.branch).name}"
         (checkout.path / feature).mkdir(parents=True)
         template = _script(checkout, "resolve-template.sh", "spec-template", "--json")["TEMPLATE_CONTENT"]
         (checkout.path / feature / "spec.md").write_text(template)

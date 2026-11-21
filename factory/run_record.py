@@ -45,8 +45,61 @@ def render(store, run, checkout) -> str:
                        and isinstance(s.produced, dict) and "verdict" in s.produced), None)
         if judged:
             lines += [f"## The review: {judged['verdict']}", ""] + [f"- {r}" for r in judged.get("reasons", [])] + [""]
+        if judged and "unbuilt" in judged:            # a spec kit sprint ends with its review (FR-090)
+            lines += _sprint_review(judged, next((s.produced for s in reversed(steps) if s.name == "architecture_review"
+                                                  and isinstance(s.produced, dict)), {}))
+        lines += _tests_before_and_after(steps)
+        lines += ["## Time and cost", "", *facts(store, run), ""]
         lines += _section("Commits on the run's branch", [f"`{c}`" for c in checkout.log_since_base()])
     return "\n".join(lines)
+
+
+def _sprint_review(judged, architect) -> list:
+    """What the operator decides at merge: every deviation the final review found, and the architect's advice."""
+    parts = [("Unbuilt", judged.get("unbuilt")), ("Requirement changes proposed", judged.get("requirement_changes")),
+             ("Ideals reported broken", judged.get("ideals_broken")), ("Implementation details", judged.get("details")),
+             ("Architect's warnings", architect.get("warnings")), ("Architect's suggestions", architect.get("suggestions"))]
+    lines = ["## Sprint review", "", "For the operator at merge: what to take into the next request.", ""]
+    for heading, items in parts:
+        lines += [f"### {heading}", "", *([f"- {item}" for item in items] if items else ["- none"]), ""]
+    return lines
+
+
+def _tests_before_and_after(steps) -> list:
+    """What the new tests said before the build, and the tests after it, as the factory ran them (FR-095)."""
+    def output(check):
+        ran = [s for s in steps if (s.produced or {}).get("output")
+               and any(c["name"] == check for c in s.checks or [])]
+        return ran[-1].produced["output"] if ran else ""
+    before, after = output("tests_fail_first"), output("tests_pass")
+    if not (before or after):
+        return []
+    return ["## The tests before and after the build", "",
+            "### Before the build", "", "```text", before.strip() or "(not run)", "```", "",
+            "### After the build", "", "```text", after.strip() or "(not run)", "```", ""]
+
+
+def facts(store, run) -> list:
+    """The run's time and cost, as the factory measured them (FR-092). Lines of a markdown table and its totals."""
+    steps = [s for s in store.query("steps", {"run_id": run.id}) if s.ended_at]
+    lines = ["| Step | Attempt | Outcome | Minutes | Cost |", "|------|---------|---------|---------|------|"]
+    minutes = cost = waited = 0.0
+    for before, s in zip([None, *steps], steps):
+        took = _minutes(s.started_at, s.ended_at)
+        minutes, cost = minutes + took, cost + (s.cost_estimate or 0)
+        if before:
+            waited += max(0.0, _minutes(before.ended_at, s.started_at))
+        outcome = "passed" if s.passed else s.failure
+        lines.append(f"| {s.name} | {s.attempt} | {outcome} | {took:.1f} | ${(s.cost_estimate or 0):.2f} |")
+    lines += ["", f"Total: {minutes:.1f} minutes of steps, ${cost:.2f}.",
+              f"Waiting for the operator, and between steps: {waited:.1f} minutes."]
+    return lines
+
+
+def _minutes(started, ended) -> float:
+    def at(text):
+        return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    return (at(ended) - at(started)).total_seconds() / 60
 
 
 def _section(heading, items) -> list:

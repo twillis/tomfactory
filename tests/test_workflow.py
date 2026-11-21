@@ -39,7 +39,7 @@ def path_through(table):
 
 @pytest.mark.fr("FR-006")
 @pytest.mark.fr("FR-037")
-@pytest.mark.parametrize("table", tables.TABLES, ids=["change", "spec-kit", "tidy-tests", "tidy-code"])
+@pytest.mark.parametrize("table", tables.TABLES, ids=["change", "spec-kit", "sprint", "tidy-tests", "tidy-code"])
 def test_every_table_names_only_steps_checks_inputs_personas_and_prompts_that_exist(table):
     driver.validate(table)
 
@@ -176,9 +176,7 @@ def test_what_follows_a_step(name, result, attempts, expected):
 @pytest.mark.fr("FR-059")
 @pytest.mark.parametrize("verdict, attempts, expected", [
     ("rework", {}, Run("build")),
-    ("replan", {}, Replan("specify")),
-    ("replan", {"specify": LIMIT}, ended("needs-me", "specify", "3")),
-    ("reject", {}, ended("rejected", "why")),
+    ("rework", {"build": 2}, Run("retro")),                   # unbuilt work goes back once, then is a deviation
 ])
 def test_a_judging_steps_verdict_chooses_its_route(verdict, attempts, expected):
     got = next_step(step("converge", tables.SPEC_KIT_STEPS), failed("verdict", "why", verdict), attempts, LIMIT)
@@ -197,7 +195,6 @@ def test_the_operators_three_decisions():
     plan = step("plan")
     assert after_wait("approve", plan) == Run("baseline")
     assert after_wait("revise", plan) == Run("plan")
-    assert after_wait("revise", step("clarify", tables.SPEC_KIT_STEPS)) == Run("specify")   # the stage's start
     assert after_wait("abandon", plan) == End("rejected", "abandoned by operator")
     with pytest.raises(ValueError):
         after_wait("postpone", plan)

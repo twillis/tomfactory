@@ -14,6 +14,7 @@ from pathlib import PurePath
 KINDS = ("agent", "code")                               # of step
 CAPABILITIES = ("read", "read+edit")
 SCOPES = ("nothing", "tests", "not_tests", "docs", "spec")      # what a step may change in the checkout
+GRADES = ("standard", "strongest")      # how strong a model an agent step is given (FR-088)
 OUTCOMES = ("accepted", "rejected", "needs-me")
 FAILURES = ("timeout", "error", "guard", "malformed", "check", "question")     # how a step can fail
 ACCEPT = "accept"               # the verdict that passes a judging step; every other verdict is a route
@@ -50,8 +51,14 @@ class StepResult:
 
 @dataclass(frozen=True)
 class Rework:
-    """Run a step again (an earlier one, or the same one), telling it what failed."""
+    """Run a step again (an earlier one, or the same one), telling it what failed.
+
+    With `at_most`, once `step` has run that many times this route goes on to the step named
+    `then` instead: the finding is recorded, not chased.
+    """
     step: str
+    at_most: int | None = None
+    then: str | None = None
 
 
 @dataclass(frozen=True)
@@ -111,7 +118,8 @@ class Step:
     may_ask: bool = True                # an agent step may ask a question instead of finishing
     speckit: tuple = ()                 # spec kit commands this step follows, where the target uses spec kit
     timeout: int | None = None          # seconds; None means the target's step_timeout_seconds
-    model: str | None = None            # agent steps; unused in this stage
+    ideals_stop: bool = True            # a judging step: a broken ideal stops the run; False reports it only
+    model: str = "standard"             # agent steps: one of GRADES; which model that is, only agent.py knows
 
     def __post_init__(self):
         def wrong(problem):
@@ -124,6 +132,8 @@ class Step:
             wrong(f"capabilities must be one of {CAPABILITIES}")
         if self.may_change not in SCOPES:
             wrong(f"may_change must be one of {SCOPES}")
+        if self.model not in GRADES:
+            wrong(f"model must be one of {GRADES}")
         if (self.on_pass == WAIT) != bool(self.on_approve):
             wrong("a waiting step, and only a waiting step, says where approval leads (on_approve)")
         if bool(self.routes) != ("verdict" in self.envelope.values()):
@@ -203,6 +213,8 @@ def next_step(step, result, attempts, limit) -> Run | Wait | Ask | Replan | End:
     if result.failure == "check":
         route = step.routes.get(result.verdict) or step.on_fail     # a judging step's verdict says where
         if isinstance(route, Rework):
+            if route.at_most and attempts.get(route.step, 0) >= route.at_most:
+                return Run(route.then)
             return _rework(route.step, step, note, attempts, limit)
         if isinstance(route, Replan):
             if attempts.get(route.step, 0) >= limit:

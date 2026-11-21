@@ -48,7 +48,7 @@ def stub(tmp_path, monkeypatch):
     work = tmp_path / "work"
     work.mkdir()
 
-    def call(stream=None, capabilities="read", timeout=10.0, **env):
+    def call(stream=None, capabilities="read", timeout=10.0, model=None, **env):
         if stream:
             monkeypatch.setenv("STUB_STREAM", str(STREAMS / stream))
         for name, value in env.items():
@@ -60,7 +60,7 @@ def stub(tmp_path, monkeypatch):
                 capabilities=capabilities, timeout=timeout,
                 on_event=lambda kind, summary, payload: events.append((kind, summary, payload, time.monotonic())),
                 raw_sink=lambda line: raw.append((line, time.monotonic())),
-                stderr_file=err, on_child=groups.append)
+                stderr_file=err, on_child=groups.append, model=model)
         record = json.loads((tmp_path / "record.json").read_text())
         return result, events, raw, groups, record
 
@@ -154,6 +154,20 @@ def test_persona_prompt_and_capabilities_reach_the_program(stub):
     assert "--permission-mode" not in argv and "Bash" not in " ".join(argv)
     assert argv[argv.index("--setting-sources") + 1] == "" and "--strict-mcp-config" in argv
     assert "--model" not in argv
+
+
+@pytest.mark.fr("FR-041")
+@pytest.mark.fr("FR-088")
+def test_a_steps_grade_becomes_a_model_here_and_nowhere_else(stub):
+    from factory import workflow
+    assert set(agent.MODELS) == set(workflow.GRADES) and len(set(agent.MODELS.values())) == len(workflow.GRADES)
+    for grade in workflow.GRADES:
+        argv = stub("structured.jsonl", model=grade)[4]["argv"]
+        assert argv[argv.index("--model") + 1] == agent.MODELS[grade]
+    named = pathlib.Path(agent.__file__).parent
+    others = [f.name for f in named.glob("*.py") if f.name != "agent.py"
+              and any(model in f.read_text() for model in agent.MODELS.values())]
+    assert others == []                                                 # no other module names a model
 
     _, _, _, _, record = stub("structured.jsonl", capabilities="read+edit")
     argv = record["argv"]

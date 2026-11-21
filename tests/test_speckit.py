@@ -8,7 +8,7 @@ import shutil
 
 import pytest
 
-from factory import operations, speckit, tables
+from factory import operations, records, speckit, tables
 from factory.store import open_store
 from factory.workspace import Workspace
 from tests.conftest import ARCHITECT, BUILD, commit_files, DOCUMENT, drive_with, git, PLAN, to_the_end, WRITE_TESTS
@@ -16,8 +16,15 @@ from tests.fake_agent import FakeAgent
 
 pytestmark = pytest.mark.skipif(shutil.which("specify") is None, reason="the specify command is not installed")
 
-FEATURE = "specs/001-add-a-greeting-page"
+WHEN = "20261119-145203"                          # every run in this file is requested at this moment
+BRANCH = f"factory/{WHEN}-add-a-greeting-page"
+FEATURE = f"specs/{WHEN}-add-a-greeting-page"     # the feature folder carries the branch's name (FR-087)
 REQUEST = "Add a greeting page"
+
+
+@pytest.fixture(autouse=True)
+def requested_at_a_known_time(monkeypatch):
+    monkeypatch.setattr(records, "stamp", lambda moment: WHEN)
 
 
 @pytest.fixture
@@ -25,10 +32,12 @@ def kit_target(tmp_path):
     return operations.init_target(tmp_path / "kit-target", spec_kit=True)
 
 
+RETRO = {"envelope": {"summary": "a clean sprint", "worked": ["one approval"], "did_not": [],
+                      "opportunities": [], "threats": []}}
 ACCEPT = {"verdict": "accept", "unbuilt": [], "details": ["a dict was used where the plan said a list"],
           "requirement_changes": [], "reasons": ["it matches the approved documents"], "ideals_broken": []}
 KIT_ORDER = ["specify", "clarify", "plan", "tasks", "analyze", "write_tests", "build", "architecture_review",
-             "document", "converge"]
+             "document", "converge", "retro"]
 
 
 def kit_script(**changes):
@@ -48,6 +57,7 @@ def kit_script(**changes):
                                  "findings": []}},
         "write_tests": WRITE_TESTS, "build": BUILD, "architecture_review": ARCHITECT, "document": DOCUMENT,
         "converge": {"envelope": ACCEPT},
+        "retro": RETRO,
     }
     entries.update(changes)
     flat = []
@@ -69,7 +79,7 @@ def test_init_target_can_set_spec_kit_up(kit_target, tmp_path):
 @pytest.fixture
 def specified(kit_target, tmp_path):
     """A checkout of the spec kit target in which this run has specified, planned and listed its tasks."""
-    checkout = Workspace.create(kit_target, tmp_path / "ws", "factory/1-test", git(kit_target, "rev-parse", "HEAD"))
+    checkout = Workspace.create(kit_target, tmp_path / "ws", BRANCH, git(kit_target, "rev-parse", "HEAD"))
     speckit.prepare(("specify", "plan", "tasks"), checkout, REQUEST)
     return checkout
 
@@ -99,13 +109,24 @@ def test_prepare_runs_each_commands_script_and_gives_its_own_instructions(specif
 @pytest.mark.fr("FR-053")
 def test_a_revision_writes_the_same_feature_and_a_new_run_a_new_one(specified, kit_target, tmp_path):
     assert speckit.prepare(("specify", "plan"), specified, REQUEST)["context"]["feature_directory"] == FEATURE
-    assert sorted(p.name for p in (specified.path / "specs").iterdir()) == ["001-add-a-greeting-page"]
+    assert sorted(p.name for p in (specified.path / "specs").iterdir()) == [FEATURE.removeprefix("specs/")]
     specified.commit("first feature")
-    later = Workspace.create(kit_target, tmp_path / "ws2", "factory/2-test", git(kit_target, "rev-parse", "HEAD"))
-    git(later.path, "merge", "-q", "--ff-only", "factory/1-test")
+    later = Workspace.create(kit_target, tmp_path / "ws2", "factory/20261120-090000-another-thing-entirely",
+                             git(kit_target, "rev-parse", "HEAD"))
+    git(later.path, "merge", "-q", "--ff-only", BRANCH)
     later.base_commit = git(later.path, "rev-parse", "HEAD")
     assert speckit.prepare(("specify",), later, "Another thing entirely")["context"]["feature_directory"] \
-        == "specs/002-another-thing-entirely"
+        == "specs/20261120-090000-another-thing-entirely"
+
+
+@pytest.mark.fr("FR-087")
+def test_two_people_specifying_at_once_do_not_make_the_same_feature_folder(kit_target, tmp_path):
+    """Neither checkout has seen the other's work, as on two machines: a counter would give both 001."""
+    base = git(kit_target, "rev-parse", "HEAD")
+    folders = [speckit.prepare(("specify",), Workspace.create(kit_target, tmp_path / who, f"factory/{when}-add-a-page", base),
+                               "Add a page")["context"]["feature_directory"]
+               for who, when in (("hers", "20261120-090000"), ("his", "20261120-090001"))]
+    assert folders == ["specs/20261120-090000-add-a-page", "specs/20261120-090001-add-a-page"]
 
 
 @pytest.mark.fr("FR-056")
@@ -115,7 +136,7 @@ def test_each_spec_kit_stage_has_the_persona_that_uses_it():
     used = {command for s in kit for command in s.speckit}
     assert {"specify", "clarify", "plan", "tasks", "analyze", "implement", "converge"} <= used
     assert all(s.kind == "agent" and s.persona for s in kit if s.speckit)        # a persona follows each one
-    assert [s.name for s in kit if s.on_pass == workflow.WAIT] == ["clarify", "analyze"]   # two approvals
+    assert [s.name for s in kit if s.on_pass == workflow.WAIT] == ["analyze"]   # one approval (FR-057)
     names = [s.name for s in kit]
     assert "converge" in names and "review" not in names                       # converge takes the review's place
 
@@ -129,27 +150,22 @@ def test_a_whole_run_on_a_spec_kit_target_follows_spec_kits_stages(home, kit_tar
     drive_with(fake)
     run = operations.request(REQUEST, kit_target)
 
-    assert (run.state, run.current_step) == ("awaiting_approval", "clarify")                # first: the specification
+    assert (run.state, run.current_step) == ("awaiting_approval", "analyze")    # the one approval: spec, plan, tasks
     assert FEATURE in operations.plan(run.id).text
     on_branch = git(kit_target, "ls-tree", "-r", "--name-only", run.branch).split()
-    assert f"{FEATURE}/spec.md" in on_branch and f"{FEATURE}/plan.md" not in on_branch
+    assert {f"{FEATURE}/spec.md", f"{FEATURE}/plan.md", f"{FEATURE}/tasks.md"} <= set(on_branch)
     assert not [name for name in on_branch if name.startswith("docs/runs/")]      # FR-079: spec kit wrote its own
     assert "Clarifications" in git(kit_target, "show", f"{run.branch}:{FEATURE}/spec.md")
-
-    run = operations.approve(run.id)
-    assert (run.state, run.current_step) == ("awaiting_approval", "analyze")                # second: plan and tasks
-    on_branch = git(kit_target, "ls-tree", "-r", "--name-only", run.branch).split()
-    assert f"{FEATURE}/plan.md" in on_branch and f"{FEATURE}/tasks.md" in on_branch
     assert "agree with the specification" in operations.plan(run.id).text
 
     run = operations.approve(run.id)
     assert run.outcome == "accepted", run.reason
     steps = open_store(home).query("steps", {"run_id": run.id})
     assert [s.name for s in steps] == ["specify", "clarify", "plan", "tasks", "analyze", "baseline", "write_tests",
-                                       "red", "build", "test", "architecture_review", "document", "converge", "finish"]
+                                       "red", "build", "test", "architecture_review", "document", "converge", "retro", "finish"]
     assert [s.persona for s in steps if s.persona] == ["analyst", "analyst", "planner", "planner", "reviewer",
                                                        "test_writer", "code_writer", "architect", "documenter",
-                                                       "reviewer"]
+                                                       "reviewer", "facilitator"]
     by_step = dict(zip(KIT_ORDER, fake.calls))
     for name, commands in {"specify": ["specify"], "clarify": ["clarify"], "plan": ["plan"], "tasks": ["tasks"],
                            "analyze": ["analyze", "checklist"], "write_tests": ["implement"], "build": ["implement"],
@@ -169,31 +185,26 @@ def test_a_whole_run_on_a_spec_kit_target_follows_spec_kits_stages(home, kit_tar
 def test_sending_back_returns_to_the_start_of_the_stage_that_is_waiting(home, kit_target, fake_notify):
     script = kit_script()
     spec, clar, plan, tasks, analyze = script[:5]
-    fake = FakeAgent([spec, clar, spec, clar, plan, tasks, analyze, plan, tasks, analyze])
+    fake = FakeAgent([spec, clar, plan, tasks, analyze, plan, tasks, analyze])
     drive_with(fake)
     run = operations.request(REQUEST, kit_target)
-    run = operations.revise(run.id, "Say what happens for a missing name.")
-    assert (run.state, run.current_step) == ("awaiting_approval", "clarify")
-    assert "missing name" in fake.calls[2]["prompt"] and fake.calls[2]["persona"] == fake.calls[0]["persona"]
-
-    run = operations.approve(run.id)
     run = operations.revise(run.id, "Fewer tasks.")
     assert (run.state, run.current_step) == ("awaiting_approval", "analyze")
     names = [s.name for s in open_store(home).query("steps", {"run_id": run.id})]
-    assert names == ["specify", "clarify", "specify", "clarify", "plan", "tasks", "analyze", "plan", "tasks", "analyze"]
-    assert "Fewer tasks." in fake.calls[7]["prompt"]                                        # the planner, not the analyst
-    assert git(kit_target, "ls-tree", "--name-only", f"{run.branch}:specs").split() == ["001-add-a-greeting-page"]
+    assert names == ["specify", "clarify", "plan", "tasks", "analyze", "plan", "tasks", "analyze"]
+    assert "Fewer tasks." in fake.calls[5]["prompt"]                                        # the planner, not the analyst
+    assert git(kit_target, "ls-tree", "--name-only", f"{run.branch}:specs").split() == [FEATURE.removeprefix("specs/")]
 
 
 @pytest.mark.fr("FR-058")
 @pytest.mark.fr("FR-059")
 def test_converge_sorts_differences_and_only_unbuilt_work_returns_to_the_build(home, kit_target, fake_notify):
     unbuilt = {"envelope": dict(ACCEPT, verdict="rework", unbuilt=["T002 is not done: no farewell"], reasons=[])}
-    fake = FakeAgent(kit_script(converge=[unbuilt]) + [BUILD, ARCHITECT, DOCUMENT, {"envelope": ACCEPT}])
+    fake = FakeAgent(kit_script(converge=[unbuilt], retro=[]) + [BUILD, ARCHITECT, DOCUMENT, {"envelope": ACCEPT}, RETRO])
     run, waits = to_the_end(kit_target, fake, REQUEST)
-    assert run.outcome == "accepted" and waits == 2                 # a detail and unbuilt work never return to the operator
+    assert run.outcome == "accepted" and waits == 1                 # a detail and unbuilt work never return to the operator
     names = [s.name for s in open_store(home).query("steps", {"run_id": run.id})]
-    assert names[-7:] == ["converge", "build", "test", "architecture_review", "document", "converge", "finish"]
+    assert names[-8:] == ["converge", "build", "test", "architecture_review", "document", "converge", "retro", "finish"]
     assert names.count("converge") == 2 and names.count("build") == 2 and names.count("specify") == 1
     assert "T002 is not done: no farewell" in fake.calls[10]["prompt"]          # the code writer is told what is unbuilt
     first = [s for s in open_store(home).query("steps", {"run_id": run.id}) if s.name == "converge"][0]
@@ -201,32 +212,39 @@ def test_converge_sorts_differences_and_only_unbuilt_work_returns_to_the_build(h
 
 
 @pytest.mark.fr("FR-059")
-@pytest.mark.fr("FR-060")
-def test_a_requirement_change_returns_a_spec_kit_run_to_the_operator(home, kit_target, fake_notify):
-    changed = {"envelope": dict(ACCEPT, verdict="replan", requirement_changes=["it also greets in French"], reasons=[])}
-    fake = FakeAgent(kit_script(converge=[changed]) + kit_script())
-    run, waits = to_the_end_of_first_build(kit_target, fake)
-    assert (run.state, run.current_step) == ("awaiting_approval", "clarify"), "it must wait for the operator again"
-    assert "it also greets in French" in fake.calls[10]["prompt"]               # the analyst is told what changed
-    assert fake.calls[10]["persona"] == fake.calls[0]["persona"]
-    aside = [b.strip(" +*") for b in git(kit_target, "branch", "--list", f"{run.branch}-aside-*").splitlines()]
-    assert len(aside) == 1 and "hello.py" in git(kit_target, "ls-tree", "-r", "--name-only", aside[0]).split()
-    kept = git(kit_target, "ls-tree", "-r", "--name-only", run.branch).split()
-    assert "hello.py" not in kept and f"{FEATURE}/plan.md" in kept              # the build is set aside; the plan stays
+@pytest.mark.fr("FR-090")
+def test_after_approval_nothing_returns_to_planning_and_every_deviation_is_in_the_sprint_review(home, kit_target, fake_notify):
+    found = {"envelope": dict(ACCEPT, requirement_changes=["it also greets in French"],
+                              ideals_broken=["two modules say the same thing"], reasons=["matches the plan otherwise"])}
+    fake = FakeAgent(kit_script(converge=[found]))
+    run, waits = to_the_end(kit_target, fake, REQUEST)
+    assert run.outcome == "accepted" and waits == 1                       # a broken ideal is reported, not a stop
+    names = [s.name for s in open_store(home).query("steps", {"run_id": run.id})]
+    assert names.count("specify") == 1 and names.count("converge") == 1
+    record = git(kit_target, "show", f"{run.branch}:docs/runs/{run.branch.removeprefix('factory/')}.md")
+    review = record[record.index("## Sprint review"):]
+    for said in ("it also greets in French", "two modules say the same thing", "a dict was used where the plan said a list",
+                 "the greeting text is repeated; give it one home"):      # the architect's advice is in it too
+        assert said in review, said
 
-    while run.state == "awaiting_approval":
-        run = operations.approve(run.id)
+
+@pytest.mark.fr("FR-059")
+@pytest.mark.fr("FR-090")
+def test_unbuilt_work_returns_to_the_build_once_and_is_then_a_deviation(home, kit_target, fake_notify):
+    unbuilt = {"envelope": dict(ACCEPT, verdict="rework", unbuilt=["T002 is not done: no farewell"], reasons=[])}
+    fake = FakeAgent(kit_script(converge=[unbuilt], retro=[]) + [BUILD, ARCHITECT, DOCUMENT, unbuilt, RETRO])
+    run, _ = to_the_end(kit_target, fake, REQUEST)
     assert run.outcome == "accepted"
-    assert "hello.py" in git(kit_target, "ls-tree", "-r", "--name-only", run.branch).split()   # built again, tests first
-    reds = [s for s in open_store(home).query("steps", {"run_id": run.id}) if s.name == "red"]
-    assert len(reds) == 2 and all(s.passed for s in reds)
+    record = git(kit_target, "show", f"{run.branch}:docs/runs/{run.branch.removeprefix('factory/')}.md")
+    assert "T002 is not done: no farewell" in record[record.index("## Sprint review"):]
+    names = [s.name for s in open_store(home).query("steps", {"run_id": run.id})]
+    assert names.count("build") == 2 and names.count("converge") == 2
 
 
 def to_the_end_of_first_build(target, fake):
     drive_with(fake)
     run = operations.request(REQUEST, target)
-    run = operations.approve(run.id)
-    return operations.approve(run.id), 2
+    return operations.approve(run.id), 1
 
 
 @pytest.mark.fr("FR-053")

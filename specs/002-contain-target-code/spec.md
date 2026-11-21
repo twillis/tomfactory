@@ -159,6 +159,13 @@ Requirement numbers continue the factory's single sequence from feature 001, so 
 
 - **FR-077**: The factory's own checks MUST include the stand-in test, run contained through the same path the factory uses, and MUST fail, naming the capability, if it can do any of the things in the table in "Why".
 
+**What a codebase needs installed** *(added 2026-11-20; see `specs/001-near-loop-factory/changes/2026-11-20-what-a-codebase-needs-installed.md`)*
+
+- **FR-083**: A target codebase MAY name a setup command in its committed settings. The factory MUST run it, contained, before each run of that codebase's tests. It differs from the tests in two ways only: it has the network, including the means to look names up, and it may write to the codebase's own home (FR-085).
+- **FR-084**: A target codebase MAY name programs its commands need, in its committed settings. Each MUST be found on the operator's PATH and let into containment read-only, as that one program. A program MUST be given by name; a path MUST be refused.
+- **FR-085**: The factory MUST keep, for each codebase, a folder that stands in for a home directory inside containment whenever that codebase has a setup command. What the setup command leaves there MUST still be there for later steps and later runs. The tests MUST be able to read it and MUST NOT be able to change it. It MUST hold nothing of the operator's, and MUST NOT be shared between codebases. (This is the one lasting write outside the checkout that FR-070 now allows, and only to the setup command.)
+- **FR-086**: If the setup command fails or runs past the time limit, or a named program is not on the operator's PATH, the step MUST fail with a reason that says which, and the tests MUST NOT be run.
+
 **Nothing else changes**
 
 - **FR-078**: All existing kinds of run MUST behave as before, and a target codebase's tests that pass uncontained MUST pass contained, given they need nothing this feature forbids.

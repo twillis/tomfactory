@@ -32,7 +32,7 @@ TABLE = [
 @pytest.fixture
 def made_up(monkeypatch, tmp_path, home, target, fake_notify):
     from factory import config
-    monkeypatch.setattr(tables, "table_for", lambda spec_kit, run_kind: TABLE)
+    monkeypatch.setattr(tables, "table_for", lambda spec_kit, run_kind, cycle="auto": TABLE)
     prompts = tmp_path / "prompts"
     prompts.mkdir()
     for name in ("draft", "design", "make", "judge"):

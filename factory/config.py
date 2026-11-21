@@ -1,4 +1,5 @@
 """Data: where things are, the target codebase's settings, and the operator's ideals."""
+import hashlib
 import json
 import os
 import pathlib
@@ -39,6 +40,11 @@ class TargetConfig:
     step_timeout_seconds: int = _setting(900, "the time limit for any one step")
     test_budget_lines: int = _setting(300, "the most lines of tests one run may add; 0 means no limit")
     test_network: bool = _setting(False, "true lets its tests reach the network; they are contained either way")
+    setup_command: str = _setting("", "run before its tests, contained, with the network: installs what it needs")
+    tools: tuple = _setting((), "programs on your PATH its commands may use, by name")
+    cycle: str = _setting("auto", "auto: spec kit where it is set up, else plain; sprint: one plan, then build to the end")
+    tests_readable_command: str = _setting("python -m compileall -q tests",
+                                           "fails if new tests cannot even be read as code; \"\" for none")
 
 
 def _toml(value) -> str:
@@ -69,21 +75,44 @@ def read_target_config(target, commit) -> TargetConfig:
     except tomllib.TOMLDecodeError as error:
         raise ConfigError(f"{target}/.factory.toml is not valid TOML: {error}") from error
     known = {name: values[name] for name in TargetConfig.__dataclass_fields__ if name in values}
-    for name in ("test_paths", "docs_paths"):
+    for name in ("test_paths", "docs_paths", "tools"):
         if name in known:
             known[name] = tuple(known[name])
     return TargetConfig(**known)
 
 
-def test_argv(settings: TargetConfig) -> list[str]:
-    """The test command as a list of words. No shell is involved.
+def _argv(command) -> list[str]:
+    """A command as a list of words. No shell is involved.
 
     A leading `python` means the Python that is running the factory.
     """
-    words = shlex.split(settings.test_command)
+    words = shlex.split(command)
     if words and words[0] == "python":
         words[0] = sys.executable
     return words
+
+
+def test_argv(settings: TargetConfig) -> list[str]:
+    return _argv(settings.test_command)
+
+
+def setup_argv(settings: TargetConfig) -> list[str]:
+    return _argv(settings.setup_command)
+
+
+def tests_readable_argv(settings: TargetConfig) -> list[str]:
+    return _argv(settings.tests_readable_command)
+
+
+def codebase_home(target) -> pathlib.Path:
+    """The folder the factory keeps for one codebase: what its setup command fetched, and nothing of the operator's.
+
+    It stands in for a home directory, so an installer's cache lands in it whatever the language.
+    """
+    target = pathlib.Path(target).resolve()
+    path = home() / "codebases" / f"{target.name}-{hashlib.sha256(str(target).encode()).hexdigest()[:8]}"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def ideals_path() -> pathlib.Path:

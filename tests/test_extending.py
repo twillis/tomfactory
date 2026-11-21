@@ -21,7 +21,7 @@ def table_with(monkeypatch, after, new, **replace_previous):
     index = [s.name for s in steps].index(after)
     steps[index] = dataclasses.replace(steps[index], on_pass=new.name, **replace_previous)
     steps.insert(index + 1, new)
-    monkeypatch.setattr(tables, "table_for", lambda spec_kit, run_kind: steps)
+    monkeypatch.setattr(tables, "table_for", lambda spec_kit, run_kind, cycle="auto": steps)
     return steps
 
 
@@ -65,7 +65,7 @@ def test_a_new_persona_is_one_file_named_on_an_entry(cycle, monkeypatch):
         steps = list(tables.STEPS)
         index = [s.name for s in steps].index("build")
         steps[index] = dataclasses.replace(steps[index], persona="careful_coder")
-        monkeypatch.setattr(tables, "table_for", lambda spec_kit, run_kind: steps)
+        monkeypatch.setattr(tables, "table_for", lambda spec_kit, run_kind, cycle="auto": steps)
 
     install()
     run, fake, store, _ = cycle(script())

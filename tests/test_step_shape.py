@@ -23,7 +23,7 @@ def test_an_entry_that_says_nothing_gets_the_most_restrictive_values():
     assert step.capabilities == "read" and step.may_change == "nothing"
     assert step.inputs == () and step.checks == () and step.envelope == {}
     assert step.on_fail == End("needs-me") and step.commit_after is False
-    assert step.timeout is None and step.model is None
+    assert step.timeout is None and step.model == "standard"       # never the program's own default
     code = Step(name="count", kind="code", on_pass="finish")
     assert code.persona is None and code.may_change == "nothing"
 
@@ -34,7 +34,7 @@ def test_an_agent_step_must_name_a_persona_and_a_code_step_has_none():
         Step(name="extra", kind="agent", on_pass="finish")
     with pytest.raises(ValueError, match="persona"):
         Step(name="count", kind="code", persona="planner", on_pass="finish")
-    for bad in ({"kind": "robot"}, {"capabilities": "read+shell"}, {"may_change": "anything"}):
+    for bad in ({"kind": "robot"}, {"capabilities": "read+shell"}, {"may_change": "anything"}, {"model": "fable"}):
         with pytest.raises(ValueError):
             Step(**{"name": "x", "kind": "agent", "persona": "planner", "on_pass": "finish", **bad})
     assert Rework("build").step == "build" and End("rejected", "why").reason == "why"
@@ -129,3 +129,12 @@ def test_factory_untouched_compares_fingerprints(tmp_path):
     ideals.write_text("tampered\n")
     result = check(context(agent_step(), before=before, factory_paths=paths))
     assert not result.passed and "changed" in result.note
+
+
+@pytest.mark.fr("FR-088")
+@pytest.mark.parametrize("step", [s for table in tables.TABLES for s in table if s.kind == "agent"] + [tables.LEAD],
+                         ids=lambda s: s.name)
+def test_the_steps_that_judge_get_the_strongest_model_and_the_rest_the_standard_one(step):
+    """Judging is where a mistake costs a whole run: the architect's review, and the final review."""
+    judges = step.persona == "architect" or bool(step.routes)          # the retro is advisory and only summarises
+    assert step.model == ("strongest" if judges else "standard")

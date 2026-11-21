@@ -36,7 +36,8 @@ class Stopped(BaseException):
 
 def table_of(run) -> list:
     """The steps a run goes through. Decided here only: by its kind, and by its checkout's codebase."""
-    return tables.table_for(speckit.available(run.workspace), run.run_kind)
+    cycle = config.read_target_config(run.target, run.base_commit).cycle
+    return tables.table_for(speckit.available(run.workspace), run.run_kind, cycle)
 
 
 def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) -> None:
@@ -250,7 +251,9 @@ UNDO = {"changes_allowed": _undo_change, "factory_untouched": _restore_factory}
 def produced(reply, done) -> dict:
     """What a step produced, for its record: the agent's envelope, or what its command printed."""
     if reply is not None:
-        return reply.envelope if reply.envelope is not None else {"text": reply.text[:2000]}
+        if reply.envelope is not None:
+            return reply.envelope
+        return {"text": reply.text[:2000], **({"error": reply.error} if reply.error else {})}
     ran = next((outcome for outcome in reversed(done) if outcome.contained is not None), None)
     return {"output": ran.output or ran.note, "contained": ran.contained} if ran else {}
 
@@ -285,9 +288,16 @@ def _request(src):
 
 
 def _plan(src):
-    """The plan last approved; or, before any approval, the latest."""
+    """The plan last approved; or, before any approval, the latest one written.
+
+    A step between the planner and the operator (the plan check) comes before any plan has
+    been shown to him, so it reads the planner's own reply (FR-095).
+    """
     approved = [plan for plan in src.plans if plan.decision == "approved"]
-    return (approved or src.plans)[-1].text if src.plans else ""
+    if approved:
+        return approved[-1].text
+    written = [s.produced.get("plan") for s in src.finished if isinstance(s.produced, dict) and s.produced.get("plan")]
+    return written[-1] if written else (src.plans[-1].text if src.plans else "")
 
 
 def _sent_back(src):
@@ -305,14 +315,49 @@ def _failure(src):
     if not src.finished or src.finished[-1].passed:
         return ""
     failed = next((c for c in src.finished[-1].checks or [] if not c["passed"]), None)
-    if not failed:
-        return str(src.finished[-1].failure)
+    if not failed:      # the agent program failed: say what it said, not only that it failed (FR-094)
+        said = (src.finished[-1].produced or {}).get("error") if isinstance(src.finished[-1].produced, dict) else None
+        return f"{src.finished[-1].failure}: {said}" if said else str(src.finished[-1].failure)
     return f"{failed['name']}: {failed['note']}" + (f"\n{failed['output']}" if failed.get("output") else "")
+
+
+def _red_output(src):
+    """What the new tests said before the build, from the step that saw them fail."""
+    reds = [r for r in src.finished if (r.produced or {}).get("output")
+            and any(c["name"] == "tests_fail_first" for c in r.checks or [])]
+    return reds[-1].produced["output"] if reds else ""
 
 
 def _test_output(src):
     outputs = [r.produced["output"] for r in src.finished if r.kind == "code" and (r.produced or {}).get("output")]
     return outputs[-1] if outputs else ""
+
+
+def _friction(src):
+    """What each agent said made its step harder, in its own words (FR-092)."""
+    said = [f"- {s.name} (attempt {s.attempt}): {item}" for s in src.finished if isinstance(s.produced, dict)
+            for item in s.produced.get("friction") or []]
+    return "\n".join(said) or "No agent said anything made its step harder."
+
+
+def _operator_feedback(src):
+    """Everything the operator wrote during the run, verbatim: comments sent back with a plan, and answers."""
+    said = [f"- Sent back with: {p.comment}" for p in src.plans if p.decision == "revised" and p.comment]
+    said += [f"- Asked \"{q.question}\", the operator answered: {q.answer}"
+             for q in src.store.query("questions", {"run_id": src.run.id}) if q.answered_by == "operator"]
+    return "\n".join(said) or "The operator approved without comment."
+
+
+def _findings(src):
+    """The final review's and the architect's findings, as they recorded them."""
+    keep = {"converge": ("unbuilt", "details", "requirement_changes", "ideals_broken", "reasons"),
+            "review": ("reasons", "ideals_broken"), "architecture_review": ("warnings", "suggestions")}
+    lines = []
+    for s in src.finished:
+        if s.name in keep and isinstance(s.produced, dict):
+            for key in keep[s.name]:
+                lines += [f"- {s.name}, {key}: {item}" for item in s.produced.get(key) or []]
+    return "\n".join(lines) or "Nothing was recorded."
 
 
 # The inputs a prompt may use, by name. A new input is one entry here.
@@ -331,6 +376,12 @@ INPUTS = {
     "question": lambda src: (records.pending_question(src.store, src.run.id) or {}).get("question", ""),
     "diff": lambda src: src.checkout.diff_since_base(),
     "test_output": _test_output,
+    "red_output": _red_output,
+    "run_facts": lambda src: "\n".join(run_record.facts(src.store, src.run)),
+    "friction": _friction,
+    "operator_feedback": _operator_feedback,
+    "findings": _findings,
+    "run_name": lambda src: run_record.name(src.run).removeprefix("docs/runs/").removesuffix(".md"),
 }
 
 
@@ -386,9 +437,21 @@ def validate(table, personas_dir=None, prompts_dir=None) -> None:
 # ---- the run's state, outside any one step ----
 
 def wait_for_operator(store, run, step, envelope) -> None:
-    """Store what the operator must decide on, mark the run as waiting, and say so."""
-    records.add_plan(store, run.id, envelope.get("plan") or envelope.get("summary") or json.dumps(envelope),
-                     envelope.get("ideals_addressed") or [], envelope.get("conflicts") or [])
+    """Store what the operator must decide on, mark the run as waiting, and say so.
+
+    A step that only checks a plan writes no plan of its own: the operator is shown the latest
+    plan, with that step's findings beneath it (FR-095).
+    """
+    planned = envelope
+    if not (envelope.get("plan") or envelope.get("summary")):
+        earlier = [s.produced for s in store.query("steps", {"run_id": run.id})
+                   if isinstance(s.produced, dict) and s.produced.get("plan")]
+        planned = earlier[-1] if earlier else envelope
+    text = planned.get("plan") or planned.get("summary") or json.dumps(planned)
+    if "findings" in envelope:
+        found = envelope["findings"] or ["nothing found"]
+        text += "\n\n## Findings from the plan check\n\n" + "\n".join(f"- {item}" for item in found)
+    records.add_plan(store, run.id, text, planned.get("ideals_addressed") or [], planned.get("conflicts") or [])
     records.await_operator(store, run.id)
     tell(store, run.id, f"Run {run.id}: {step.name} ready — waiting for you", " ".join(run.request.split()[:12]))
 

@@ -5,7 +5,7 @@ change what the factory does, change a table. Nothing here reads or writes anyth
 """
 from dataclasses import replace
 
-from factory.workflow import END_ACCEPTED, End, Replan, Rework, Step, WAIT
+from factory.workflow import END_ACCEPTED, End, Rework, Step, WAIT
 
 # ---- the plain table: a change, test first ----
 
@@ -38,8 +38,8 @@ STEPS: list[Step] = [
 
     # Advice, not a gate: what the architect finds goes to a backlog, and the run carries on.
     Step("architecture_review", "agent", persona="architect", capabilities="read+edit", may_change="docs",
-         on_pass="document", commit_after=True, advisory=True,
-         inputs=("request", "plan", "constitution", "ideals", "diff", "docs_paths"),
+         on_pass="document", commit_after=True, advisory=True, model="strongest",
+         inputs=("request", "plan", "constitution", "ideals", "diff", "docs_paths", "red_output"),
          envelope={"summary": "text", "suggestions": "list", "warnings": "list"}),
 
     # Documented before it is reviewed, so the reviewer judges the whole change.
@@ -50,7 +50,7 @@ STEPS: list[Step] = [
 
     # A reply that contradicts itself (accept, with broken ideals) is asked for again.
     Step("review", "agent", persona="reviewer", on_pass="finish", on_fail=Rework("review"),
-         routes={"reject": End("rejected")},
+         routes={"reject": End("rejected")}, model="strongest",
          inputs=("request", "run_kind", "plan", "constitution", "ideals", "diff", "test_output"),
          envelope={"verdict": "verdict", "reasons": "list", "ideals_broken": "list"}),
 
@@ -74,8 +74,8 @@ SPEC_KIT_STEPS: list[Step] = [
          inputs=("request", "constitution", "ideals", "comment", "failure"),
          envelope={"summary": "text", "assumptions": "list"}),
 
-    Step("clarify", "agent", persona="analyst", capabilities="read+edit", may_change="spec", on_pass=WAIT,
-         on_approve="plan", revise_from="specify", commit_after=True, speckit=("clarify",),  # first approval
+    Step("clarify", "agent", persona="analyst", capabilities="read+edit", may_change="spec", on_pass="plan",
+         commit_after=True, speckit=("clarify",),
          inputs=("request", "constitution", "ideals", "failure"),
          envelope={"plan": "text", "clarified": "list"}),
 
@@ -87,7 +87,7 @@ SPEC_KIT_STEPS: list[Step] = [
          envelope={"summary": "text"}),
 
     Step("analyze", "agent", persona="reviewer", on_pass=WAIT, on_approve="baseline", revise_from="plan",
-         speckit=("analyze", "checklist"),                                    # second approval: plan and tasks
+         speckit=("analyze", "checklist"),          # the one approval: spec, plan and tasks, findings as notes
          inputs=("request", "constitution", "ideals", "failure"),
          envelope={"plan": "text", "findings": "list"}),
 
@@ -99,17 +99,45 @@ SPEC_KIT_STEPS: list[Step] = [
     _plain["architecture_review"],
     replace(_plain["document"], on_pass="converge"),
 
-    # The scope assessment: is what was built what was approved? (FR-058, FR-059)
-    Step("converge", "agent", persona="reviewer", on_pass="finish", on_fail=Rework("converge"),
-         speckit=("converge",),
-         routes={"rework": Rework("build"), "replan": Replan("specify"), "reject": End("rejected")},
-         inputs=("request", "constitution", "ideals", "diff", "test_output"),
+    # The scope assessment: is what was built what was approved? (FR-058, FR-059, FR-090)
+    # After approval nothing returns to planning: unbuilt work goes back to the build once, and
+    # everything else is recorded for the sprint review the run ends with.
+    Step("converge", "agent", persona="reviewer", on_pass="retro", on_fail=Rework("converge"),
+         speckit=("converge",), model="strongest", ideals_stop=False,
+         routes={"rework": Rework("build", at_most=2, then="retro")},      # found twice: left for the review
+         inputs=("request", "plan", "constitution", "ideals", "diff", "test_output", "red_output"),
          envelope={"verdict": "verdict", "unbuilt": "list", "details": "list", "requirement_changes": "list",
                    "reasons": "list", "ideals_broken": "list"}),
+
+    # Advice, like the architect's: the team's retro, about the factory, never a gate (FR-091).
+    Step("retro", "agent", persona="facilitator", capabilities="read+edit", may_change="docs",
+         on_pass="finish", commit_after=True, advisory=True,
+         inputs=("request", "run_facts", "friction", "operator_feedback", "findings", "docs_paths", "run_name"),
+         envelope={"summary": "text", "worked": "list", "did_not": "list", "opportunities": "list",
+                   "threats": "list"}),
 
     _plain["finish"],
 ]
 
+
+_converge = next(entry for entry in SPEC_KIT_STEPS if entry.name == "converge")
+_retro = next(entry for entry in SPEC_KIT_STEPS if entry.name == "retro")
+
+
+# ---- the sprint: one plan from the codebase's standing documents, one approval, then to the end (FR-093) ----
+
+SPRINT_STEPS: list[Step] = [
+    replace(_plain["plan"], on_pass="check_plan", on_approve=None),
+    # Read before the one approval: notes for the operator, never a gate (FR-095).
+    Step("check_plan", "agent", persona="reviewer", on_pass=WAIT, on_approve="baseline", revise_from="plan",
+         inputs=("request", "plan", "constitution", "ideals", "failure"), envelope={"findings": "list"}),
+    _plain["baseline"], _plain["write_tests"], _plain["red"], _plain["build"], _plain["test"],
+    _plain["architecture_review"],
+    replace(_plain["document"], on_pass="converge"),
+    replace(_converge, speckit=()),                    # no spec kit stage, whatever is set up
+    _retro,
+    _plain["finish"],
+]
 
 # ---- tidying: a change that must not alter behaviour, so no failing test comes first (FR-066) ----
 # The tests must pass before (baseline) and after (test). One side is held still: tidying the
@@ -141,11 +169,16 @@ RUN_KINDS = {
     "tidy-tests": (TIDY_TESTS, TIDY_TESTS),
     "tidy-code": (TIDY_CODE, TIDY_CODE),
 }
-TABLES = [STEPS, SPEC_KIT_STEPS, TIDY_TESTS, TIDY_CODE]
+TABLES = [STEPS, SPEC_KIT_STEPS, SPRINT_STEPS, TIDY_TESTS, TIDY_CODE]
+CYCLES = ("auto", "sprint")
 
 
-def table_for(spec_kit, run_kind) -> list[Step]:
-    """The steps a run goes through: chosen by its kind, and by whether its codebase uses spec kit."""
+def table_for(spec_kit, run_kind, cycle="auto") -> list[Step]:
+    """The steps a run goes through: chosen by its kind, its codebase's cycle, and whether it uses spec kit."""
     if run_kind not in RUN_KINDS:
         raise ValueError(f"a run is one of: {', '.join(RUN_KINDS)}; not {run_kind!r}")
+    if cycle not in CYCLES:
+        raise ValueError(f"a codebase's cycle is one of: {', '.join(CYCLES)}; not {cycle!r}")
+    if cycle == "sprint" and run_kind == "change":
+        return SPRINT_STEPS
     return RUN_KINDS[run_kind][bool(spec_kit)]

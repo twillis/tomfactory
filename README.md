@@ -210,27 +210,38 @@ following that stage's instructions from the codebase itself:
 | Stage | Persona | What it produces |
 |-------|---------|------------------|
 | `specify`, `clarify` | analyst | `spec.md` |
-| *wait* | you | **First approval: the specification** |
 | `plan`, `tasks` | planner | `plan.md` and its companions, `tasks.md` |
 | `analyze` (with spec kit's checklist) | reviewer | A check that spec, plan and tasks agree; changes nothing |
-| *wait* | you | **Second approval: the plan and tasks** |
+| *wait* | you | **The one approval: specification, plan and tasks, with analyze's findings as notes** |
 | `write_tests`, `build` | test writer, code writer | Following spec kit's implement stage, tests first |
 | `architecture_review`, `document` | architect, documenter | As in the plain cycle |
 | `converge` | reviewer | Is what was built what you approved? |
+| `retro` | facilitator | The sprint's retro, about the factory: advice, never a gate |
 
-The documents are on the run's branch under `specs/<NNN-name>/`. `factory plan` gives a
-summary of whatever is waiting for you and names the files. Sending work back at either
-approval returns the run to the start of that stage: the analyst for the specification, the
-planner for the plan.
+The documents are on the run's branch under `specs/<branch name>/`, for example
+`specs/20261119-145203-add-a-greeting/`: named from when the run was requested, not counted, so
+two people specifying at once never make the same folder. `factory plan` gives a
+summary of whatever is waiting for you and names the files. Sending the work back returns
+the run to the planner, who may change the specification too.
 
-**What converge does with a difference.** After the build, the reviewer sorts each
-difference between what was built and what you approved:
+**After approval the run is a sprint.** Nothing returns to planning. After the build, the
+reviewer sorts each difference between what was built and what you approved:
 
-- *Unbuilt work* goes back to the build.
-- *An implementation detail* is recorded, and the run carries on. It does not come back to you.
-- *A change to the requirement* goes back to planning, and waits for you again. What had
-  been built is kept on a side branch (`factory/…-aside-1`) and the build starts again
-  from the documents you approve, tests first.
+- *Unbuilt work* goes back to the build once. Found again, it is left for the sprint review.
+- *An implementation detail*, *a proposed change to the requirement* and *a broken ideal* are
+  recorded. None of them stops the run.
+
+The run's record ends with a **sprint review**: every deviation the reviewer found and the
+architect's warnings and suggestions. You decide at merge which become the next request.
+
+**And with a retro.** The record also holds the run's **time and cost**, measured by the
+factory's own code: each step's minutes, cost and outcome, the totals, and the time spent
+waiting for you. Every agent may add `friction` to its reply: what made its step harder. Then
+a facilitator writes `docs/retros/<run>.md`, an atomic note with front matter for an
+Obsidian vault: what worked, what did not, the opportunities and the threats, for the factory
+and not the product, quoting your comments in your own words. It is advice, like the
+architect's, and never stops a run. Its inputs are `run_facts`, `friction`,
+`operator_feedback`, `findings` and `run_name`.
 
 **Whose rules win.** Where they disagree, the order is: the codebase's own constitution
 (`.specify/memory/constitution.md` in it) first, then your ideals, then spec kit's generic
@@ -240,6 +251,24 @@ is still spec kit's blank template is treated as having none, so your ideals are
 No agent runs anything to do this. Spec kit's scripts are run by the factory's own code,
 and each persona is handed its stage's instructions and what the scripts set up. A codebase
 without spec kit runs the plain cycle, exactly as before.
+
+### The sprint cycle
+
+A codebase whose specification already exists, in documents of its own, can choose a lighter
+cycle in its committed `.factory.toml`, even where spec kit is set up:
+
+```toml
+cycle = "sprint"
+```
+
+A sprint is: `plan` (the planner reads the codebase's standing documents and writes one plan),
+`check_plan` (a reviewer reads the plan for contradictions, missed rulings, wrong claims and
+untested refusals; its findings are shown beneath the plan, and it is never a gate), your one
+approval, then the build, the tests, the architect, the documenter, `converge` (the
+final review: unbuilt work goes back to the build once, everything else is recorded), `retro`
+and `finish`. No spec kit stage runs. The record ends with the sprint review, what the new
+tests said before the build and the tests after it, the time and cost, and the retro. `cycle = "auto"`, the default, picks spec kit where
+it is set up and the plain cycle elsewhere.
 
 ### Tidying: a change that must not alter behaviour
 
@@ -268,8 +297,57 @@ test_network = true     # off unless this line is here
 ```
 
 `factory show --step <id>` on a test step shows `contained`, and whether the network was
-allowed. `factory doctor` reports whether containment works on the machine. Tests that need
-a tool from your home other than the factory's own Python, or that use git, fail contained.
+allowed. `factory doctor` reports whether containment works on the machine. Tests that use
+git fail contained.
+
+### A codebase that needs things installed
+
+The factory knows nothing about any language's packages. A codebase says what it needs, in
+its committed `.factory.toml`, and the factory lets exactly that in:
+
+```toml
+tools = ["uv"]                      # programs on your PATH its commands may use, by name
+setup_command = "uv sync"           # run before every test step: installs what it needs
+test_command = ".venv/bin/python -m pytest -q -p no:cacheprovider"
+```
+
+- **`tools`** are let into containment read-only, each as that one program and nothing
+  beside it. A tool is given by name, never by path, so the setting cannot be used to expose
+  a folder of yours. A tool that is a launcher for something elsewhere in your home (a
+  version manager's shim) will not work; name the real program.
+- **`setup_command`** runs before the tests, every time the factory runs them. It is
+  contained like the tests, with two differences: it has the network, because downloading is
+  its job, and it can write to the codebase's own home.
+- **The codebase's own home** is a folder the factory keeps for that codebase, under
+  `codebases/` in the factory's home. Inside containment it stands in for your home
+  directory, so an installer's cache lands there whatever the language, and the second
+  setup is quick. The tests can read it and cannot change it. Nothing of yours is in it.
+
+A Rust codebase would differ only in those three lines. What the setup command writes into
+the checkout (a lock file) is committed with the step that ran it. If setup fails, the step
+fails with what it last said, and the tests are not run. `factory show --step <id>` shows
+that setup ran and had the network.
+
+### Which model each step uses
+
+Every agent step is given a model on purpose; none is left to the agent program's own
+default. A step's entry names a grade, and there are two:
+
+- **strongest**, for the steps that judge a change: the architect's review, and the final
+  review (`review`, or `converge` on a spec kit codebase).
+- **standard**, for everything else: planning, writing tests, building, documenting.
+
+Which model each grade is, is written in one place, `MODELS` in `agent.py`. To give a step
+the other grade, set `model=` in its entry in `tables.py`.
+
+### Tests that cannot be read are not failing tests
+
+Before the new tests are run to see them fail, the factory runs the codebase's
+`tests_readable_command` (by default `python -m compileall -q tests`), contained. A test file
+with a syntax error fails every time whatever is built, and the builder may not touch tests,
+so without this check it would use up its attempts on tests that can never run. When the
+command fails, the work goes back to the test writer with what it said. Set it to `""` to
+switch it off, or to your own language's equivalent.
 
 ### Keeping tests proportionate
 
@@ -402,7 +480,7 @@ whatever its entry says. A new step cannot leave them out.
 
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
 `ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`,
-`test_files`, `failure`, `question`, `diff`, `test_output`. Each is one entry in `INPUTS` in
+`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 
 ## Adding a persona
@@ -475,7 +553,9 @@ Be clear-eyed about these before pointing it at anything you care about.
   every test command inside bubblewrap: the code sees its checkout, the system read-only and
   the factory's Python, and nothing else of yours — no home, no records, no keys, no
   environment variables, no docker socket, no network unless the codebase allows it, and
-  nothing it starts outlives the step. It shares your kernel, has no system-call filter, and
+  nothing it starts outlives the step. A codebase's setup command is contained the same way
+  but always has the network, so what it downloads and runs while installing can reach the
+  internet and your local network; it still cannot see your home. It shares your kernel, has no system-call filter, and
   has no limit on CPU or memory beyond the step's time limit. If bubblewrap does not work,
   the factory refuses to run the tests at all. (Feature 002.)
 - **The agent program itself is not contained by the factory.** It is confined by its own

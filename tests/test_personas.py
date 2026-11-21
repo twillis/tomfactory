@@ -31,7 +31,7 @@ def test_all_six_personas_exist_with_the_three_headings():
     named = {step.persona for step in tables.STEPS if step.kind == "agent"}
     assert named == {"planner", "test_writer", "code_writer", "architect", "reviewer", "documenter"}
     with_spec_kit = {step.persona for step in tables.table_for(True, "change") if step.kind == "agent"}
-    assert with_spec_kit == named | {"analyst"}             # spec kit's specify and clarify have their own persona
+    assert with_spec_kit == named | {"analyst", "facilitator"}   # specify and clarify, and the sprint's retro
     for name in with_spec_kit:
         sections(name)
     assert {f.stem for f in config.PERSONAS_DIR.glob("*.md")} == with_spec_kit | {"lead"}   # the lead answers questions

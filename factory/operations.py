@@ -246,7 +246,9 @@ def resume(run_id=None) -> dict:
     Workspace.of(run).undo()            # whatever the stopped step left half-done
     own_files.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))   # the factory as it is now
     state = "planning" if workflow.is_planning(run.current_step, driver.table_of(run)) else "working"
-    return _launch_at(store, records.reopen(store, run.id, state), run.current_step)
+    reopened = records.reopen(store, run.id, state)
+    run_record.write(store, reopened, Workspace.of(reopened), f"factory: resumed (run {run.id})")    # FR-094
+    return _launch_at(store, reopened, run.current_step)
 
 
 def answer(run_id=None, text="") -> dict:
