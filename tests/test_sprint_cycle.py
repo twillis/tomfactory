@@ -15,7 +15,7 @@ RETRO = {"envelope": {"summary": "fine", "worked": ["one approval"], "did_not": 
 
 
 def sprint(**changes):
-    entries = {"plan": {"envelope": PLAN}, "check_plan": {"envelope": {"findings": []}}, "write_tests": WRITE_TESTS, "build": BUILD, "architecture_review": ARCHITECT,
+    entries = {"plan": {"envelope": PLAN}, "check_plan": {"envelope": {"verdict": "accept", "findings": []}}, "write_tests": WRITE_TESTS, "build": BUILD, "architecture_review": ARCHITECT,
                "document": DOCUMENT, "converge": ACCEPT, "retro": RETRO}
     entries.update(changes)
     return [entries[n] for n in ("plan", "check_plan", "write_tests", "build", "architecture_review", "document", "converge", "retro")]
@@ -40,7 +40,7 @@ def test_a_codebase_chooses_its_cycle(spec_kit, cycle, expected):
 @pytest.mark.fr("FR-093")
 def test_the_sprint_waits_once_and_ends_with_the_sprint_review_and_the_retro():
     steps = tables.SPRINT_STEPS
-    assert [s.name for s in steps if s.on_pass == workflow.WAIT] == ["check_plan"]
+    assert [s.name for s in steps if s.on_pass == workflow.WAIT] == ["check_plan", "amend_plan"]
     assert [s.name for s in steps][-3:] == ["converge", "retro", "finish"]
     review = workflow.get("converge", steps)
     assert review.speckit == () and not review.ideals_stop and set(review.routes) == {"rework"}
@@ -83,7 +83,11 @@ def test_a_resumed_step_is_told_why_it_stopped_and_the_record_is_written_again(h
 
 # ---- the plan check, and the record of the tests (FR-095) ----
 
-CHECKED = {"envelope": {"findings": ["the plan says the CHECK refuses it, but NOT NULL is checked first"]}}
+CHECKED = {"envelope": {"verdict": "amend",
+                        "findings": ["the plan says the CHECK refuses it, but NOT NULL is checked first"]}}
+AMENDED = {"envelope": {"plan": "Add hello.py that prints hello; NOT NULL is checked first.",
+                        "taken": ["NOT NULL is checked first: the plan now says so"], "declined": [],
+                        "ideals_addressed": ["keeps the layers apart"], "conflicts": []}}
 
 
 @pytest.mark.fr("FR-095")
@@ -93,16 +97,23 @@ def test_a_sprints_plan_is_checked_before_the_one_approval_and_the_check_is_not_
     assert workflow.get("plan", steps).on_pass == "check_plan"
     assert check.on_pass == workflow.WAIT and check.on_approve == "baseline" and check.revise_from == "plan"
     assert (check.capabilities, check.may_change, check.model) == ("read", "nothing", "standard")
-    assert not check.routes and {"plan", "constitution", "ideals"} <= set(check.inputs)
+    assert check.routes == {"amend": workflow.Rework("amend_plan")} and {"plan", "constitution", "ideals"} <= set(check.inputs)
+    amend = workflow.get("amend_plan", steps)                                    # FR-104
+    assert (amend.persona, amend.capabilities, amend.may_change) == ("planner", "read", "nothing")
+    assert amend.on_pass == workflow.WAIT and amend.on_approve == "baseline" and amend.revise_from == "plan"
 
 
 @pytest.mark.fr("FR-095")
 def test_what_the_operator_approves_is_the_planners_plan_with_the_checks_findings(home, sprint_target, fake_notify):
     script = sprint()
-    drive_with(FakeAgent(script[:1] + [CHECKED] + script[2:]))
+    fake = FakeAgent(script[:1] + [CHECKED, AMENDED] + script[2:])
+    drive_with(fake)
     run = operations.request("Add a greeting", sprint_target)
-    shown = operations.plan(run.id).text
-    assert PLAN["plan"] in shown and "NOT NULL is checked first" in shown
+    shown = operations.plan(run.id).text                                      # FR-104: amended, then shown once
+    assert shown.startswith(AMENDED["envelope"]["plan"]) and "but NOT NULL is checked first" in shown
+    assert "the plan now says so" in shown
+    amending = next(c["prompt"] for c in fake.calls if c["prompt"].startswith("# Task: amend the plan"))
+    assert PLAN["plan"] in amending and "but NOT NULL is checked first" in amending
     run = operations.approve(run.id)
     assert run.outcome == "accepted"
 
@@ -110,7 +121,7 @@ def test_what_the_operator_approves_is_the_planners_plan_with_the_checks_finding
 @pytest.mark.fr("FR-095")
 def test_the_record_holds_the_tests_before_and_after_the_build(home, sprint_target, fake_notify):
     script = sprint()
-    run, _ = to_the_end(sprint_target, FakeAgent(script[:1] + [CHECKED] + script[2:]))
+    run, _ = to_the_end(sprint_target, FakeAgent(script[:1] + [CHECKED, AMENDED] + script[2:]))
     record = git(sprint_target, "show", f"{run.branch}:{run_record.name(run)}")
     tests = record[record.index("## The tests before and after the build"):]
     assert "### Before the build" in tests and "### After the build" in tests and "passed" in tests
@@ -228,4 +239,28 @@ def test_what_was_asked_and_answered_in_planning_reaches_the_plan_check_and_the_
     ("converge.md", "the answer stands"),
 ])
 def test_the_judges_are_told_a_measured_answer_outranks_the_request(prompt, says):
+    assert says in (config.PROMPTS_DIR / prompt).read_text()
+
+
+@pytest.mark.fr("FR-104")
+def test_a_finding_the_planner_declines_is_shown_with_its_reason(home, sprint_target, fake_notify):
+    declined = {"envelope": dict(AMENDED["envelope"], plan=PLAN["plan"], taken=[],
+                                 declined=["NOT NULL is checked first: it is not; the column is optional (measured)"])}
+    script = sprint()
+    drive_with(FakeAgent(script[:1] + [CHECKED, declined] + script[2:]))
+    run = operations.request("Add a greeting", sprint_target)
+    shown = operations.plan(run.id).text
+    assert "but NOT NULL is checked first" in shown and "the column is optional (measured)" in shown
+    assert run.state == "awaiting_approval"                                   # the operator still decides
+
+
+@pytest.mark.fr("FR-104")
+@pytest.mark.parametrize("prompt, says", [
+    ("check_plan.md", "what makes it fail before the build"),     # bttr_erp run 62: tests that already passed
+    ("check_plan.md", "a table missing from it"),                  # run 62: a new list with no fallback
+    ("check_plan.md", "module docstring"),                         # run 58: a docstring the change made untrue
+    ("amend_plan.md", "Decline a finding"),
+    ("document.md", "docs/runs/"),                                 # runs 62 and 63: the account was overwritten
+])
+def test_the_prompts_carry_what_runs_58_to_63_taught(prompt, says):
     assert says in (config.PROMPTS_DIR / prompt).read_text()

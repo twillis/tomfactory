@@ -22,10 +22,15 @@ def step_message(store, run, step, envelope) -> str:
     writer, summary = step.name, (envelope or {}).get("summary") if isinstance(envelope, dict) else None
     if step.kind == "code":
         wrote = [s for s in store.query("steps", {"run_id": run.id}) if s.kind == "agent" and s.ended_at
-                 and s.passed and s.name != "answer_question"]
+                 and s.failure in (None, "check") and s.name != "answer_question"]
         if wrote:
             writer = wrote[-1].name
-            summary = (wrote[-1].produced or {}).get("summary") if isinstance(wrote[-1].produced, dict) else None
+            first = wrote[-1]
+            for earlier in reversed(wrote):         # a step sent back is named by what it first did, not its fix
+                if earlier.name != writer:
+                    break
+                first = earlier
+            summary = (first.produced or {}).get("summary") if isinstance(first.produced, dict) else None
     label = LABELS.get(writer, writer)
     subject = f"{label}: {summary}" if summary else label
     return _message(run, step.name, subject)
@@ -114,7 +119,7 @@ def render(store, run, checkout) -> str:
         lines += _section("Where it conflicts with them", plan.conflicts)
     if ended:
         lines += ["## How it went", "", "| Step | Attempt | Result |", "|------|---------|--------|"]
-        lines += [f"| {s.name} | {s.attempt} | {'passed' if s.passed else s.failure} |" for s in steps]
+        lines += [f"| {s.name} | {s.attempt} | {_result(s)} |" for s in steps]
         lines += ["", f"**Outcome: {run.outcome}.** {run.reason}", ""]
         judged = next((s.produced for s in reversed(steps) if s.persona == "reviewer"
                        and isinstance(s.produced, dict) and "verdict" in s.produced), None)
@@ -123,10 +128,22 @@ def render(store, run, checkout) -> str:
         if judged and "unbuilt" in judged:            # a spec kit sprint ends with its review (FR-090)
             lines += _sprint_review(judged, next((s.produced for s in reversed(steps) if s.name == "architecture_review"
                                                   and isinstance(s.produced, dict)), {}))
+        documented = next((s.produced for s in reversed(steps) if s.name == "document" and s.passed
+                           and isinstance(s.produced, dict)), None)
+        if documented and documented.get("summary"):        # the documenter's account, kept (FR-104)
+            lines += ["## What changed", "", documented["summary"].strip(), ""]
         lines += _tests_before_and_after(steps)
         lines += ["## Time and cost", "", *facts(store, run), ""]
         lines += _section("Commits on the run's branch", [f"`{c}`" for c in checkout.log_since_base()])
     return "\n".join(lines)
+
+
+def _result(step) -> str:
+    """How a step went: passed, or how it failed and, for a check, which one."""
+    if step.passed:
+        return "passed"
+    failed = next((c["name"] for c in step.checks or [] if not c.get("passed")), None)
+    return f"{step.failure}: {failed}" if step.failure == "check" and failed else str(step.failure)
 
 
 def _sprint_review(judged, architect) -> list:

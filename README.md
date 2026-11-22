@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 419 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 428 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -332,7 +332,8 @@ cycle = "sprint"
 
 A sprint is: `plan` (the planner reads the codebase's standing documents and writes one plan),
 `check_plan` (a reviewer reads the plan for contradictions, missed rulings, wrong claims and
-untested refusals; its findings are shown beneath the plan, and it is never a gate), your one
+untested refusals; it is never a gate), `amend_plan` where the check found something (the planner
+takes each finding that is right and declines, with its reason, each that is not, once), your one
 approval, then the build, the tests, the architect, the documenter, `converge` (the
 final review: unbuilt work goes back to the build once, everything else is recorded), `retro`
 and `finish`. No spec kit stage runs. The planner and the plan check are told where each later
@@ -582,7 +583,7 @@ whatever its entry says. A new step cannot leave them out.
 
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
 `ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`,
-`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`. Each is one entry in `INPUTS` in
+`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, `plan_findings`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 
 ## Adding a persona

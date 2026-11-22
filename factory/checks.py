@@ -5,6 +5,7 @@ whether it passed and why not. Checks are how code, not an agent, decides whethe
 acceptable. A new check is a function with `@register("name")` above it; the registry
 stamps the name on what it returns. Which checks a step gets is a rule: workflow.checks_for.
 """
+import re
 from dataclasses import dataclass, field, replace
 
 from factory import config, own_files, proc, sandbox, speckit, workspace
@@ -115,7 +116,7 @@ def verdict(ctx) -> CheckResult:
             return CheckResult(True, "")
         return CheckResult(not broken, f"the verdict was accept, but these ideals were named as broken: "
                                        f"{', '.join(broken)}" if broken else "")
-    said = [str(item) for key in ("requirement_changes", "unbuilt", "reasons", "ideals_broken")
+    said = [str(item) for key in ("requirement_changes", "unbuilt", "reasons", "ideals_broken", "findings")
             for item in envelope.get(key) or []]
     return CheckResult(False, "; ".join(said) or f"the verdict was {envelope.get('verdict')}, with no reason given")
 
@@ -154,6 +155,25 @@ def lines_within_length(ctx) -> CheckResult:
         return CheckResult(True, f"no added line is over {limit}")
     return CheckResult(False, f"these added lines are longer than this codebase's {limit}, counting indentation: "
                               f"{', '.join(long)}. Wrap them; change nothing else.")
+
+
+FENCE = re.compile(r"^```.*?$(.*?)^```", re.M | re.S)
+
+
+@register("plan_lines_within_length")
+def plan_lines_within_length(ctx) -> CheckResult:
+    """No line of code a plan gives is longer than the codebase allows (FR-104): the builder copies a plan's code,
+    and a line over the limit would send the build back. Prose is not measured."""
+    limit = ctx.target_config.line_length
+    text = (ctx.envelope or {}).get("plan") if isinstance(ctx.envelope, dict) else None
+    if not limit or not isinstance(text, str):
+        return CheckResult(True, "no line length to hold the plan's code to")
+    long = [line for block in FENCE.findall(text) for line in block.splitlines() if len(line) > limit]
+    if not long:
+        return CheckResult(True, f"no line of the plan's code is over {limit}")
+    shown = "; ".join(f"{len(line)}: {line.strip()[:60]}" for line in long[:5])
+    return CheckResult(False, f"{len(long)} lines of the plan's code are longer than this codebase's {limit}, "
+                              f"counting indentation (length: start): {shown}. Wrap them; change nothing else.")
 
 
 @register("edge_cases_stated")

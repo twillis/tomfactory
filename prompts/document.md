@@ -22,7 +22,9 @@ You may create or change files only under: {{docs_paths}}
 
 ## What to produce
 
-A short written account of the change in the documentation paths. Do not change code or tests.
+A short written account of the change in the documentation paths. Do not change code or tests. Write nothing
+under docs/runs/: that is the run's record, which the factory writes and rewrites; your `summary` is put in it,
+under "What changed".
 
 In your reply's JSON object:
 

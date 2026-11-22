@@ -162,6 +162,30 @@ def test_each_commit_says_what_it_holds_and_which_run_made_it(cycle):
     assert "it matches the request" in record and "minutes of steps" in record        # the run, in brief
 
 
+@pytest.mark.fr("FR-103")
+def test_a_build_sent_back_is_named_by_what_it_built_and_the_record_says_why(cycle):
+    first = dict(BUILD, envelope=dict(BUILD["envelope"], summary="added greet"), files={"hello.py": WRONG})
+    fix = dict(BUILD, envelope=dict(BUILD["envelope"], summary="corrected the greeting's word"))
+    run, _, _, target = cycle(script(build=[first, fix]))
+    subjects = git(target, "log", "--format=%s", f"{run.base_commit}..{run.branch}").splitlines()
+    assert "Build: added greet" in subjects                                   # the build, not its last fix
+    record = git(target, "show", f"{run.branch}:docs/runs/{run.branch.removeprefix('factory/')}.md")
+    assert "| test | 1 | check: tests_pass |" in record                       # why it went back
+    assert "## What changed" in record and "Added a greeting." in record       # the documenter's account, kept
+
+
+LONG_PLAN = {"envelope": dict(PLAN, plan="Add hello.py:\n\n```python\nGREETING = '" + "h" * 70 + "'\n```\n")}
+
+
+@pytest.mark.fr("FR-104")
+def test_a_plan_whose_code_is_longer_than_the_codebase_allows_is_written_again(cycle):
+    limited = {".factory.toml": config.DEFAULT_FACTORY_TOML.replace("line_length = 0", "line_length = 60")}
+    run, fake, store, _ = cycle(script(plan=[LONG_PLAN, {"envelope": PLAN}]), files=limited)
+    assert run.outcome == "accepted"
+    assert names(store, run)[:2] == ["plan", "plan"]
+    assert "60" in fake.calls[1]["prompt"] and "lines_within_length" in fake.calls[1]["prompt"]
+
+
 @pytest.mark.fr("FR-011")
 def test_the_attempt_limit_set_on_the_request_is_the_one_used(cycle):
     wrong = dict(BUILD, files={"hello.py": WRONG})

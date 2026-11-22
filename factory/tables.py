@@ -13,7 +13,7 @@ STEPS: list[Step] = [
     # "spec" allows spec kit's documents where the target uses spec kit, and nothing elsewhere:
     # so in this plain cycle the planner changes no file.
     Step("plan", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass=WAIT,
-         on_approve="baseline", commit_after=True,
+         on_approve="baseline", commit_after=True, checks=("plan_lines_within_length",), on_fail=Rework("plan"),
          inputs=("request", "run_kind", "constitution", "ideals", "previous_plan", "comment", "failure",
                  "test_paths", "docs_paths"),
          envelope={"plan": "text", "ideals_addressed": "list", "conflicts": "list"}),
@@ -143,10 +143,18 @@ _retro = next(entry for entry in SPEC_KIT_STEPS if entry.name == "retro")
 SPRINT_STEPS: list[Step] = [
     replace(_plain["plan"], on_pass="check_plan", on_approve=None),
     # Read before the one approval: notes for the operator, never a gate (FR-095).
+    # What it finds goes to the planner, who amends the plan once before the operator sees it (FR-104).
     Step("check_plan", "agent", persona="reviewer", on_pass=WAIT, on_approve="baseline", revise_from="plan",
+         routes={"amend": Rework("amend_plan")},
          inputs=("request", "plan", "constitution", "ideals", "failure", "test_paths", "docs_paths",
                  "planning_answers"),
-         envelope={"findings": "list"}),
+         envelope={"verdict": "verdict", "findings": "list"}),
+    Step("amend_plan", "agent", persona="planner", on_pass=WAIT, on_approve="baseline", revise_from="plan",
+         checks=("plan_lines_within_length",), on_fail=Rework("amend_plan"),
+         inputs=("request", "plan", "plan_findings", "constitution", "ideals", "failure", "test_paths",
+                 "docs_paths", "planning_answers"),
+         envelope={"plan": "text", "taken": "list", "declined": "list", "ideals_addressed": "list",
+                   "conflicts": "list"}),
     _plain["baseline"], _plain["write_tests"], _plain["red"], _plain["build"], _plain["mend_tests"],
     _plain["test"], _plain["architecture_review"],
     replace(_plain["document"], on_pass="converge"),

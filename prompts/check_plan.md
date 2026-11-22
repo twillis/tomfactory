@@ -45,6 +45,11 @@ follows an answer and not the request.
   that does not exist and that no step is asked to create. The test writer may write only
   under {{test_paths}}; the documenter and the architect only under {{docs_paths}}; the builder
   anywhere except the test paths.
+- A planned test that cannot fail before the build. For each test, say what makes it fail before the build;
+  one that guards behaviour already true is a finding unless the plan names it as existing behaviour.
+- A new list, mapping or table of names the plan adds: what does a table missing from it do, and is that
+  mistake loud or silent? A silent one is a finding.
+- Every module docstring, and every comment, of a file the plan changes: is it still true after the change?
 - A refusal whose message tells the reader what to do instead: follow the remedy, and say so
   if it leads to the loss the refusal exists to prevent, or is wrong for one direction of the
   change.
@@ -62,4 +67,7 @@ answer.
 
 In your reply's JSON object:
 
-- `findings`: each thing you found, most serious first, with where in the plan it is; empty if none
+- `verdict`: `accept` when you found nothing; `amend` when you found something, which sends your findings to
+  the planner to amend the plan once before the operator sees it
+- `findings`: each thing you found, most serious first, with where in the plan it is, and the fix the plan
+  should take; empty if none

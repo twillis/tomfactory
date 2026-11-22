@@ -372,6 +372,16 @@ def _planning_answers(src):
                        for q in answered)
 
 
+def _checked(produced_by) -> dict:
+    """What the plan check found most recently, as it recorded it: the last reply that holds findings."""
+    checks = [s.produced for s in produced_by if isinstance(s.produced, dict) and "findings" in s.produced]
+    return checks[-1] if checks else {}
+
+
+def _plan_findings(src):
+    return "\n".join(f"- {item}" for item in _checked(src.finished).get("findings") or [])
+
+
 # The inputs a prompt may use, by name. A new input is one entry here.
 INPUTS = {
     "request": _request,
@@ -395,6 +405,7 @@ INPUTS = {
     "operator_feedback": _operator_feedback,
     "findings": _findings,
     "planning_answers": _planning_answers,
+    "plan_findings": _plan_findings,
     "run_name": lambda src: run_record.name(src.run).removeprefix("docs/runs/").removesuffix(".md"),
 }
 
@@ -465,9 +476,18 @@ def wait_for_operator(store, run, step, envelope) -> None:
     if "findings" in envelope:
         found = envelope["findings"] or ["nothing found"]
         text += "\n\n## Findings from the plan check\n\n" + "\n".join(f"- {item}" for item in found)
+    if "taken" in envelope or "declined" in envelope:          # amended by the planner from the check (FR-104)
+        found = _checked(store.query("steps", {"run_id": run.id})).get("findings") or []
+        text += _listed("Findings from the plan check", found)
+        text += _listed("Taken into the plan", envelope.get("taken"))
+        text += _listed("Declined by the planner, with its reason", envelope.get("declined"))
     records.add_plan(store, run.id, text, planned.get("ideals_addressed") or [], planned.get("conflicts") or [])
     records.await_operator(store, run.id)
     tell(store, run.id, f"Run {run.id}: {step.name} ready — waiting for you", " ".join(run.request.split()[:12]))
+
+
+def _listed(heading, items) -> str:
+    return f"\n\n## {heading}\n\n" + "\n".join(f"- {item}" for item in (items or ["none"]))
 
 
 def set_aside(store, run, checkout) -> None:

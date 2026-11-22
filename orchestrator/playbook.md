@@ -46,6 +46,14 @@ specification already exists in its own documents.
   thing, made easy.
 - Agents cannot read outside the target. Before a run, copy the reference material it needs into
   the target's `knowledge/`, unchanged, with a README row saying what it settles and for which run.
+- Before sending, measure on a scratch database every statement the request names, and every text a test
+  will compare from the catalog (`pg_get_constraintdef`, `pg_indexes`), and put the results in the request
+  as measured facts. A planner that starts from facts does not spend its first attempt asking.
+- Name the existing tests that pin what the run changes, sorted into "expected to move" and "read only,
+  should not move". Grep for them; do not list from memory.
+- Ask for the comments a run makes untrue by the behaviour it changes, not by fixed phrases.
+- A ruling the request would make in passing (which of two readers is right) is the operator's: ask him,
+  or leave it out of the request.
 - Keep it to a paragraph. The standing documents are the specification; the request points at them.
 
 ## While a run is open
@@ -69,6 +77,8 @@ specification already exists in its own documents.
 
 - Read the plan and the plan check's findings yourself. Summarise in plain terms: what it builds,
   what the check found, what needs his ruling.
+- The plan check's findings have already gone to the planner, who amended the plan and says what it took
+  and declined. Read the declined ones first: a finding declined wrongly is the operator's to send back.
 - Recommend approve unless a finding would cost a failed or stuck build: a test expectation the
   design cannot meet, an import that cannot load, a guard he asked for that is missing. Wording,
   stale notes and findings he has ruled out of scope are not reasons for another pass.
