@@ -121,6 +121,27 @@ def test_the_test_writer_mending_a_test_may_not_touch_the_code(cycle):
     assert run.outcome == "needs-me" and "mend_tests step changed what it may not" in run.reason
 
 
+LONG = "def greet(name=''):\n    return 'hello'  # " + "x" * 60 + "\n"
+
+
+@pytest.mark.fr("FR-101")
+def test_a_line_longer_than_the_codebase_allows_is_sent_back_naming_it(cycle):
+    limited = {".factory.toml": config.DEFAULT_FACTORY_TOML.replace("line_length = 0", "line_length = 60")}
+    run, fake, store, _ = cycle(script(build=[dict(BUILD, files={"hello.py": LONG}), BUILD]), files=limited)
+    assert run.outcome == "accepted"
+    assert names(store, run)[4:7] == ["build", "build", "test"]                # found before the tests were run
+    first = record(store, run, "build", 0)
+    assert first.failure == "check" and "lines_within_length" in [c["name"] for c in first.checks if not c["passed"]]
+    retry = fake.calls[3]["prompt"]
+    assert "hello.py:2" in retry and "60" in retry                              # told which line, and the limit
+
+
+@pytest.mark.fr("FR-101")
+def test_no_line_length_is_asked_of_a_codebase_that_sets_none(cycle):
+    run, _, store, _ = cycle(script(build=dict(BUILD, files={"hello.py": LONG})))
+    assert run.outcome == "accepted" and names(store, run).count("build") == 1
+
+
 @pytest.mark.fr("FR-011")
 def test_the_attempt_limit_set_on_the_request_is_the_one_used(cycle):
     wrong = dict(BUILD, files={"hello.py": WRONG})

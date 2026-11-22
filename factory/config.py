@@ -45,6 +45,7 @@ class TargetConfig:
     cycle: str = _setting("auto", "auto: spec kit where it is set up, else plain; sprint: one plan, then build to the end")
     tests_readable_command: str = _setting("python -m compileall -q tests",
                                            "fails if new tests cannot even be read as code; \"\" for none")
+    line_length: int = _setting(0, "the longest line a step may add to code or tests; 0 means no limit")
 
 
 def _toml(value) -> str:

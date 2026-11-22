@@ -13,6 +13,17 @@ documents (such as `requirements/`, `knowledge/` and `docs/`) are the specificat
 
 {{plan}}
 
+## What was asked and answered while this was planned
+
+Questions an agent asked during this run, and the answers it was given. A measurement was taken
+on a running system by whoever drives the run.
+
+{{planning_answers}}
+
+Treat an answer as established. Where the request says one thing and an answer says another,
+the answer stands: the request was written before it. Do not raise as a finding that the plan
+follows an answer and not the request.
+
 ## What to look for
 
 - A contradiction: the plan against the request, against the standing documents, or against

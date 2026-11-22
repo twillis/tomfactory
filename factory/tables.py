@@ -21,7 +21,7 @@ STEPS: list[Step] = [
     Step("baseline", "code", on_pass="write_tests", checks=("baseline",)),
 
     Step("write_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
-         on_pass="red", checks=("tests_added", "tests_within_budget", "edge_cases_stated"),
+         on_pass="red", checks=("tests_added", "tests_within_budget", "edge_cases_stated", "lines_within_length"),
          on_fail=Rework("write_tests"),
          inputs=("request", "plan", "test_paths", "failure"),
          envelope={"summary": "text", "test_files": "list", "edge_cases": "list"}),
@@ -33,13 +33,14 @@ STEPS: list[Step] = [
     # reported again, the tests are run and the failure takes its usual course.
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
          on_pass="test", routes={"test_defect": Rework("mend_tests", at_most=1, then="test")},
+         checks=("lines_within_length",), on_fail=Rework("build"),
          inputs=("request", "plan", "constitution", "ideals", "test_files", "failure"),
          envelope={"summary": "text", "files_changed": "list", "verdict": "verdict", "reasons": "list"}),
 
     # Not on the usual path: reached only from the build. It goes on to `test`, not `red`: the build is there,
     # so a mended test is expected to pass.
     Step("mend_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
-         on_pass="test", checks=("tests_within_budget",), on_fail=Rework("mend_tests"),
+         on_pass="test", checks=("tests_within_budget", "lines_within_length"), on_fail=Rework("mend_tests"),
          inputs=("request", "plan", "test_paths", "failure"),
          envelope={"summary": "text", "mended": "list"}),
 
@@ -116,7 +117,8 @@ SPEC_KIT_STEPS: list[Step] = [
     Step("converge", "agent", persona="reviewer", on_pass="retro", on_fail=Rework("converge"),
          speckit=("converge",), model="strongest", ideals_stop=False,
          routes={"rework": Rework("build", at_most=2, then="retro")},      # found twice: left for the review
-         inputs=("request", "plan", "constitution", "ideals", "diff", "test_output", "red_output"),
+         inputs=("request", "plan", "constitution", "ideals", "diff", "test_output", "red_output",
+                 "planning_answers"),
          envelope={"verdict": "verdict", "unbuilt": "list", "details": "list", "requirement_changes": "list",
                    "reasons": "list", "ideals_broken": "list"}),
 
@@ -142,7 +144,8 @@ SPRINT_STEPS: list[Step] = [
     replace(_plain["plan"], on_pass="check_plan", on_approve=None),
     # Read before the one approval: notes for the operator, never a gate (FR-095).
     Step("check_plan", "agent", persona="reviewer", on_pass=WAIT, on_approve="baseline", revise_from="plan",
-         inputs=("request", "plan", "constitution", "ideals", "failure", "test_paths", "docs_paths"),
+         inputs=("request", "plan", "constitution", "ideals", "failure", "test_paths", "docs_paths",
+                 "planning_answers"),
          envelope={"findings": "list"}),
     _plain["baseline"], _plain["write_tests"], _plain["red"], _plain["build"], _plain["mend_tests"],
     _plain["test"], _plain["architecture_review"],

@@ -81,6 +81,24 @@ class Workspace:
             total += int(counted[0]) if counted and counted[0].isdigit() else 0
         return total
 
+    def long_lines_added(self, names, limit) -> list[str]:
+        """Each line these files have gained since the last commit that is longer than `limit`, as
+        "file:line (n)". A new file counts in full."""
+        found = []
+        for name in sorted(names):
+            file = self.path / name
+            if not file.is_file():
+                continue
+            lines = file.read_text(errors="replace").splitlines()
+            if _git(self.path, "ls-files", "--error-unmatch", name, ok=(0, 1))[0] != 0:
+                added = range(1, len(lines) + 1)                    # git does not know it: all of it is new
+            else:
+                added = _added_line_numbers(_git(self.path, "diff", "-U0", "HEAD", "--", name)[1])
+            for number in added:
+                if number <= len(lines) and len(lines[number - 1]) > limit:
+                    found.append(f"{name}:{number} ({len(lines[number - 1])})")
+        return found
+
     def head(self) -> str:
         return _git(self.path, "rev-parse", "HEAD")[1].strip()
 
@@ -137,6 +155,17 @@ class Workspace:
         ahead = _git(self.target, "rev-list", "--count", f"{self.base_commit}..{self.branch}", ok=(0, 128))
         if ahead[0] == 0 and ahead[1].strip() == "0":
             _git(self.target, "branch", "-q", "-D", self.branch)
+
+
+HUNK = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", re.M)
+
+
+def _added_line_numbers(diff) -> list[int]:
+    """The numbers, in the new file, of the lines a zero-context diff adds."""
+    numbers = []
+    for start, count in HUNK.findall(diff):
+        numbers.extend(range(int(start), int(start) + int(count or 1)))
+    return numbers
 
 
 def changed(before: dict[str, str], after: dict[str, str]) -> set[str]:

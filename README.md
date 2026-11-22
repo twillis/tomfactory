@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 413 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 418 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -424,6 +424,19 @@ it back. Its persona tells it to test each behaviour once, at the level where it
 each codebase sets a budget, `test_budget_lines` in `.factory.toml` (300 by default; 0 for
 no limit): a run whose new tests add more lines than that is sent back and told the numbers.
 
+### A longest line, if the codebase wants one
+
+```toml
+line_length = 120       # the longest line a step may add to code or tests; 0, the default, is no limit
+```
+
+Where it is set, the factory measures the lines each writing step added (the test writer, the
+builder, a mended test), counting indentation, and sends the work back to that step with each
+line that is over, as `file:line (length)`. Lines already there are not measured, and
+documentation is not: prose and tables run long. It is measured by code, before the tests are
+run, so a width nobody checked is not discovered by the final review after everything else has
+passed.
+
 ### When an agent has a question
 
 An agent that cannot go on without an answer may ask one question instead of finishing. It
@@ -447,6 +460,10 @@ documents and cannot measure, so it is not asked. The run waits, the notificatio
 measurement is asked for", and `factory answer` gives the result to the step, which runs again.
 When Claude Code drives the factory (`/factory`), it does the measuring, on a scratch system,
 and tells you afterwards; the playbook says how.
+
+What was asked and answered travels with the run. The plan check and the final review are given
+every answered question, with who asked and who answered, and are told that where the request
+and an answer disagree, the answer stands: the request was written first.
 
 A run cannot be approved past a question that is still waiting. Every question, who asked
 it, the answer and who answered are kept with the run and shown by `factory show`. An agent
@@ -560,7 +577,7 @@ whatever its entry says. A new step cannot leave them out.
 
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
 `ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`,
-`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`. Each is one entry in `INPUTS` in
+`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 
 ## Adding a persona

@@ -364,6 +364,14 @@ def _findings(src):
     return "\n".join(lines) or "Nothing was recorded."
 
 
+def _planning_answers(src):
+    """Every question asked in this run that has its answer, whoever asked and whoever answered: a judge is
+    shown what the planner was told, a measurement above all (FR-102)."""
+    answered = [q for q in src.store.query("questions", {"run_id": src.run.id}) if q.answer is not None]
+    return "\n\n".join(f"The {q.asked_by}, at {q.step}, asked: {q.question}\nThe {q.answered_by} answered: {q.answer}"
+                       for q in answered)
+
+
 # The inputs a prompt may use, by name. A new input is one entry here.
 INPUTS = {
     "request": _request,
@@ -386,6 +394,7 @@ INPUTS = {
     "friction": _friction,
     "operator_feedback": _operator_feedback,
     "findings": _findings,
+    "planning_answers": _planning_answers,
     "run_name": lambda src: run_record.name(src.run).removeprefix("docs/runs/").removesuffix(".md"),
 }
 

@@ -201,3 +201,31 @@ def test_the_retro_is_given_the_rules_and_the_planners_where_each_step_may_write
 ])
 def test_the_prompts_carry_the_smaller_lessons_of_runs_52_to_56(prompt, says):
     assert says in (config.PROMPTS_DIR / prompt).read_text()
+
+
+@pytest.mark.fr("FR-102")
+def test_what_was_asked_and_answered_in_planning_reaches_the_plan_check_and_the_final_review(home, sprint_target, fake_notify):
+    """bttr_erp run 60: the plan check contradicted a measurement it had never been shown."""
+    asks = {"envelope": {"measure": "What does a read of the period column return?"}}
+    fake = FakeAgent([asks, *sprint()])
+    run, _ = to_the_end(sprint_target, fake)
+    assert run.state == "awaiting_approval" and run.current_step == "plan"
+    run = operations.answer(run.id, "A psycopg Range, measured on 18.6.")
+    while run.state == "awaiting_approval":
+        run = operations.approve(run.id)
+    assert run.outcome == "accepted", run.reason
+    reviewers = [call["prompt"] for call in fake.calls if call["persona"].startswith("# Reviewer")]
+    for prompt in (reviewers[0], reviewers[-1]):                    # the plan check, and the final review
+        assert "What does a read of the period column return?" in prompt
+        assert "A psycopg Range, measured on 18.6." in prompt and "operator" in prompt
+    builder = next(call["prompt"] for call in fake.calls if call["persona"].startswith("# Code writer"))
+    assert "A psycopg Range, measured on 18.6." not in builder       # the plan carries what the builder needs
+
+
+@pytest.mark.fr("FR-102")
+@pytest.mark.parametrize("prompt, says", [
+    ("check_plan.md", "the answer stands"),
+    ("converge.md", "the answer stands"),
+])
+def test_the_judges_are_told_a_measured_answer_outranks_the_request(prompt, says):
+    assert says in (config.PROMPTS_DIR / prompt).read_text()

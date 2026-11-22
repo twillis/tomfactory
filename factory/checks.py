@@ -141,6 +141,21 @@ def tests_within_budget(ctx) -> CheckResult:
                               " Keep them proportionate, as your priorities say.")
 
 
+@register("lines_within_length")
+def lines_within_length(ctx) -> CheckResult:
+    """No line the step added to code or tests is longer than the codebase allows (FR-101). Documentation
+    is not measured: prose and tables run long."""
+    limit = ctx.target_config.line_length
+    if not limit:
+        return CheckResult(True, "this codebase sets no line length")
+    measured = [name for name in ctx.changed if not under(name, ctx.target_config.docs_paths)]
+    long = ctx.checkout.long_lines_added(measured, limit)
+    if not long:
+        return CheckResult(True, f"no added line is over {limit}")
+    return CheckResult(False, f"these added lines are longer than this codebase's {limit}, counting indentation: "
+                              f"{', '.join(long)}. Wrap them; change nothing else.")
+
+
 @register("edge_cases_stated")
 def edge_cases_stated(ctx) -> CheckResult:
     """The test writer listed at least one edge or failure case it covered (FR-045)."""
