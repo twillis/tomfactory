@@ -65,7 +65,7 @@ def title(store, run) -> str:
     approved = [p for p in store.query("plans", {"run_id": run.id}) if p.decision == "approved"]
     text = approved[-1].text if approved else run.request
     first = next((line for line in text.splitlines() if line.strip()), run.request)
-    first = first.strip().lstrip("#").strip()
+    first = first.strip().lstrip("#").strip().strip("*_").strip()     # a heading, or a line in bold
     return re.sub(r"^Plan( for [^:]*)?:\s*", "", first) or first
 
 

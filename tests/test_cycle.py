@@ -144,7 +144,7 @@ def test_no_line_length_is_asked_of_a_codebase_that_sets_none(cycle):
 
 @pytest.mark.fr("FR-103")
 def test_each_commit_says_what_it_holds_and_which_run_made_it(cycle):
-    titled = {"envelope": dict(PLAN, plan="# Greet the reader\n\nAdd hello.py that prints hello.")}
+    titled = {"envelope": dict(PLAN, plan="**Plan: Greet the reader**\n\nAdd hello.py that prints hello.")}
     long = dict(BUILD, envelope=dict(BUILD["envelope"], summary="added greet " + "and a great deal more " * 8))
     run, _, _, target = cycle(script(plan=titled, build=long), request="Add a greeting.\nOne file is enough.")
     log = git(target, "log", "--format=%s%x00%b%x01", f"{run.base_commit}..{run.branch}").split("\x01")
