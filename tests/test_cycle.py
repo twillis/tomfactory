@@ -35,9 +35,9 @@ def test_the_happy_path_from_an_empty_target(cycle):
 
     assert git(target, "rev-list", "--count", f"{run.base_commit}..{run.branch}") == "6"
     subjects = git(target, "log", "--format=%s", f"{run.base_commit}..{run.branch}").splitlines()
-    assert subjects == [f"factory: run record (run {run.id})", f"factory: document (run {run.id})", f"factory: architecture_review (run {run.id})",
-                        f"factory: test (run {run.id})", f"factory: red (run {run.id})",
-                        f"factory: approved plan (run {run.id})"]
+    assert subjects == ["Accepted: Add hello.py that prints hello.",          # FR-103: what each holds
+                        "Docs: Added a greeting.", "Backlog: sound, with one thing to tidy later",
+                        "Build: added greet", "Tests: greeting tests", "Plan: Add hello.py that prints hello."]
     assert git(target, "show", f"{run.branch}:hello.py") == CODE.strip()
     assert "Added a greeting" in git(target, "show", f"{run.branch}:CHANGELOG.md")
     assert record(store, run, "document").produced["summary"] == "Added a greeting."
@@ -140,6 +140,26 @@ def test_a_line_longer_than_the_codebase_allows_is_sent_back_naming_it(cycle):
 def test_no_line_length_is_asked_of_a_codebase_that_sets_none(cycle):
     run, _, store, _ = cycle(script(build=dict(BUILD, files={"hello.py": LONG})))
     assert run.outcome == "accepted" and names(store, run).count("build") == 1
+
+
+@pytest.mark.fr("FR-103")
+def test_each_commit_says_what_it_holds_and_which_run_made_it(cycle):
+    titled = {"envelope": dict(PLAN, plan="# Greet the reader\n\nAdd hello.py that prints hello.")}
+    long = dict(BUILD, envelope=dict(BUILD["envelope"], summary="added greet " + "and a great deal more " * 8))
+    run, _, _, target = cycle(script(plan=titled, build=long), request="Add a greeting.\nOne file is enough.")
+    log = git(target, "log", "--format=%s%x00%b%x01", f"{run.base_commit}..{run.branch}").split("\x01")
+    commits = [entry.strip().split("\x00") for entry in log if entry.strip()]
+    subjects = [subject for subject, _ in commits]
+    assert subjects[-1] == "Plan: Greet the reader"                       # a plan is named by its heading
+    assert subjects[0] == "Accepted: Greet the reader"
+    build = next(s for s in subjects if s.startswith("Build: "))
+    assert len(build) <= 72 and build.endswith("…")                         # a long summary is cut at a word
+    for _, body in commits:
+        assert f"Run {run.id}: Add a greeting." in body and f"Factory-Run: {run.id}" in body
+    steps = [line.split(": ", 1)[1] for _, body in commits for line in body.splitlines() if line.startswith("Factory-Step: ")]
+    assert steps == ["finish", "document", "architecture_review", "test", "red", "plan"]
+    record = next(body for subject, body in commits if subject.startswith("Accepted: "))
+    assert "it matches the request" in record and "minutes of steps" in record        # the run, in brief
 
 
 @pytest.mark.fr("FR-011")
@@ -452,9 +472,9 @@ def test_a_run_leaves_its_record_with_the_code_from_approval_to_its_end(home, ta
     assert PLAN["plan"] not in at_approval                               # the version approved, not the one sent back
     record = git(target, "show", f"{run.branch}:{name}")
     for part in ("Add a greeting", "The second version.", "keeps the layers apart", "| write_tests | 1 | passed |",
-                 "accepted", "it matches the request", f"factory: red (run {run.id})"):
+                 "accepted", "it matches the request", "Tests: greeting tests"):
         assert part in record, part
-    assert git(target, "log", "--format=%s", "-1", run.branch) == f"factory: run record (run {run.id})"
+    assert git(target, "log", "--format=%s", "-1", run.branch) == "Accepted: The second version."
     assert git(target, "show", "--name-only", "--format=", run.branch).split() == [name]     # the record alone
 
 

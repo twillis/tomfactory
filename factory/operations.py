@@ -195,7 +195,7 @@ def approve(run_id=None) -> dict:
     records.decide(store, run.id, "approved")
     checkout = Workspace.of(run)
     if not workflow.get(run.current_step, driver.table_of(run)).speckit:     # spec kit commits its own documents
-        run_record.write(store, run, checkout, f"factory: approved plan (run {run.id})")
+        run_record.write(store, run, checkout, run_record.approved_message(store, run))
     records.event(store, run.id, "approved", f"approved at {run.current_step}", {"commit": checkout.head()})
     return _carry_on(store, run, "approve")
 
@@ -252,7 +252,7 @@ def resume(run_id=None) -> dict:
     own_files.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))   # the factory as it is now
     state = "planning" if workflow.is_planning(run.current_step, steps) else "working"
     reopened = records.reopen(store, run.id, state)
-    run_record.write(store, reopened, Workspace.of(reopened), f"factory: resumed (run {run.id})")    # FR-094
+    run_record.write(store, reopened, Workspace.of(reopened), run_record.resumed_message(reopened))    # FR-094
     return _launch_at(store, reopened, run.current_step)
 
 

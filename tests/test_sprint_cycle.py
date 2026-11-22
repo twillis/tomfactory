@@ -78,7 +78,7 @@ def test_a_resumed_step_is_told_why_it_stopped_and_the_record_is_written_again(h
     fake.script = happy[3:]
     run = operations.resume(run.id)
     assert "5-hour limit" in fake.calls[4]["prompt"]                     # the build, run again, knows why
-    assert "factory: resumed (run" in git(sprint_target, "log", "--format=%s", run.branch)
+    assert "Resumed at build" in git(sprint_target, "log", "--format=%s", run.branch)
 
 
 # ---- the plan check, and the record of the tests (FR-095) ----

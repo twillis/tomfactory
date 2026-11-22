@@ -5,6 +5,81 @@ so the reason for a change, and how it was made, travel with the code. The recor
 rendered from the factory's own records of the run; this module decides nothing.
 """
 import datetime
+import re
+
+
+# What each step's commit holds, by the step that wrote it (FR-103). A step not named here is named by itself.
+LABELS = {"plan": "Plan", "specify": "Specification", "clarify": "Specification", "tasks": "Tasks",
+          "write_tests": "Tests", "mend_tests": "Tests mended", "build": "Build", "tidy_code": "Tidy",
+          "tidy_tests": "Tidy tests", "architecture_review": "Backlog", "document": "Docs", "retro": "Retro"}
+SUBJECT_LENGTH = 72     # what git log --oneline and most tools show in full
+OUTCOMES = {"accepted": "Accepted", "rejected": "Rejected", "needs-me": "Needs me"}   # the record's subject begins so
+
+
+def step_message(store, run, step, envelope) -> str:
+    """The message for the commit after `step`: what it holds, in the words of the agent that wrote it. A code
+    step commits what the last agent wrote (the test writer's tests at `red`, the builder's code at `test`)."""
+    writer, summary = step.name, (envelope or {}).get("summary") if isinstance(envelope, dict) else None
+    if step.kind == "code":
+        wrote = [s for s in store.query("steps", {"run_id": run.id}) if s.kind == "agent" and s.ended_at
+                 and s.passed and s.name != "answer_question"]
+        if wrote:
+            writer = wrote[-1].name
+            summary = (wrote[-1].produced or {}).get("summary") if isinstance(wrote[-1].produced, dict) else None
+    label = LABELS.get(writer, writer)
+    subject = f"{label}: {summary}" if summary else label
+    return _message(run, step.name, subject)
+
+
+def approved_message(store, run) -> str:
+    """The message for the commit of the approved plan: the plan, by its title."""
+    return _message(run, "plan", f"Plan: {title(store, run)}")
+
+
+def resumed_message(run) -> str:
+    return _message(run, run.current_step, f"Resumed at {run.current_step}")
+
+
+def ended_message(store, run) -> str:
+    """The message for the commit of the run's finished record: the run in brief, its outcome and why, what the
+    review said, and what it cost."""
+    steps = [s for s in store.query("steps", {"run_id": run.id}) if s.ended_at]
+    judged = next((s.produced for s in reversed(steps) if s.persona == "reviewer"
+                   and isinstance(s.produced, dict) and "verdict" in s.produced), None)
+    brief = [run.reason or ""]
+    if judged:
+        brief += ["", f"The review: {judged['verdict']}", *[f"- {reason}" for reason in judged.get("reasons", [])]]
+    totals = [line for line in facts(store, run) if line.startswith("Total:")]
+    brief += ["", *totals]
+    outcome = OUTCOMES.get(run.outcome, run.outcome)
+    return _message(run, run.current_step, f"{outcome}: {title(store, run)}", brief)
+
+
+def title(store, run) -> str:
+    """What the run is about, in a line: the approved plan's heading or first line, else the request's first line."""
+    approved = [p for p in store.query("plans", {"run_id": run.id}) if p.decision == "approved"]
+    text = approved[-1].text if approved else run.request
+    first = next((line for line in text.splitlines() if line.strip()), run.request)
+    first = first.strip().lstrip("#").strip()
+    return re.sub(r"^Plan( for [^:]*)?:\s*", "", first) or first
+
+
+def _message(run, step_name, subject, body=()) -> str:
+    request = next((line for line in run.request.splitlines() if line.strip()), "")
+    lines = [_shorten(subject, SUBJECT_LENGTH), "", *body]
+    if body:
+        lines.append("")
+    lines += [f"Run {run.id}: {_shorten(request, 200)}", "", f"Factory-Run: {run.id}", f"Factory-Step: {step_name}"]
+    return "\n".join(lines)
+
+
+def _shorten(text, limit) -> str:
+    """`text` on one line, cut at a word to at most `limit` characters, with an ellipsis where it was cut."""
+    one_line = " ".join(text.split())
+    if len(one_line) <= limit:
+        return one_line
+    cut = one_line[:limit - 1].rsplit(" ", 1)[0]
+    return cut.rstrip(" ,;:") + "…"
 
 
 def name(run) -> str:

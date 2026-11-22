@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 418 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 419 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -164,7 +164,12 @@ Each run works in its own checkout of the target codebase, on its own branch
 `factory/20261119-145203-add-a-greeting`). Your own working copy is never touched. An
 accepted run leaves up to six commits on its branch: the plan you approved, the tests, the
 change, the architect's backlog notes if it had any, the documentation, and the run's record.
-The record is one file under `docs/runs/`, with the branch's own name. Neither is named by the
+Each commit says what it holds, in at most 72 characters: `Plan: <the plan's title>`,
+`Tests: …`, `Build: …`, `Backlog: …`, `Docs: …` and `Retro: …` in the words of the agent that
+wrote them, and `Accepted: <the plan's title>` (or `Rejected:`, `Needs me:`) for the record at the end, whose body gives
+the outcome's reason, the review and the time and cost. Every body names the run and its request
+and ends with the trailers `Factory-Run:` and `Factory-Step:`, so `git log --grep "Factory-Run: 62"`
+finds a run's commits. The record is one file under `docs/runs/`, with the branch's own name. Neither is named by the
 run's number, which is counted on your machine alone, so two people working on one codebase do
 not collide. It is written when you approve the
 plan (the request, anything you sent it back with, the plan) and completed when the run ends,

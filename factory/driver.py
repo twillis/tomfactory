@@ -129,7 +129,7 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     if step.advisory and result.failure not in (None, "guard"):
         checkout.discard(changed)       # a failed advisory step leaves nothing behind for the next to commit
     if result.passed and step.commit_after:
-        commit = checkout.commit(f"factory: {step.name} (run {run.id})")
+        commit = checkout.commit(run_record.step_message(store, run, step, reply.envelope if reply else None))
         if commit:
             doing.emit("commit", f"{step.name}: {commit[:10]}", {"commit": commit})
 
@@ -489,7 +489,7 @@ def end_run(store, run_id, outcome, reason):
     tell(store, run_id, f"Run {run_id}: {outcome}", reason)
     if pathlib.Path(ended.workspace).is_dir():          # the record travels with the work, whatever the outcome
         try:
-            run_record.write(store, ended, Workspace.of(ended), f"factory: run record (run {run_id})")
+            run_record.write(store, ended, Workspace.of(ended), run_record.ended_message(store, ended))
         except Exception as problem:                    # the run has ended either way; say what went wrong
             records.event(store, run_id, "error", f"the run's record could not be written: {problem}")
     return ended
