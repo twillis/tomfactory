@@ -157,8 +157,9 @@ def status(args):
     for view in views:
         run, last = view.run, (view.steps[-1] if view.steps else None)
         waiting = [q.question for q in view.questions if q.answer is None]
-        if waiting:
-            doing = "a question for you"
+        if waiting:        # a measurement is for whoever drives the run; any other question is the operator's
+            measure = last and any(check["name"] == "measure" for check in last.checks or [])
+            doing = "a measurement is asked for" if measure else "a question for you"
         elif run.state == "ended":
             doing = run.outcome
         elif last and last.ended_at is None:

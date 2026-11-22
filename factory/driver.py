@@ -70,6 +70,10 @@ def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) ->
                 return
             if isinstance(then, Replan):        # the requirement changed: back to planning, build set aside
                 set_aside(store, run, checkout)
+            if isinstance(then, Ask) and then.measure:      # the lead reads documents; it cannot measure (FR-100)
+                records.await_operator(store, run_id)
+                tell(store, run_id, f"Run {run_id}: a measurement is asked for", then.question)
+                return
             if isinstance(then, Ask):           # the lead answers if it can; otherwise the operator is asked
                 answered, said = run_step(store, run, tables.LEAD, checkout, settings, adapter,
                                           personas_dir, prompts_dir)
@@ -213,9 +217,9 @@ def verify(doing, reply, before, dirty_before, paths):
                 result = StepResult(False, "guard", outcome)
     question = workflow.question_in(doing.step, envelope)
     if result.passed and question:      # it asked instead of finishing
-        outcome = CheckResult(False, question, name="question")
+        outcome = CheckResult(False, question, name="measure" if workflow.asks_to_measure(envelope) else "question")
         done.append(outcome)
-        doing.emit("check", "question: asked", asdict(outcome))
+        doing.emit("check", f"{outcome.name}: asked", asdict(outcome))
         result = StepResult(False, "question", outcome)
     if result.passed:
         try:

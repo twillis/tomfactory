@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 409 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 413 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -435,10 +435,18 @@ does not come straight to you:
 2. If the lead cannot answer, the run waits and you are notified with the question.
 
 ```bash
-factory status                      # shows "a question for you"
+factory status                      # shows "a question for you", or "a measurement is asked for"
 factory show                        # the question, and who asked it
 factory answer "Use spaces."        # the step that asked runs again with your answer
 ```
+
+**Asking for a measurement.** No agent can run anything, so an agent whose work rests on how a
+running system behaves (what a statement returns, which version is installed) may ask for that
+to be measured, in place of guessing: its reply is `{"measure": "..."}`. The lead reads
+documents and cannot measure, so it is not asked. The run waits, the notification says "a
+measurement is asked for", and `factory answer` gives the result to the step, which runs again.
+When Claude Code drives the factory (`/factory`), it does the measuring, on a scratch system,
+and tells you afterwards; the playbook says how.
 
 A run cannot be approved past a question that is still waiting. Every question, who asked
 it, the answer and who answered are kept with the run and shown by `factory show`. An agent

@@ -86,8 +86,13 @@ class Run:
 
 @dataclass(frozen=True)
 class Ask:
-    """A step asked a question instead of finishing. The lead answers, or the operator does."""
+    """A step asked a question instead of finishing. The lead answers, or the operator does.
+
+    With `measure`, it asked for a fact only a running system can give: the lead, who answers from
+    documents, is not asked, and it goes straight to whoever drives the run (FR-100).
+    """
     question: str
+    measure: bool = False
 
 
 @dataclass(frozen=True)
@@ -178,10 +183,20 @@ def _within(path, folder) -> bool:
 
 
 def question_in(step, envelope) -> str | None:
-    """The question a step asked instead of finishing: its whole reply is {"question": ...}."""
-    if step.may_ask and isinstance(envelope, dict) and set(envelope) == {"question"}:
+    """The question a step asked instead of finishing: its whole reply is {"question": ...}, or, for a fact
+    only a running system can give, {"measure": ...}."""
+    if not step.may_ask or not isinstance(envelope, dict):
+        return None
+    if set(envelope) == {"question"}:
         return str(envelope["question"])
+    if asks_to_measure(envelope):
+        return str(envelope["measure"])
     return None
+
+
+def asks_to_measure(envelope) -> bool:
+    """Is this reply a request for a measurement, and nothing else?"""
+    return isinstance(envelope, dict) and set(envelope) == {"measure"}
 
 
 def lead_answered(result, envelope) -> bool:
@@ -205,7 +220,7 @@ def next_step(step, result, attempts, limit) -> Run | Wait | Ask | Replan | End:
     if result.failure == "question":
         if attempts.get(step.name, 0) >= limit:
             return End("needs-me", f"the {step.name} step has run {limit} times and is still asking: {note}")
-        return Ask(note)
+        return Ask(note, measure=result.failed_check.name == "measure")
     if result.failure == "timeout":
         return End("needs-me", f"the {step.name} step was stopped at its time limit of {result.message}")
     if result.failure == "error":

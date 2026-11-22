@@ -3,7 +3,7 @@ the question comes to the operator. Either way it is all on record (FR-061 to FR
 """
 import pytest
 
-from factory import cli, operations, tables, workflow
+from factory import cli, config, operations, tables, workflow
 from factory.checks import CheckResult
 from factory.operations import Refused
 from factory.store import open_store
@@ -141,3 +141,65 @@ def test_the_command_line_shows_and_answers_questions(home, target, fake_notify,
     assert cli.main(["show"]) == 0
     out = capsys.readouterr().out
     assert "Should the greeting end with an exclamation mark?" in out and "Yes, with one." in out and "operator" in out
+
+
+# ---- a measurement: a fact only a running system can give (FR-100) ----
+
+MEASURE = {"envelope": {"measure": "Does 'create extension btree_gist' succeed on the test database, and which"
+                                   " PostgreSQL version is it?"}}
+
+
+@pytest.mark.fr("FR-100")
+def test_asking_for_a_measurement_is_a_question_that_the_lead_is_not_asked():
+    build = workflow.get("build", tables.STEPS)
+    assert workflow.question_in(build, MEASURE["envelope"]) == MEASURE["envelope"]["measure"]
+    assert workflow.asks_to_measure(MEASURE["envelope"]) and not workflow.asks_to_measure(QUESTION["envelope"])
+    assert workflow.question_in(tables.LEAD, MEASURE["envelope"]) is None          # the lead cannot ask either way
+    measure = StepResult(False, "question", CheckResult(False, "Which version?", name="measure"))
+    assert next_step(build, measure, {"build": 1}, 3) == Ask("Which version?", measure=True)
+    assert next_step(build, asked(), {"build": 1}, 3) == Ask("Tabs or spaces?", measure=False)
+    assert next_step(build, measure, {"build": 3}, 3).outcome == "needs-me"         # it cannot ask for ever
+
+
+@pytest.mark.fr("FR-100")
+def test_a_measurement_comes_straight_to_whoever_drives_the_run_and_its_answer_goes_back(home, target, fake_notify):
+    run, fake = start(target, [{"envelope": PLAN}, WRITE_TESTS, MEASURE, BUILD, *AFTER_BUILD])     # no lead is scripted
+    drive_with(fake)
+    run = operations.approve(run.id)
+
+    assert (run.state, run.current_step, run.outcome) == ("awaiting_approval", "build", None)
+    assert fake_notify[-1] == (f"Run {run.id}: a measurement is asked for", MEASURE["envelope"]["measure"])
+    names = [s.name for s in open_store(home).query("steps", {"run_id": run.id})]
+    assert "answer_question" not in names
+    with pytest.raises(Refused, match="question"):
+        operations.approve(run.id)
+
+    run = operations.answer(run.id, "It succeeds. PostgreSQL 18.6.")
+    assert run.outcome == "accepted", run.reason
+    assert "It succeeds. PostgreSQL 18.6." in fake.calls[3]["prompt"]
+    asked_for = operations.show(run.id).questions[-1]
+    assert (asked_for.asked_by, asked_for.answer) == ("code_writer", "It succeeds. PostgreSQL 18.6.")
+
+
+@pytest.mark.fr("FR-100")
+def test_every_agent_is_told_it_may_ask_for_a_measurement_and_the_orchestrator_how_to_answer(home, target, fake_notify):
+    run, fake = start(target, [{"envelope": PLAN}, WRITE_TESTS, BUILD, *AFTER_BUILD])
+    drive_with(fake)
+    operations.approve(run.id)
+    for call in fake.calls:
+        assert '"measure"' in call["prompt"] and "only a running system can give" in call["prompt"]
+    playbook = (config.PACKAGE_DIR.parent / "orchestrator" / "playbook.md").read_text()
+    for says in ("a measurement is asked for", "Write the command yourself", "a decision"):
+        assert says in playbook
+
+
+@pytest.mark.fr("FR-100")
+def test_the_command_line_says_a_measurement_is_asked_for(home, target, fake_notify, monkeypatch, capsys):
+    fake = FakeAgent([{"envelope": PLAN}, WRITE_TESTS, MEASURE, BUILD, *AFTER_BUILD])
+    monkeypatch.setattr(operations, "launch", in_process(fake))
+    assert cli.main(["request", "Add a greeting", "--target", str(target)]) == 0
+    assert cli.main(["approve"]) == 0
+    capsys.readouterr()
+    assert cli.main(["status"]) == 0
+    out = capsys.readouterr().out
+    assert "a measurement is asked for" in out and "question for you" not in out
