@@ -110,7 +110,8 @@ class Step:
     envelope: dict = field(default_factory=dict)   # agent steps: required key -> text | list | verdict | (values)
     checks: tuple = ()                  # names of the step's own checks, run in order
     on_fail: Rework | End = End("needs-me")        # what a failed check of its own leads to
-    routes: dict = field(default_factory=dict)     # a judging step: verdict -> Rework | Replan | End
+    routes: dict = field(default_factory=dict)     # a step that gives a verdict: verdict -> Rework | Replan | End.
+                                                   # A judging step's; and the build's one, for a test no build can pass
     on_approve: str | None = None       # a waiting step: where approval leads
     revise_from: str | None = None      # a waiting step: where "send it back" returns to; None means itself
     commit_after: bool = False          # commit the checkout when the step passes
@@ -137,7 +138,8 @@ class Step:
         if (self.on_pass == WAIT) != bool(self.on_approve):
             wrong("a waiting step, and only a waiting step, says where approval leads (on_approve)")
         if bool(self.routes) != ("verdict" in self.envelope.values()):
-            wrong("a judging step has routes, and its envelope has a verdict; other steps have neither")
+            wrong("a judging step, or any step that gives a verdict, has routes, and its envelope has a verdict;"
+                  " other steps have neither")
 
 
 def verdicts(step) -> tuple:

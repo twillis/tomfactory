@@ -374,7 +374,8 @@ INPUTS = {
     "test_files": _test_files,
     "failure": _failure,
     "question": lambda src: (records.pending_question(src.store, src.run.id) or {}).get("question", ""),
-    "diff": lambda src: src.checkout.diff_since_base(),
+    # Without the run's own record: it holds the request and the plan, which a step given the diff already has.
+    "diff": lambda src: src.checkout.diff_since_base(leaving_out=run_record.name(src.run)),
     "test_output": _test_output,
     "red_output": _red_output,
     "run_facts": lambda src: "\n".join(run_record.facts(src.store, src.run)),

@@ -48,7 +48,7 @@ No design needed. A few hours, no quota beyond a check run.
 - **Tick tasks off in code.** On a spec kit codebase nobody marks `tasks.md` done, because
   the writers are told not to, so an agent cannot claim work is finished. The factory's code
   could tick a task when the tests that cover it pass. (`changes/2026-11-18-spec-kit-cycle.md`)
-- **Tell the planner what the factory adds.** The planner writes "no documentation" into
+- **Tell the planner what the factory adds.** *Done 2026-11-22 (FR-099): the plan prompt says who writes what after approval.* The planner writes "no documentation" into
   plans, then the architect and documenter add a backlog and a changelog, and converge has
   to excuse it. One paragraph in the plan prompt.
 - **Retire the comments-travel stop-gap** on the plain cycle, now that the scope rule is

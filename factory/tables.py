@@ -14,7 +14,8 @@ STEPS: list[Step] = [
     # so in this plain cycle the planner changes no file.
     Step("plan", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass=WAIT,
          on_approve="baseline", commit_after=True,
-         inputs=("request", "run_kind", "constitution", "ideals", "previous_plan", "comment", "failure"),
+         inputs=("request", "run_kind", "constitution", "ideals", "previous_plan", "comment", "failure",
+                 "test_paths", "docs_paths"),
          envelope={"plan": "text", "ideals_addressed": "list", "conflicts": "list"}),
 
     Step("baseline", "code", on_pass="write_tests", checks=("baseline",)),
@@ -28,10 +29,19 @@ STEPS: list[Step] = [
     Step("red", "code", on_pass="build", checks=("tests_fail_first",), on_fail=Rework("write_tests"),
          commit_after=True),
 
+    # The builder may not touch a test. One it finds no build can pass goes to the test writer, once (FR-097);
+    # reported again, the tests are run and the failure takes its usual course.
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
-         on_pass="test",
+         on_pass="test", routes={"test_defect": Rework("mend_tests", at_most=1, then="test")},
          inputs=("request", "plan", "constitution", "ideals", "test_files", "failure"),
-         envelope={"summary": "text", "files_changed": "list"}),
+         envelope={"summary": "text", "files_changed": "list", "verdict": "verdict", "reasons": "list"}),
+
+    # Not on the usual path: reached only from the build. It goes on to `test`, not `red`: the build is there,
+    # so a mended test is expected to pass.
+    Step("mend_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
+         on_pass="test", checks=("tests_within_budget",), on_fail=Rework("mend_tests"),
+         inputs=("request", "plan", "test_paths", "failure"),
+         envelope={"summary": "text", "mended": "list"}),
 
     Step("test", "code", on_pass="architecture_review", checks=("tests_pass",), on_fail=Rework("build"),
          commit_after=True),
@@ -95,6 +105,7 @@ SPEC_KIT_STEPS: list[Step] = [
     replace(_plain["write_tests"], speckit=("implement",)),
     _plain["red"],
     replace(_plain["build"], speckit=("implement",)),
+    _plain["mend_tests"],
     _plain["test"],
     _plain["architecture_review"],
     replace(_plain["document"], on_pass="converge"),
@@ -112,7 +123,8 @@ SPEC_KIT_STEPS: list[Step] = [
     # Advice, like the architect's: the team's retro, about the factory, never a gate (FR-091).
     Step("retro", "agent", persona="facilitator", capabilities="read+edit", may_change="docs",
          on_pass="finish", commit_after=True, advisory=True,
-         inputs=("request", "run_facts", "friction", "operator_feedback", "findings", "docs_paths", "run_name"),
+         inputs=("request", "run_facts", "friction", "operator_feedback", "findings", "docs_paths", "run_name",
+                 "constitution", "ideals"),
          envelope={"summary": "text", "worked": "list", "did_not": "list", "opportunities": "list",
                    "threats": "list"}),
 
@@ -130,9 +142,10 @@ SPRINT_STEPS: list[Step] = [
     replace(_plain["plan"], on_pass="check_plan", on_approve=None),
     # Read before the one approval: notes for the operator, never a gate (FR-095).
     Step("check_plan", "agent", persona="reviewer", on_pass=WAIT, on_approve="baseline", revise_from="plan",
-         inputs=("request", "plan", "constitution", "ideals", "failure"), envelope={"findings": "list"}),
-    _plain["baseline"], _plain["write_tests"], _plain["red"], _plain["build"], _plain["test"],
-    _plain["architecture_review"],
+         inputs=("request", "plan", "constitution", "ideals", "failure", "test_paths", "docs_paths"),
+         envelope={"findings": "list"}),
+    _plain["baseline"], _plain["write_tests"], _plain["red"], _plain["build"], _plain["mend_tests"],
+    _plain["test"], _plain["architecture_review"],
     replace(_plain["document"], on_pass="converge"),
     replace(_converge, speckit=()),                    # no spec kit stage, whatever is set up
     _retro,

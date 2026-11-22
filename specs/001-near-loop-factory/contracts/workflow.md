@@ -36,7 +36,8 @@ A code step has no persona, capabilities, inputs or envelope. Its work is its ch
 | 2 | `baseline` | code | — | — | nothing | `baseline` | `write_tests` | `End("needs-me")` | no |
 | 3 | `write_tests` | agent | `test_writer` | read+edit | tests | `tests_added`, `tests_within_budget`, `edge_cases_stated` | `red` | `Rework("write_tests")` | no |
 | 4 | `red` | code | — | — | nothing | `tests_fail_first` | `build` | `Rework("write_tests")` | yes |
-| 5 | `build` | agent | `code_writer` | read+edit | not_tests | — | `test` | — | no |
+| 5 | `build` | agent | `code_writer` | read+edit | not_tests | — | `test` | route: `test_defect` → `Rework("mend_tests", at_most=1, then="test")` (FR-097) | no |
+| — | `mend_tests` | agent | `test_writer` | read+edit | tests | `tests_within_budget` | `test` | `Rework("mend_tests")` | no |
 | 6 | `test` | code | — | — | nothing | `tests_pass` | `architecture_review` | `Rework("build")` | yes |
 | 7 | `architecture_review` | agent | `architect` | read+edit | docs | — | `document` | — (advisory) | yes |
 | 8 | `document` | agent | `documenter` | read+edit | docs | — | `review` | — | yes |
@@ -187,7 +188,7 @@ An agent step's prompt is `prompts/<step name>.md` with placeholders written `{{
 | `failure` | On a rework: the failed check and its note |
 | `speckit_instructions` | Where the target uses spec kit and the step names commands: the instruction text of those commands, from the target's own copy |
 | `speckit_context` | What spec kit's scripts set up for this step: the feature directory and the paths of its documents |
-| `diff` | The run's whole change so far, as a diff |
+| `diff` | The run's whole change so far, as a diff, without the run's own record under `docs/runs/` (FR-099) |
 | `test_output` | The output of the most recent test command run |
 
 | Step | `inputs` |
@@ -195,6 +196,7 @@ An agent step's prompt is `prompts/<step name>.md` with placeholders written `{{
 | `plan` | `request`, `constitution`, `ideals`, `previous_plan`, `comment`, `failure`, `speckit_instructions`, `speckit_context` |
 | `write_tests` | `request`, `plan`, `test_paths`, `failure` |
 | `build` | `request`, `plan`, `constitution`, `ideals`, `test_files`, `failure` |
+| `mend_tests` | `request`, `plan`, `test_paths`, `failure` |
 | `architecture_review` | `request`, `plan`, `constitution`, `ideals`, `diff`, `docs_paths` |
 | `document` | `request`, `plan`, `diff`, `docs_paths` |
 | `review` | `request`, `plan`, `constitution`, `ideals`, `diff`, `test_output` |
@@ -240,6 +242,10 @@ Each agent step must end its reply with one JSON object. Required keys and types
 | | `edge_cases` | list |
 | `build` | `summary` | text |
 | | `files_changed` | list |
+| | `verdict` | `accept`, or `test_defect` (FR-097) |
+| | `reasons` | list |
+| `mend_tests` | `summary` | text |
+| | `mended` | list |
 | `architecture_review` | `summary` | text |
 | | `suggestions` | list |
 | | `warnings` | list |

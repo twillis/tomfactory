@@ -25,6 +25,20 @@ These figures come from the factory's own records, not from any agent.
 
 {{findings}}
 
+## The rules the run was held to
+
+The codebase's constitution, which outranks the ideals:
+
+{{constitution}}
+
+The ideals:
+
+{{ideals}}
+
+Use them to weigh what you report. Where the request, the plan or a finding rested on one
+rule and another outranks it, say which rule was missed and at which step it could have been
+caught. Do not restate the rules.
+
 ## Where the retro goes
 
 You may create or change files only under: {{docs_paths}}

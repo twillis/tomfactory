@@ -168,7 +168,8 @@ WRONG = "def greet(name=''):\n    return 'goodbye'\n"
 WRITE_TESTS = {"envelope": {"summary": "greeting tests", "test_files": ["tests/test_hello.py"],
                             "edge_cases": ["an empty name"]},
                "files": {"tests/test_hello.py": TEST}}
-BUILD = {"envelope": {"summary": "added greet", "files_changed": ["hello.py"]}, "files": {"hello.py": CODE},
+BUILD = {"envelope": {"summary": "added greet", "files_changed": ["hello.py"], "verdict": "accept", "reasons": []},
+         "files": {"hello.py": CODE},
          "events": [("agent_text", "BUILDER-PRIVATE-THOUGHT", {"text": "BUILDER-PRIVATE-THOUGHT"})]}
 ARCHITECT = {"envelope": {"summary": "sound, with one thing to tidy later",
                           "suggestions": ["the greeting text is repeated; give it one home"], "warnings": []},

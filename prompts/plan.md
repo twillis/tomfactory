@@ -34,6 +34,19 @@ What was wrong with it, if anything:
 Where spec kit is in use, your envelope's `plan` is a short summary that names the files you
 wrote, so those who build from the plan can find them. Where it is not, change no file.
 
+## Who writes what, after the plan is approved
+
+Each later step may change only its own part of the codebase, and the factory undoes anything
+else. The test writer may write only under: {{test_paths}}. The documenter and the architect
+may write only under: {{docs_paths}}. The builder may write anywhere except the test paths.
+The factory itself adds the run's record under `docs/runs/`; the architect keeps a backlog and,
+on a sprint, a retro is written under the documentation paths.
+
+Give no step a file it may not write, and none that does not exist unless the plan has the
+right step create it. A document outside those paths that the change makes out of date (a
+standing requirement, a run order) is not for any step: name it in the plan as left for the
+operator at merge.
+
 ## What every plan says, and does not
 
 - **Where it differs from what it carries over.** Where the design carries behaviour over from

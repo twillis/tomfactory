@@ -64,8 +64,11 @@ def test_the_roles_are_kept_apart():
     by_persona = {s.name: s.persona for s in tables.STEPS}
     assert len({by_persona["write_tests"], by_persona["build"], by_persona["review"]}) == 3
     for table in tables.TABLES:
-        for judge in (s for s in table if s.routes):
+        for judge in (s for s in table if s.routes and s.name != "build"):
             assert (judge.capabilities, judge.may_change) == ("read", "nothing")     # a judge changes nothing
+        for build in (s for s in table if s.name == "build"):       # the one step with a verdict that judges nothing:
+            assert build.routes == {"test_defect": Rework("mend_tests", at_most=1, then="test")}        # FR-097
+            assert step("mend_tests", table).may_change == "tests" and step("mend_tests", table).on_pass == "test"
     assert [s.name for s in tables.STEPS if s.advisory] == ["architecture_review"]
     assert not any(s.speckit for s in tables.STEPS)          # the plain cycle names no spec kit command
     assert all(s.inputs == () and s.envelope == {} for t in tables.TABLES for s in t if s.kind == "code")

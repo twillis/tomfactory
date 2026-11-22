@@ -24,7 +24,12 @@ You may create or change files only under: {{docs_paths}}
 
 Keep the backlog in `docs/backlog.md`. If the file exists, read it and add to it; do not
 repeat what is already there. Give each entry one line: what to do, in which file, and
-whether it is a suggestion or a warning. If you have nothing to add, change nothing.
+whether it is a suggestion or a warning. Keep an entry short enough to read at a glance: the
+reasoning belongs in your reply, not in the backlog. If you have nothing to add, change nothing.
+
+The backlog holds what is still to do. An entry this change has answered, or that an earlier
+change answered and nobody closed, is moved whole to `backlog-done.md` beside it, with the
+run that answered it; an entry answered in part stays, saying what is left.
 
 ## What to produce
 

@@ -59,7 +59,7 @@ def test_a_second_request_goes_through_the_same_cycle_and_runs_the_first_ones_te
     second, _, store, _ = cycle(script(
         write_tests={"envelope": {"summary": "farewell", "test_files": ["tests/test_bye.py"], "edge_cases": ["none given"]},
                      "files": {"tests/test_bye.py": bye_test}},
-        build={"envelope": {"summary": "bye", "files_changed": ["bye.py"]},
+        build={"envelope": {"summary": "bye", "files_changed": ["bye.py"], "verdict": "accept", "reasons": []},
                "files": {"bye.py": "def farewell():\n    return 'bye'\n"}}), target=target, request="Add a farewell")
     assert second.outcome == "accepted" and names(store, second) == ORDER
     baseline = record(store, second, "baseline")
@@ -82,6 +82,43 @@ def test_a_failed_build_is_sent_back_with_the_failure(cycle):
     assert "tests/test_hello.py" in fake.calls[2]["prompt"]                      # told which tests to satisfy
     first_test = record(store, run, "test", 0)
     assert first_test.passed is False and first_test.failure == "check"
+
+
+# A test that expects what the plan does not: no build can pass it, and the builder may not touch it.
+WRONG_TEST = dict(WRITE_TESTS, files={"tests/test_hello.py": TEST.replace("== 'hello'\n\n\ndef", "== 'hullo'\n\n\ndef")})
+DEFECT = dict(BUILD, envelope=dict(BUILD["envelope"], verdict="test_defect",
+                                   reasons=["test_greets expects 'hullo'; the plan says hello"]))
+MENDED = {"envelope": {"summary": "the expected greeting was misspelled", "mended": ["tests/test_hello.py"]},
+          "files": {"tests/test_hello.py": TEST}}
+NOT_MENDED = {"envelope": {"summary": "the test is as the plan gives it", "mended": []}}
+
+
+@pytest.mark.fr("FR-097")
+def test_a_builder_that_reports_a_test_no_build_can_pass_sends_it_to_the_test_writer_once(cycle):
+    run, fake, store, _ = cycle(script(write_tests=WRONG_TEST, build=[DEFECT, MENDED]))
+    assert run.outcome == "accepted"
+    assert names(store, run) == ["plan", "baseline", "write_tests", "red", "build", "mend_tests", "test",
+                                 "architecture_review", "document", "review", "finish"]   # no second build, no red
+    mend = fake.calls[3]
+    assert mend["persona"].startswith("# Test writer")
+    assert "test_greets expects 'hullo'; the plan says hello" in mend["prompt"]           # told what the builder found
+    assert record(store, run, "build").failure == "check" and record(store, run, "test").passed
+    assert (pathlib.Path(run.workspace) / "hello.py").read_text() == CODE                  # the build's work was kept
+
+
+@pytest.mark.fr("FR-097")
+def test_a_second_report_of_a_defective_test_is_not_chased(cycle):
+    again = dict(DEFECT, files={})
+    run, _, store, _ = cycle(script(write_tests=WRONG_TEST, build=[DEFECT, NOT_MENDED, again, again]))
+    assert run.outcome == "needs-me" and "build step has run 3 times" in run.reason
+    assert names(store, run)[4:] == ["build", "mend_tests", "test", "build", "test", "build", "test"]
+
+
+@pytest.mark.fr("FR-097")
+def test_the_test_writer_mending_a_test_may_not_touch_the_code(cycle):
+    meddled = dict(MENDED, files={"tests/test_hello.py": TEST, "hello.py": WRONG})
+    run, _, store, _ = cycle(script(write_tests=WRONG_TEST, build=[DEFECT, meddled]))
+    assert run.outcome == "needs-me" and "mend_tests step changed what it may not" in run.reason
 
 
 @pytest.mark.fr("FR-011")

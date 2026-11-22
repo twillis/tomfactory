@@ -121,9 +121,10 @@ class Workspace:
         """The run's commits so far, oldest first, each as its short id and subject."""
         return _git(self.path, "log", "--reverse", "--format=%h %s", f"{self.base_commit}..HEAD")[1].splitlines()
 
-    def diff_since_base(self) -> str:
-        """The run's whole change so far, as a diff against where it started."""
-        return _git(self.path, "diff", self.base_commit)[1]
+    def diff_since_base(self, leaving_out=None) -> str:
+        """The run's whole change so far, as a diff against where it started, without the file `leaving_out`."""
+        without = [f":(exclude){leaving_out}"] if leaving_out else []
+        return _git(self.path, "diff", self.base_commit, "--", ".", *without)[1]
 
     def files_changed_since_base(self) -> list[str]:
         """The names of the files this run has committed changes to."""

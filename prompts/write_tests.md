@@ -3,6 +3,11 @@
 Write tests that describe the change in the approved plan. Nothing has been built yet, so
 your tests must fail when they are run. Read the codebase in the current directory first.
 
+You cannot run the tests. The factory runs them as its next step and sends them back to you
+if they pass or cannot be read as code, so do not claim to have seen them fail: work out from
+the code why each one fails today, and check by reading that every name a test imports and
+every table, file or row its setup relies on exists.
+
 ## The request
 
 {{request}}

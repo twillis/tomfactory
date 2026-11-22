@@ -23,6 +23,15 @@ What failed, if anything:
 
 {{failure}}
 
+## If a test cannot pass whatever you build
+
+You may not change a test. If one of them can never pass, because what it expects contradicts
+the approved plan or the codebase itself (a wrong expected value, a setup that leaves out
+something the test relies on, a name the plan does not give), do not spend another attempt
+building against it. Build everything else, and give the verdict `test_defect`: the test
+writer is then asked, once, to mend that test, and the tests are run again. A test that is
+merely hard to satisfy is not defective.
+
 ## If this codebase uses spec kit
 
 Where spec kit is in use, the task list in the feature directory says what to do and in what
@@ -36,3 +45,7 @@ In your reply's JSON object:
 
 - `summary`: what you changed and why, in a sentence or two
 - `files_changed`: the files you created or changed
+- `verdict`: `accept` when you have built the change; `test_defect` when a test cannot pass
+  whatever is built
+- `reasons`: for `test_defect`, each such test: its name, what it expects, and what the plan
+  or the codebase says instead; otherwise an empty list

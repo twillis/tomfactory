@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 388 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 409 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -136,6 +136,14 @@ Eight rules, applied in this order:
    judging step's verdict chooses its route: the review's reject ends the run **rejected**
    (in a tidy, it sends the work back); a judge that contradicts itself is asked again.
 8. Everything passed → the next step.
+
+One more route, off the usual path. The builder may not change a test, so a test that can
+never pass (a wrong expected value, a setup that leaves something out) used to cost it every
+attempt. Now the builder says so, with the verdict `test_defect`, and the `mend_tests` step asks
+the test writer, once, to correct that test and nothing else; the tests are then run again. It
+goes on to `test`, not back to `red`, because the build is already there. The test writer may
+find the builder wrong and change nothing. A second report in the same run is not chased: the
+tests are run and their failure takes its usual course.
 
 No step runs more than three times in one run (you can change the number per request).
 When a step has used its attempts, the run ends as **needs-me** and tells you what failed.
@@ -243,6 +251,8 @@ factory resume                      # carry on a run that stopped as needs-me, f
 Resuming puts back whatever a stopped agent left half-done. Where the step that stopped is the factory's
 own (the tests failing after the build used its attempts), the build's work is kept: mend what was
 wrong, commit it in the run's checkout, and the resumed step checks the work again.
+That is the way through when the test writer's one chance to mend a test (`mend_tests`, above) did
+not settle it.
 
 Every command that takes a run works on the most recent run unless you give its number:
 `factory show 3`. `factory plan`, `factory status` and `factory show` take `--json`.
@@ -320,7 +330,11 @@ A sprint is: `plan` (the planner reads the codebase's standing documents and wri
 untested refusals; its findings are shown beneath the plan, and it is never a gate), your one
 approval, then the build, the tests, the architect, the documenter, `converge` (the
 final review: unbuilt work goes back to the build once, everything else is recorded), `retro`
-and `finish`. No spec kit stage runs. The record ends with the sprint review, what the new
+and `finish`. No spec kit stage runs. The planner and the plan check are told where each later
+step may write, so a plan gives no step a file it may not touch; the diff the architect and the
+final review are given leaves out the run's own record, which repeats the plan they already
+have; and the retro is given the constitution and the ideals, so it can say which rule a run
+missed. The record ends with the sprint review, what the new
 tests said before the build and the tests after it, the time and cost, and the retro. `cycle = "auto"`, the default, picks spec kit where
 it is set up and the plain cycle elsewhere.
 
@@ -438,6 +452,10 @@ think like a Lisp programmer — someone who knows every paradigm as a tool with
 weaknesses. It does not change code and it cannot fail the run. What it finds is added, one
 line each, to `docs/backlog.md` in the target codebase, and recorded on the run
 (`factory show --step <id>` for the `architecture_review` step).
+
+The backlog holds what is still to do. An entry a change has answered is moved by the architect
+to `docs/backlog-done.md`, with the run that answered it, so the backlog stays short enough to
+read.
 
 The backlog is yours to work through. Any entry can be handed back to the factory as a
 request of its own.

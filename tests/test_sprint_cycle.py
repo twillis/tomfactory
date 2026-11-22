@@ -153,3 +153,51 @@ def test_a_long_test_run_keeps_its_beginning_as_well_as_its_end():
 ])
 def test_the_prompts_carry_the_retros_lessons(prompt, says):
     assert says in (config.PROMPTS_DIR / prompt).read_text()
+
+
+@pytest.mark.fr("FR-098")
+@pytest.mark.parametrize("prompt, says", [
+    ("check_plan.md", "from that test's own setup"),               # bttr_erp run 56: a file number vouched for by another row
+    ("check_plan.md", "read as a regular expression"),             # run 56: '(3)' passed to match=
+    ("check_plan.md", "every kind of input the rule covers"),      # run 55: a cast measured for VARCHAR, wrong for CHAR
+    ("check_plan.md", "the remedy"),                               # run 54: a refusal whose remedy led to the loss it prevents
+    ("write_tests.md", "You cannot run the tests"),                # runs 53 to 56: the test writer has no shell
+    ("build.md", "test_defect"),
+    ("mend_tests.md", "Do not weaken"),
+])
+def test_the_prompts_carry_what_bttr_erps_runs_53_to_56_taught(prompt, says):
+    assert says in (config.PROMPTS_DIR / prompt).read_text()
+
+
+@pytest.mark.fr("FR-099")
+def test_the_judges_diff_leaves_out_the_runs_own_record(home, sprint_target, fake_notify):
+    """The record holds the request and the plan, which the architect and the final review are already given."""
+    fake = FakeAgent(sprint())
+    run, _ = to_the_end(sprint_target, fake)
+    assert run.outcome == "accepted"
+    architect = next(call["prompt"] for call in fake.calls if call["persona"].startswith("# Architect"))
+    final_review = [call["prompt"] for call in fake.calls if call["persona"].startswith("# Reviewer")][-1]
+    for prompt in (architect, final_review):
+        assert "diff --git a/hello.py" in prompt and "diff --git a/docs/runs/" not in prompt
+    assert "docs/runs/" in git(run.workspace, "diff", "--name-only", run.base_commit)      # it is still in the branch
+
+
+@pytest.mark.fr("FR-099")
+@pytest.mark.parametrize("step, needs", [("retro", ("ideals", "constitution")), ("plan", ("test_paths", "docs_paths")),
+                                         ("check_plan", ("test_paths", "docs_paths"))])
+def test_the_retro_is_given_the_rules_and_the_planners_where_each_step_may_write(step, needs):
+    entry = workflow.get(step, tables.SPRINT_STEPS)
+    assert set(needs) <= set(entry.inputs)
+    text = (config.PROMPTS_DIR / f"{step}.md").read_text()
+    assert all("{{" + name + "}}" in text for name in needs)
+
+
+@pytest.mark.fr("FR-099")
+@pytest.mark.parametrize("prompt, says", [
+    ("plan.md", "Give no step a file it may not write"),       # bttr_erp runs 52 and 53: a requirements row, a CHANGELOG
+    ("check_plan.md", "a file that step may not write"),
+    ("retro.md", "outranks"),                                  # run 53: a parity ideal against the constitution
+    ("architecture_review.md", "backlog-done.md"),             # runs 53, 55, 56: a backlog too long to read or search
+])
+def test_the_prompts_carry_the_smaller_lessons_of_runs_52_to_56(prompt, says):
+    assert says in (config.PROMPTS_DIR / prompt).read_text()

@@ -136,5 +136,6 @@ def test_factory_untouched_compares_fingerprints(tmp_path):
                          ids=lambda s: s.name)
 def test_the_steps_that_judge_get_the_strongest_model_and_the_rest_the_standard_one(step):
     """Judging is where a mistake costs a whole run: the architect's review, and the final review."""
-    judges = step.persona == "architect" or bool(step.routes)          # the retro is advisory and only summarises
+    reports = step.name == "build"      # its one verdict reports a test it may not change (FR-097); it judges nothing
+    judges = step.persona == "architect" or (bool(step.routes) and not reports)   # the retro only summarises
     assert step.model == ("strongest" if judges else "standard")
