@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 462 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 478 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -462,6 +462,20 @@ kept with the step and listed under "Smells" in the run's record, for the operat
 merge or in a later tidy. A smell never sends work back, never ends a run, and the final review
 is told it is no reason to reject. On bttr_erp the line check had sent work back seven times and
 once ended a run as needs-me for one line; the budget had never fired.
+
+### A project's own settings for its steps
+
+A codebase may tune the steps it already has, in its `.factory.toml`, without changing the
+factory. Each `[steps.<name>]` table may set only `model` (a grade), `timeout` (seconds),
+`smells` (added to the step's own, never removed) and `rework_at_most` (the cap on a step's
+capped rework route); `climbs_to` sets how high a retried step climbs. Nothing that decides
+what passing means can be set: not a step's checks, persona, prompt, inputs, where it may
+write or where it leads. A setting that is not allowed is refused, naming it, when the
+request is made, before anything is paid for.
+
+```bash
+factory table --target <codebase>      # the steps a run would go through, with its overrides
+```
 
 ### Coverage: measured before and after, a smell when it falls
 

@@ -10,6 +10,8 @@ import shutil
 
 import pytest
 
+from factory.operations import Refused
+
 from factory import checks, config, own_files, tables, workflow, workspace
 from factory.workflow import Step
 from tests.conftest import script
@@ -95,7 +97,7 @@ def test_a_prompt_may_only_use_the_inputs_its_entry_lists(cycle, monkeypatch, pr
     (prompts_copy / "second_opinion.md").write_text("Opinion on {{request}} given {{diff}}\n")
     table_with(monkeypatch, "review", Step("second_opinion", "agent", persona="reviewer", on_pass="finish",
                                              inputs=("request",)))
-    with pytest.raises(ValueError, match="second_opinion's prompt uses {{diff}}"):     # before any agent is asked
+    with pytest.raises(Refused, match="second_opinion's prompt uses {{diff}}"):        # refused at the request (FR-112)
         cycle(script() + [{"envelope": {}}])
 
 

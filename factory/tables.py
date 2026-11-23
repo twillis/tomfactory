@@ -5,7 +5,7 @@ change what the factory does, change a table. Nothing here reads or writes anyth
 """
 from dataclasses import replace
 
-from factory.workflow import END_ACCEPTED, End, Rework, Step, WAIT
+from factory.workflow import END_ACCEPTED, GRADES, End, Rework, Step, WAIT
 
 # ---- the plain table: a change, test first ----
 
@@ -196,6 +196,54 @@ RUN_KINDS = {
 }
 TABLES = [STEPS, SPEC_KIT_STEPS, SPRINT_STEPS, TIDY_TESTS, TIDY_CODE]
 CYCLES = ("auto", "sprint")
+
+
+# What a project's [steps.<name>] may set (FR-112). Nothing here changes what passing means: not the checks, the
+# persona, the prompt, the inputs, where a step may write, its capabilities or where it leads.
+OVERRIDABLE = ("model", "timeout", "smells", "rework_at_most")
+
+
+def overridden(table, overrides) -> list[Step]:
+    """`table` with a project's per-step overrides applied (FR-112). Refuses, naming it, a step not in the table, a
+    field not overridable, or a value of the wrong kind; a smell that is not registered is refused by `validate`."""
+    names = {step.name for step in table}
+    problems = [f"[steps.{name}]: there is no step {name} in this run's table ({', '.join(sorted(names))})"
+                for name in overrides if name not in names]
+    result = []
+    for step in table:
+        given = overrides.get(step.name) or {}
+        problems += [f"[steps.{step.name}]: {key} cannot be set; a project may set {', '.join(OVERRIDABLE)}"
+                     for key in given if key not in OVERRIDABLE]
+        changes = {}
+        if "model" in given:
+            if given["model"] not in GRADES or step.kind != "agent":
+                problems.append(f"[steps.{step.name}]: model must be one of {', '.join(GRADES)}, on an agent step")
+            else:
+                changes["model"] = given["model"]
+        if "timeout" in given:
+            if not isinstance(given["timeout"], int) or isinstance(given["timeout"], bool) or given["timeout"] < 1:
+                problems.append(f"[steps.{step.name}]: timeout must be a whole number of seconds")
+            else:
+                changes["timeout"] = given["timeout"]
+        if "smells" in given:
+            if not isinstance(given["smells"], list) or not all(isinstance(s, str) for s in given["smells"]):
+                problems.append(f"[steps.{step.name}]: smells must be a list of check names")
+            else:
+                changes["smells"] = tuple(dict.fromkeys([*step.smells, *given["smells"]]))     # added, never removed
+        if "rework_at_most" in given:
+            capped = {verdict: route for verdict, route in step.routes.items()
+                      if isinstance(route, Rework) and route.at_most is not None}
+            value = given["rework_at_most"]
+            if not capped:
+                problems.append(f"[steps.{step.name}]: rework_at_most needs a capped rework route; it has none")
+            elif not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                problems.append(f"[steps.{step.name}]: rework_at_most must be a whole number, at least 1")
+            else:
+                changes["routes"] = {**step.routes, **{v: replace(r, at_most=value) for v, r in capped.items()}}
+        result.append(replace(step, **changes) if changes else step)
+    if problems:
+        raise ValueError("this codebase's .factory.toml: " + "; ".join(problems))
+    return result
 
 
 def table_for(spec_kit, run_kind, cycle="auto") -> list[Step]:

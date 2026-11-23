@@ -49,6 +49,9 @@ class TargetConfig:
     coverage_report: str = _setting("", "the coverage.py JSON report its test command writes; \"\" if not measured")
     coverage_floor: float = _setting(0.0, "a smell when coverage after a run is below this percent; 0 for none")
     coverage_drop: float = _setting(0.0, "a smell when a run lowers coverage by more than this many points; 0 for none")
+    climbs_to: str = _setting("standard", "the highest grade a retried step climbs to (FR-109)")
+    # [steps.<name>] tables: per-step overrides (FR-112). Not written into a new codebase's file: none are needed.
+    steps: dict = field(default_factory=dict, metadata={"says": "", "unlisted": True})
 
 
 def _toml(value) -> str:
@@ -58,7 +61,8 @@ def _toml(value) -> str:
 DEFAULT_FACTORY_TOML = (
     "# How the factory works on this codebase. Read from the commit a run starts at,\n"
     "# never from a run's checkout, so an agent cannot change what \"passing\" means.\n"
-    + "".join(f"{f'{s.name} = {_toml(s.default)}':<31} # {s.metadata['says']}\n" for s in fields(TargetConfig)))
+    + "".join(f"{f'{s.name} = {_toml(s.default)}':<31} # {s.metadata['says']}\n" for s in fields(TargetConfig)
+              if not s.metadata.get("unlisted")))
 
 
 def home() -> pathlib.Path:
@@ -82,6 +86,8 @@ def read_target_config(target, commit) -> TargetConfig:
     for name in ("test_paths", "docs_paths", "tools"):
         if name in known:
             known[name] = tuple(known[name])
+    if known.get("climbs_to", "standard") not in ("light", "middle", "standard", "strongest"):
+        raise ConfigError(f"{target}/.factory.toml: climbs_to must be light, middle, standard or strongest")
     return TargetConfig(**known)
 
 

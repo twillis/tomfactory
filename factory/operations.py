@@ -141,6 +141,29 @@ def init_target(path, spec_kit=False) -> pathlib.Path:
     return path
 
 
+def resolved_table(target, commit, run_kind="change") -> list:
+    """The steps a run of `run_kind` on `target` at `commit` would go through, with the project's overrides
+    (FR-112), checked as a run checks its table. Refused, saying why, if they are not sound."""
+    try:
+        settings = config.read_target_config(target, commit)
+        table = tables.table_for(speckit.available_at(target, commit), run_kind, settings.cycle)
+        table = tables.overridden(table, settings.steps)
+        driver.validate(table)
+    except (config.ConfigError, ValueError) as problem:
+        raise Refused(str(problem)) from None
+    return table
+
+
+def table(target, run_kind="change") -> list:
+    """The table a run on `target` would use now (`factory table`)."""
+    target = pathlib.Path(target).resolve()
+    try:
+        commit = workspace.head_of(target)
+    except workspace.WorkspaceError as problem:
+        raise Refused(str(problem)) from None
+    return resolved_table(target, commit, run_kind)
+
+
 def request(text, target, attempts=3, run_kind="change") -> dict:
     """Hand the factory a request. A plan is written in the background; then the run waits."""
     store = _open()
@@ -160,6 +183,7 @@ def request(text, target, attempts=3, run_kind="change") -> dict:
                       " let it finish, or stop or abandon it, before making another request")
     if run_kind not in tables.RUN_KINDS:
         raise Refused(f"a run is one of: {', '.join(tables.RUN_KINDS)}; not {run_kind!r}")
+    resolved_table(target, base, run_kind)          # a project's overrides are checked before anything is paid for
 
     run = records.new_run(store, text.strip(), target, base, ideals=config.ideals_for(target, base),
                           attempt_limit=attempts, run_kind=run_kind)

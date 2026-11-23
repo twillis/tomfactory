@@ -37,8 +37,9 @@ class Stopped(BaseException):
 def table_of(run) -> list:
     """The steps a run goes through. Decided here only: by its kind, and by its codebase as of its starting commit
     (FR-111), so nothing a step writes can change which table it is on."""
-    cycle = config.read_target_config(run.target, run.base_commit).cycle
-    return tables.table_for(speckit.available_at(run.target, run.base_commit), run.run_kind, cycle)
+    settings = config.read_target_config(run.target, run.base_commit)
+    table = tables.table_for(speckit.available_at(run.target, run.base_commit), run.run_kind, settings.cycle)
+    return tables.overridden(table, settings.steps)         # the project's [steps.<name>] (FR-112)
 
 
 def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) -> None:
@@ -122,7 +123,7 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     doing = Doing(store, run, step, checkout, settings, step.timeout or settings.step_timeout_seconds)
     asked = prompt(doing, prompts_dir) if step.kind == "agent" else ""
     doing.record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)
-    doing.grade = workflow.grade_for(step, records.attempts_climbed(store, run.id, step.name)) \
+    doing.grade = workflow.grade_for(step, records.attempts_climbed(store, run.id, step.name), settings.climbs_to) \
         if step.kind == "agent" else None
     doing.emit("step_start", step.name, {"attempt": doing.record.attempt, "persona": step.persona,
                                          "head": head, "dirty_before": dirty_before, "model": doing.grade})

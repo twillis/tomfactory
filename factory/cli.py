@@ -74,6 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
     with_run(command("watch", watch, "Follow a run as it happens, until it waits for you or ends."))
     command("ideals", ideals, "Show the ideals every run is held to.").add_argument("--edit", action="store_true")
     command("doctor", doctor, "Check that everything the factory needs is installed and working.")
+    sub = command("table", table, "The steps a run would go through, with this codebase's overrides.")
+    sub.add_argument("--target", required=True, help="the codebase")
+    sub.add_argument("--kind", choices=operations.run_kinds(), default="change")
 
     sub = commands.add_parser("_drive")     # what the detached driver process runs; not for people
     sub.add_argument("run_id", type=int)
@@ -82,6 +85,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # ---- one function per command: call the operation, print the result ----
+
+def table(args):
+    for step in operations.table(args.target, args.kind):
+        model = f"model {step.model}" if step.kind == "agent" else "code"
+        extras = [f"timeout {step.timeout}s" if step.timeout else "",
+                  f"checks {', '.join(step.checks)}" if step.checks else "",
+                  f"smells {', '.join(step.smells)}" if step.smells else "",
+                  *[f"{verdict} -> {route.step} at most {route.at_most}" for verdict, route in step.routes.items()
+                    if getattr(route, "at_most", None)]]
+        print(f"{step.name:<22} {model:<16} " + "; ".join(e for e in extras if e))
+
 
 def init_target(args):
     path = operations.init_target(args.dir, spec_kit=args.spec_kit)

@@ -208,12 +208,12 @@ def lead_answered(result, envelope) -> bool:
     return result.passed and (envelope or {}).get("confident") == "yes"
 
 
-def grade_for(step, tries) -> str:
+def grade_for(step, tries, climbs_to=CLIMBS_TO) -> str:
     """The grade this attempt of `step` runs on: its own, one higher for each earlier attempt whose work was found
     wanting (`records.attempts_climbed`, FR-109). A cheap model that fails is given a stronger one, never the strongest unless the step starts there:
     the cost the operator controls stays his (the strongest is his to choose)."""
     own = GRADES.index(step.model)
-    ceiling = max(own, GRADES.index(CLIMBS_TO))
+    ceiling = max(own, GRADES.index(climbs_to))
     return GRADES[min(own + tries, ceiling)]
 
 
