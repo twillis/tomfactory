@@ -5,6 +5,7 @@ whether it passed and why not. Checks are how code, not an agent, decides whethe
 acceptable. A new check is a function with `@register("name")` above it; the registry
 stamps the name on what it returns. Which checks a step gets is a rule: workflow.checks_for.
 """
+import json
 import re
 from dataclasses import dataclass, field, replace
 
@@ -32,6 +33,7 @@ class CheckContext:
     stderr_file: object = None  # where a command the check runs sends its standard error
     on_child: object = None     # told the process group of a command the check runs
     timeout: float | None = None
+    store: object = None        # the factory's records, for a smell that compares with an earlier step (FR-110)
 
 
 def register(name):
@@ -250,8 +252,24 @@ def kept_output(lines) -> str:
 SUMMARY_LINES = 5       # how many of its last lines a failure's note carries
 
 
+def _coverage(ctx) -> dict | None:
+    """What the test command's coverage report says (FR-110), or None where the codebase measures none or the
+    report is not there. Coverage.py's JSON: the total, and each file's, in percent to one decimal."""
+    report = ctx.target_config.coverage_report
+    path = ctx.checkout.path / report if report else None
+    if not path or not path.is_file():
+        return None
+    data = json.loads(path.read_text())
+    files = {name: round(f["summary"]["percent_covered"], 1) for name, f in data.get("files", {}).items()}
+    return {"coverage": round(data["totals"]["percent_covered"], 1), "files": files}
+
+
 def _tests_judged(ctx, judge) -> CheckResult:
-    """Run the tests, then let `judge(exit code)` say (passed, note). Output and containment are kept."""
+    """Run the tests, then let `judge(exit code)` say (passed, note). Output and containment are kept, and so is
+    the coverage the run measured, if the codebase measures it (FR-110)."""
+    report = ctx.target_config.coverage_report
+    if report:      # a report left by an earlier run must not pass for this one's
+        (ctx.checkout.path / report).unlink(missing_ok=True)
     try:
         code, output, contained = run_tests(ctx)
     except SetupFailed as failed:
@@ -263,7 +281,41 @@ def _tests_judged(ctx, judge) -> CheckResult:
         return CheckResult(False, f"the test command did not finish within {ctx.timeout:g} seconds",
                            output=output, timed_out=True, contained=contained)
     passed, note = judge(code)
-    return CheckResult(passed, note if passed else _said(note, output), output=output, contained=contained)
+    return CheckResult(passed, note if passed else _said(note, output), output=output, contained=contained,
+                       measured=_coverage(ctx))
+
+
+def measured_before(store, run_id) -> dict | None:
+    """The first coverage the run measured: the tests run before anything changed (FR-110)."""
+    for step in store.query("steps", {"run_id": run_id}):
+        found = next((c["measured"] for c in step.checks or [] if c.get("measured")), None)
+        if found:
+            return found
+    return None
+
+
+@register("coverage_holds")
+def coverage_holds(ctx) -> CheckResult:
+    """Coverage after the run is not below the codebase's floor, and the run did not lower it by more than the
+    codebase allows (FR-110). A smell: reported, never a reason to send work back."""
+    settings = ctx.target_config
+    after = _coverage(ctx)
+    if not after:
+        return CheckResult(True, "coverage is not measured on this codebase")
+    before = measured_before(ctx.store, ctx.run.id) if ctx.store else None
+    said = f"coverage {after['coverage']}%"
+    wrong = []
+    if before:
+        change = round(after["coverage"] - before["coverage"], 1)
+        said = f"coverage {before['coverage']}% before, {after['coverage']}% after ({change:+.1f})"
+        if settings.coverage_drop and -change > settings.coverage_drop:
+            lower = sorted(((round(after['files'].get(f, 0) - p, 1), f) for f, p in before["files"].items()
+                            if after["files"].get(f, 0) < p))[:5]
+            wrong.append(f"it fell by more than {settings.coverage_drop:g} points; most: "
+                         + ", ".join(f"{f} ({d:+.1f})" for d, f in lower))
+    if settings.coverage_floor and after["coverage"] < settings.coverage_floor:
+        wrong.append(f"it is below this codebase's floor of {settings.coverage_floor:g}%")
+    return CheckResult(not wrong, "; ".join([said, *wrong]))
 
 
 @register("baseline")

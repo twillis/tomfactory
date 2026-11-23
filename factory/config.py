@@ -46,6 +46,9 @@ class TargetConfig:
     tests_readable_command: str = _setting("python -m compileall -q tests",
                                            "fails if new tests cannot even be read as code; \"\" for none")
     line_length: int = _setting(0, "the longest line a step may add to code or tests; 0 means no limit")
+    coverage_report: str = _setting("", "the coverage.py JSON report its test command writes; \"\" if not measured")
+    coverage_floor: float = _setting(0.0, "a smell when coverage after a run is below this percent; 0 for none")
+    coverage_drop: float = _setting(0.0, "a smell when a run lowers coverage by more than this many points; 0 for none")
 
 
 def _toml(value) -> str:

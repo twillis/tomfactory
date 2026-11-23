@@ -45,6 +45,19 @@ def resumed_message(run) -> str:
     return _message(run, run.current_step, f"Resumed at {run.current_step}")
 
 
+def coverage_line(steps) -> str | None:
+    """Coverage before the run and after it, where the codebase measures it (FR-110): the first a step measured,
+    before anything changed, and the last a passing step measured."""
+    found = [c["measured"] for s in steps if s.passed for c in s.checks or [] if c.get("measured")]
+    before, after = (found[0], found[-1]) if len(found) > 1 else (None, found[-1] if found else None)
+    if not after:
+        return None
+    if not before:
+        return f"Coverage: {after['coverage']}% after."
+    return (f"Coverage: {before['coverage']}% before, {after['coverage']}% after "
+            f"({after['coverage'] - before['coverage']:+.1f}).")
+
+
 def ended_message(store, run) -> str:
     """The message for the commit of the run's finished record: the run in brief, its outcome and why, what the
     review said, and what it cost."""
@@ -55,7 +68,8 @@ def ended_message(store, run) -> str:
     if judged:
         brief += ["", f"The review: {judged['verdict']}", *[f"- {reason}" for reason in judged.get("reasons", [])]]
     totals = [line for line in facts(store, run) if line.startswith("Total:")]
-    brief += ["", *totals]
+    covered = coverage_line(steps)
+    brief += ["", *totals, *([covered] if covered else [])]
     outcome = OUTCOMES.get(run.outcome, run.outcome)
     return _message(run, run.current_step, f"{outcome}: {title(store, run)}", brief)
 
@@ -133,6 +147,8 @@ def render(store, run, checkout) -> str:
         if documented and documented.get("summary"):        # the documenter's account, kept (FR-104)
             lines += ["## What changed", "", documented["summary"].strip(), ""]
         lines += _smells(steps)
+        covered = coverage_line(steps)
+        lines += ["## Coverage", "", covered, ""] if covered else []
         lines += _tests_before_and_after(steps)
         lines += ["## Time and cost", "", *facts(store, run), ""]
         lines += _section("Commits on the run's branch", [f"`{c}`" for c in checkout.log_since_base()])

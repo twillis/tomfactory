@@ -35,6 +35,7 @@ class CheckResult:
     contained: dict | None = None   # it ran the target's code, contained: {"network": bool}
     name: str = ""
     smell: bool = False             # run as a smell: what it found is reported and never fails the step (FR-107)
+    measured: dict | None = None    # what a test run measured beside passing: {"coverage": %, "files": {name: %}}
 
 
 @dataclass

@@ -44,7 +44,8 @@ STEPS: list[Step] = [
          inputs=("request", "plan", "test_paths", "failure"),
          envelope={"summary": "text", "mended": "list"}),
 
-    Step("test", "code", on_pass="architecture_review", checks=("tests_pass",), on_fail=Rework("build"),
+    Step("test", "code", on_pass="architecture_review", checks=("tests_pass",), smells=("coverage_holds",),
+         on_fail=Rework("build"),
          commit_after=True),
 
     # Advice, not a gate: what the architect finds goes to a backlog, and the run carries on.

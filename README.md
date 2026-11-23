@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 453 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 459 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -462,6 +462,14 @@ kept with the step and listed under "Smells" in the run's record, for the operat
 merge or in a later tidy. A smell never sends work back, never ends a run, and the final review
 is told it is no reason to reject. On bttr_erp the line check had sent work back seven times and
 once ended a run as needs-me for one line; the budget had never fired.
+
+### Coverage: measured before and after, a smell when it falls
+
+A codebase that names `coverage_report` in its `.factory.toml` (the coverage.py JSON its test
+command writes) has its coverage kept each time its tests run. The run's record and its last
+commit say what it was before the run and after it, and the test step reports a smell when it
+ends below `coverage_floor` or fell by more than `coverage_drop` points, naming the files that
+fell most. No model is involved: the test command measures, the factory compares.
 
 ### When an agent has a question
 

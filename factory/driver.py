@@ -222,7 +222,8 @@ def verify(doing, reply, before, dirty_before, paths):
     context = checks.CheckContext(
         run=doing.run, step=doing.step, checkout=doing.checkout, target_config=doing.settings,
         changed=workspace.changed(dirty_before, doing.checkout.dirty()), envelope=envelope, before=before,
-        factory_paths=paths, stderr_file=doing.errors, on_child=doing.on_child, timeout=doing.timeout)
+        factory_paths=paths, stderr_file=doing.errors, on_child=doing.on_child, timeout=doing.timeout,
+        store=doing.store)
     done = []
 
     def check(name):
