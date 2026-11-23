@@ -35,9 +35,10 @@ class Stopped(BaseException):
 
 
 def table_of(run) -> list:
-    """The steps a run goes through. Decided here only: by its kind, and by its checkout's codebase."""
+    """The steps a run goes through. Decided here only: by its kind, and by its codebase as of its starting commit
+    (FR-111), so nothing a step writes can change which table it is on."""
     cycle = config.read_target_config(run.target, run.base_commit).cycle
-    return tables.table_for(speckit.available(run.workspace), run.run_kind, cycle)
+    return tables.table_for(speckit.available_at(run.target, run.base_commit), run.run_kind, cycle)
 
 
 def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) -> None:
@@ -415,7 +416,8 @@ INPUTS = {
     "request": _request,
     "run_kind": lambda src: (src.prompts_dir / "run_kinds" / f"{src.run.run_kind}.md").read_text(),
     "ideals": lambda src: src.run.ideals or NO_IDEALS,
-    "constitution": lambda src: speckit.constitution(src.checkout.path) or "This codebase has no constitution of its own.",
+    "constitution": lambda src: (speckit.constitution_at(src.run.target, src.run.base_commit)      # FR-111
+                                 or "This codebase has no constitution of its own."),
     "plan": _plan,
     "previous_plan": lambda src: _sent_back(src).text if _sent_back(src) else "",
     "comment": lambda src: (_sent_back(src).comment or "") if _sent_back(src) else "",

@@ -10,10 +10,11 @@ This applies only to a target codebase that has spec kit set up. It decides noth
 import json
 import pathlib
 
-from factory import agent, proc
+from factory import agent, proc, workspace
 
 SCRIPTS = pathlib.Path(".specify") / "scripts" / "bash"
 FEATURE_FILE = ".specify/feature.json"
+CONSTITUTION_FILE = ".specify/memory/constitution.md"
 
 
 class SpecKitError(Exception):
@@ -31,11 +32,23 @@ def owns(name) -> bool:
 
 
 def constitution(root) -> str:
-    """The codebase's own constitution, or "" if it has none. An unfilled template is none."""
-    path = pathlib.Path(root) / ".specify" / "memory" / "constitution.md"
-    if not path.is_file():
-        return ""
-    text = path.read_text()
+    """The codebase's own constitution in a folder, or "" if it has none. An unfilled template is none."""
+    path = pathlib.Path(root) / CONSTITUTION_FILE
+    return _filled(path.read_text()) if path.is_file() else ""
+
+
+def constitution_at(target, commit) -> str:
+    """The constitution as committed at `commit`, or "" if there was none (FR-111). A run is judged by the rules
+    its codebase had when it started, never by a copy a step could have rewritten."""
+    return _filled(workspace.committed(target, commit, CONSTITUTION_FILE) or "")
+
+
+def available_at(target, commit) -> bool:
+    """Did this codebase have spec kit set up at `commit`? Decided once, from the run's starting commit (FR-111)."""
+    return workspace.committed(target, commit, str(SCRIPTS / "setup-plan.sh")) is not None
+
+
+def _filled(text) -> str:
     return "" if "[PROJECT_NAME]" in text or "[PRINCIPLE_1_NAME]" in text else text
 
 

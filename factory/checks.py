@@ -70,13 +70,17 @@ def changes_allowed(ctx) -> CheckResult:
     return CheckResult(not offending, note)
 
 
+# Files no step may change, whatever its scope: what decides how a run is judged (FR-082, FR-111).
+PROTECTED = (".factory.toml", ".gitignore", config.IDEALS_FILE, speckit.CONSTITUTION_FILE)
+
+
 def _allowed(scope, name, settings, checkout) -> bool:
     if scope == "spec":     # spec kit's documents, and only where the target uses spec kit
         return speckit.available(checkout.path) and speckit.owns(name)
     if scope == "tests":
         return under(name, settings.test_paths)
     if scope == "not_tests":
-        return not under(name, settings.test_paths) and name not in (".factory.toml", ".gitignore", config.IDEALS_FILE)
+        return not under(name, settings.test_paths) and name not in PROTECTED
     if scope == "docs":
         return under(name, settings.docs_paths)
     return False    # "nothing"

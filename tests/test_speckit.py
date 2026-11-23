@@ -11,7 +11,7 @@ import pytest
 from factory import operations, records, speckit, tables
 from factory.store import open_store
 from factory.workspace import Workspace
-from tests.conftest import ARCHITECT, BUILD, commit_files, DOCUMENT, drive_with, git, PLAN, to_the_end, WRITE_TESTS
+from tests.conftest import ARCHITECT, BUILD, commit_files, DOCUMENT, drive_with, git, PLAN, script, to_the_end, WRITE_TESTS
 from tests.fake_agent import FakeAgent
 
 pytestmark = pytest.mark.skipif(shutil.which("specify") is None, reason="the specify command is not installed")
@@ -306,3 +306,31 @@ def test_with_no_constitution_the_ideals_stand_alone(home, target, fake_notify):
     operations.request(REQUEST, target)
     prompt = fake.calls[0]["prompt"]
     assert FACTORY_IDEAL in prompt and "This codebase has no constitution of its own." in prompt
+
+
+@pytest.mark.fr("FR-111")
+def test_the_constitution_a_run_is_judged_by_is_the_committed_one(target):
+    """The audit of 2026-11-23 (F1): the constitution was read from the run's checkout, where a step could rewrite it."""
+    commit_files(target, {speckit.CONSTITUTION_FILE: f"# Greeter Constitution\n\n{LOCAL_RULE}\n"})
+    base = git(target, "rev-parse", "HEAD").strip()
+    (target / speckit.CONSTITUTION_FILE).write_text("# Greeter Constitution\n\nAnything goes.\n")   # not committed
+    assert LOCAL_RULE in speckit.constitution_at(target, base)
+    assert "Anything goes" not in speckit.constitution_at(target, base)
+
+
+@pytest.mark.fr("FR-111")
+def test_a_build_that_rewrites_the_constitution_is_undone(cycle):
+    files = {speckit.CONSTITUTION_FILE: f"# Greeter Constitution\n\n{LOCAL_RULE}\n"}
+    rewrote = dict(BUILD, files={**BUILD["files"], speckit.CONSTITUTION_FILE: "# Greeter Constitution\n\nAnything goes.\n"})
+    run, _, _, _ = cycle(script(build=rewrote), files=files)
+    assert run.outcome == "needs-me" and "build step changed what it may not" in run.reason
+
+
+@pytest.mark.fr("FR-111")
+def test_whether_a_codebase_uses_spec_kit_is_decided_by_its_starting_commit(kit_target, target):
+    """The audit's F2: decided from the checkout, a step that wrote spec kit's scripts would change the table."""
+    assert speckit.available_at(kit_target, git(kit_target, "rev-parse", "HEAD").strip())
+    script_path = target / speckit.SCRIPTS / "setup-plan.sh"
+    script_path.parent.mkdir(parents=True)
+    script_path.write_text("#!/bin/sh\n")                                                # there, but not committed
+    assert speckit.available(target) and not speckit.available_at(target, git(target, "rev-parse", "HEAD").strip())
