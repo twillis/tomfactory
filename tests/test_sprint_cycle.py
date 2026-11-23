@@ -264,3 +264,13 @@ def test_a_finding_the_planner_declines_is_shown_with_its_reason(home, sprint_ta
 ])
 def test_the_prompts_carry_what_runs_58_to_63_taught(prompt, says):
     assert says in (config.PROMPTS_DIR / prompt).read_text()
+
+
+@pytest.mark.fr("FR-106")
+@pytest.mark.parametrize("prompt, says", [
+    ("check_plan.md", "would still pass if the rule it names were broken"),  # bttr_erp run 69: a key from the wrong table
+    ("check_plan.md", "the whole package"),                         # run 69: a reworded phrase left in another package
+    ("write_tests.md", "Never drop a case the plan lists"),          # run 69: the only case of its kind was dropped
+])
+def test_the_prompts_carry_what_run_69_taught(prompt, says):
+    assert says in (config.PROMPTS_DIR / prompt).read_text()

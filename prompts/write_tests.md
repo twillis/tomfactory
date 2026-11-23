@@ -41,6 +41,11 @@ order; do the tasks that are yours, and do not mark tasks done.
 Test files under the test paths, covering the edge cases and failure cases as well as the
 main path. Do not write any of the implementation.
 
+Never drop a case the plan lists. Where a planned case cannot show what it is there for (a key
+from the wrong table, a value refused for another reason first) and what it is meant to show is
+plain, write it so it shows that, and say in `summary` what you changed and why. Where its
+intent is not plain, write it as planned and say in `summary` why it may not show its rule.
+
 In your reply's JSON object:
 
 - `summary`: what the tests check, in a sentence or two

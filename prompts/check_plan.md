@@ -47,9 +47,15 @@ follows an answer and not the request.
   anywhere except the test paths.
 - A planned test that cannot fail before the build. For each test, say what makes it fail before the build;
   one that guards behaviour already true is a finding unless the plan names it as existing behaviour.
+- A planned case that would still pass if the rule it names were broken, because its outcome comes from
+  something else: a key taken from a different table than the path segment it fills, a value refused for
+  another reason first. For each case, work out from the setup where each value comes from and what
+  answer it gets with the rule removed; give the case that would show the rule.
 - A new list, mapping or table of names the plan adds: what does a table missing from it do, and is that
   mistake loud or silent? A silent one is a finding.
 - Every module docstring, and every comment, of a file the plan changes: is it still true after the change?
+  Where the plan rewords a phrase or renames a word so it means one thing, search the whole package for
+  it, not only the files the plan changes, and name each place it is left.
 - A refusal whose message tells the reader what to do instead: follow the remedy, and say so
   if it leads to the loss the refusal exists to prevent, or is wrong for one direction of the
   change.
