@@ -134,6 +134,21 @@ def attempts(gw, run_id, name) -> int:
     return len(gw.query("steps", {"run_id": run_id, "name": name}))
 
 
+# Why an attempt ended that says nothing about the model's work, so a stronger one would not help (FR-109).
+NOT_THE_WORK = ("error", "timeout", "question")
+
+
+def attempts_climbed(gw, run_id, name) -> int:
+    """How many grades this step's next attempt climbs (FR-109): its earlier attempts since the operator last sent
+    the work back whose work was found wanting, by its own check, its reply's shape, a guard, or a later step
+    sending it back. An attempt that ended in an error of the agent program, a timeout or a question is left out:
+    a stronger model would not have helped. The attempt now starting is left out too."""
+    revised = [p.created_at for p in gw.query("plans", {"run_id": run_id}) if p.decision == "revised"]
+    since = max(revised) if revised else ""
+    earlier = [s for s in gw.query("steps", {"run_id": run_id, "name": name}) if s.ended_at and s.started_at >= since]
+    return sum(1 for s in earlier if s.failure not in NOT_THE_WORK)
+
+
 def attempts_counted(gw, run_id, name) -> int:
     """How many of this step's runs count toward its attempt limit: its own failures and successes since the
     operator last sent the work back, leaving out a run that asked a question the operator answered (FR-105).

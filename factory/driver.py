@@ -121,7 +121,7 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     doing = Doing(store, run, step, checkout, settings, step.timeout or settings.step_timeout_seconds)
     asked = prompt(doing, prompts_dir) if step.kind == "agent" else ""
     doing.record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)
-    doing.grade = workflow.grade_for(step, records.attempts_counted(store, run.id, step.name) - 1) \
+    doing.grade = workflow.grade_for(step, records.attempts_climbed(store, run.id, step.name)) \
         if step.kind == "agent" else None
     doing.emit("step_start", step.name, {"attempt": doing.record.attempt, "persona": step.persona,
                                          "head": head, "dirty_before": dirty_before, "model": doing.grade})

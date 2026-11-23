@@ -14,7 +14,8 @@ architect and the final review, on the strongest model, were $4.38 of it.
 - **FR-109, `workflow.py`.** `GRADES` is light, middle, standard, strongest; `grade_for(step, tries)` climbs one grade
   per earlier counted attempt, up to `CLIMBS_TO` (standard), never past it unless the step starts higher.
 - **`agent.py`.** `MODELS` names Haiku, Sonnet, Opus and Fable for the four grades.
-- **`driver.py`.** Each attempt runs on `grade_for` its counted attempts; the `step_start` event records the model.
+- **`records.py`.** `attempts_climbed` counts the earlier attempts whose work was found wanting, leaving out an error, a timeout or a question (`NOT_THE_WORK`); the operator: "I suppose the cause of the failure should be evaluated before escalating the model".
+- **`driver.py`.** Each attempt runs on `grade_for` its climbed attempts; the `step_start` event records the model.
 - **`tables.py`.** The architect, the review and converge move from strongest to standard; the documenter, the retro
   and the lead start on light.
 - **`run_record.py`.** The time-and-cost table gains a Model column.

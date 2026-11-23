@@ -37,3 +37,20 @@ def test_a_documenter_that_fails_runs_again_on_a_stronger_model_and_the_record_s
     assert [call["model"] for call in fake.calls] == ["standard", "standard", "standard", "standard", "light", "middle", "standard"]
     table = "\n".join(facts(open_store(home), run))
     assert "| Model |" in table and "| document | 1 | light |" in table and "| document | 2 | middle |" in table
+
+
+@pytest.mark.fr("FR-109")
+def test_a_question_does_not_climb_and_work_found_wanting_does(home, target, fake_notify):
+    """An answered question says nothing of the model, so the next attempt stays on its grade; a reply in the wrong
+    shape is the model's own, so the one after climbs. (The agent program failing ends the run as needs-me; it is
+    never retried, so it cannot climb either.)"""
+    asked = {"envelope": {"measure": "Which PostgreSQL version is it?"}}
+    no_summary = {"envelope": {"files_changed": []}}
+    fake = drive_with(FakeAgent([{"envelope": PLAN}, WRITE_TESTS, BUILD, ARCHITECT, asked, no_summary, DOCUMENT,
+                                 REVIEW]))
+    run = operations.request("Add a greeting", target)
+    run = operations.approve(run.id)
+    assert run.state == "awaiting_approval", run.reason          # the documenter asked; the operator answers
+    run = operations.answer(run.id, "18.6")
+    assert run.outcome == "accepted", run.reason
+    assert [call["model"] for call in fake.calls][4:] == ["light", "light", "middle", "standard"]
