@@ -14,7 +14,8 @@ from pathlib import PurePath
 KINDS = ("agent", "code")                               # of step
 CAPABILITIES = ("read", "read+edit")
 SCOPES = ("nothing", "tests", "not_tests", "docs", "spec")      # what a step may change in the checkout
-GRADES = ("standard", "strongest")      # how strong a model an agent step is given (FR-088)
+GRADES = ("light", "middle", "standard", "strongest")    # how strong a model an agent step is given, weakest first (FR-088)
+CLIMBS_TO = "standard"      # a retry climbs a grade at a time, never past this one unless the step starts above it (FR-109)
 OUTCOMES = ("accepted", "rejected", "needs-me")
 FAILURES = ("timeout", "error", "guard", "malformed", "check", "question")     # how a step can fail
 ACCEPT = "accept"               # the verdict that passes a judging step; every other verdict is a route
@@ -204,6 +205,15 @@ def asks_to_measure(envelope) -> bool:
 def lead_answered(result, envelope) -> bool:
     """The lead has answered only if its step passed and it said it is confident."""
     return result.passed and (envelope or {}).get("confident") == "yes"
+
+
+def grade_for(step, tries) -> str:
+    """The grade this attempt of `step` runs on: its own, one higher for each earlier attempt of it that counts
+    (FR-109). A cheap model that fails is given a stronger one, never the strongest unless the step starts there:
+    the cost the operator controls stays his (the strongest is his to choose)."""
+    own = GRADES.index(step.model)
+    ceiling = max(own, GRADES.index(CLIMBS_TO))
+    return GRADES[min(own + tries, ceiling)]
 
 
 # ---- what happens next ----

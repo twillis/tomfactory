@@ -183,7 +183,8 @@ def _tests_before_and_after(steps) -> list:
 def facts(store, run) -> list:
     """The run's time and cost, as the factory measured them (FR-092). Lines of a markdown table and its totals."""
     steps = [s for s in store.query("steps", {"run_id": run.id}) if s.ended_at]
-    lines = ["| Step | Attempt | Outcome | Minutes | Cost |", "|------|---------|---------|---------|------|"]
+    lines = ["| Step | Attempt | Model | Outcome | Minutes | Cost |", "|------|---------|-------|---------|---------|------|"]
+    started = {e.step_id: e.payload.get("model") for e in store.query("events", {"run_id": run.id, "kind": "step_start"})}
     minutes = cost = waited = 0.0
     for before, s in zip([None, *steps], steps):
         took = _minutes(s.started_at, s.ended_at)
@@ -191,7 +192,8 @@ def facts(store, run) -> list:
         if before:
             waited += max(0.0, _minutes(before.ended_at, s.started_at))
         outcome = "passed" if s.passed else s.failure
-        lines.append(f"| {s.name} | {s.attempt} | {outcome} | {took:.1f} | ${(s.cost_estimate or 0):.2f} |")
+        lines.append(f"| {s.name} | {s.attempt} | {started.get(s.id) or '-'} | {outcome} | {took:.1f} | "
+                     f"${(s.cost_estimate or 0):.2f} |")
     lines += ["", f"Total: {minutes:.1f} minutes of steps, ${cost:.2f}.",
               f"Waiting for the operator, and between steps: {waited:.1f} minutes."]
     return lines

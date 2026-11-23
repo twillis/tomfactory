@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 439 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 452 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -407,14 +407,22 @@ that setup ran and had the network.
 ### Which model each step uses
 
 Every agent step is given a model on purpose; none is left to the agent program's own
-default. A step's entry names a grade, and there are two:
+default. A step's entry names a grade, weakest first:
 
-- **strongest**, for the steps that judge a change: the architect's review, and the final
-  review (`review`, or `converge` on a spec kit codebase).
-- **standard**, for everything else: planning, writing tests, building, documenting.
+- **light** (Haiku), for the steps that summarise or answer from what is written: the
+  documenter, the retro, and the lead answering a question.
+- **middle** (Sonnet), which no step starts on yet; a light step's second attempt runs on it.
+- **standard** (Opus), for everything else, the architect's review and the final review
+  included.
+- **strongest** (Fable), which no step starts on: it is the operator's to choose.
+
+**A retry climbs.** Each attempt of a step that counts runs one grade higher than the last,
+up to standard: a light step that fails runs again on middle, then on standard. A step never
+climbs to the strongest by itself. The run record's time-and-cost table says which model
+each attempt ran on, so a cheaper grade can be judged by its first-attempt passes and its cost.
 
 Which model each grade is, is written in one place, `MODELS` in `agent.py`. To give a step
-the other grade, set `model=` in its entry in `tables.py`.
+another grade, set `model=` in its entry in `tables.py`.
 
 ### Tests that cannot be read are not failing tests
 

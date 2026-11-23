@@ -49,19 +49,19 @@ STEPS: list[Step] = [
 
     # Advice, not a gate: what the architect finds goes to a backlog, and the run carries on.
     Step("architecture_review", "agent", persona="architect", capabilities="read+edit", may_change="docs",
-         on_pass="document", commit_after=True, advisory=True, model="strongest",
+         on_pass="document", commit_after=True, advisory=True, model="standard",
          inputs=("request", "plan", "constitution", "ideals", "diff", "docs_paths", "red_output"),
          envelope={"summary": "text", "suggestions": "list", "warnings": "list"}),
 
     # Documented before it is reviewed, so the reviewer judges the whole change.
     Step("document", "agent", persona="documenter", capabilities="read+edit", may_change="docs",
-         on_pass="review", commit_after=True,
+         on_pass="review", commit_after=True, model="light",
          inputs=("request", "plan", "diff", "docs_paths"),
          envelope={"summary": "text", "files_changed": "list"}),
 
     # A reply that contradicts itself (accept, with broken ideals) is asked for again.
     Step("review", "agent", persona="reviewer", on_pass="finish", on_fail=Rework("review"),
-         routes={"reject": End("rejected")}, model="strongest",
+         routes={"reject": End("rejected")}, model="standard",
          inputs=("request", "run_kind", "plan", "constitution", "ideals", "diff", "test_output"),
          envelope={"verdict": "verdict", "reasons": "list", "ideals_broken": "list"}),
 
@@ -72,7 +72,7 @@ _plain = {entry.name: entry for entry in STEPS}
 
 
 # Not part of any table: the lead is called on whenever a step asks a question.
-LEAD = Step("answer_question", "agent", persona="lead", on_pass="", may_ask=False,
+LEAD = Step("answer_question", "agent", persona="lead", on_pass="", may_ask=False, model="light",
             inputs=("request", "constitution", "ideals", "plan", "question"),
             envelope={"answer": "text", "confident": ("yes", "no")})
 
@@ -115,7 +115,7 @@ SPEC_KIT_STEPS: list[Step] = [
     # After approval nothing returns to planning: unbuilt work goes back to the build once, and
     # everything else is recorded for the sprint review the run ends with.
     Step("converge", "agent", persona="reviewer", on_pass="retro", on_fail=Rework("converge"),
-         speckit=("converge",), model="strongest", ideals_stop=False,
+         speckit=("converge",), model="standard", ideals_stop=False,
          routes={"rework": Rework("build", at_most=2, then="retro")},      # found twice: left for the review
          inputs=("request", "plan", "constitution", "ideals", "diff", "test_output", "red_output",
                  "planning_answers"),
@@ -124,7 +124,7 @@ SPEC_KIT_STEPS: list[Step] = [
 
     # Advice, like the architect's: the team's retro, about the factory, never a gate (FR-091).
     Step("retro", "agent", persona="facilitator", capabilities="read+edit", may_change="docs",
-         on_pass="finish", commit_after=True, advisory=True,
+         on_pass="finish", commit_after=True, advisory=True, model="light",
          inputs=("request", "run_facts", "friction", "operator_feedback", "findings", "docs_paths", "run_name",
                  "constitution", "ideals"),
          envelope={"summary": "text", "worked": "list", "did_not": "list", "opportunities": "list",

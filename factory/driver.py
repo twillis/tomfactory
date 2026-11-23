@@ -105,6 +105,7 @@ class Doing:
     timeout: float
     record: object = None
     errors: object = None
+    grade: str | None = None       # the grade this attempt runs on (FR-109)
 
     def emit(self, kind, summary, payload=None):
         records.event(self.store, self.run.id, kind, summary, payload, step_id=self.record.id)
@@ -120,8 +121,10 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     doing = Doing(store, run, step, checkout, settings, step.timeout or settings.step_timeout_seconds)
     asked = prompt(doing, prompts_dir) if step.kind == "agent" else ""
     doing.record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)
+    doing.grade = workflow.grade_for(step, records.attempts_counted(store, run.id, step.name) - 1) \
+        if step.kind == "agent" else None
     doing.emit("step_start", step.name, {"attempt": doing.record.attempt, "persona": step.persona,
-                                         "head": head, "dirty_before": dirty_before})
+                                         "head": head, "dirty_before": dirty_before, "model": doing.grade})
     with store.files.stderr_file(run.id, doing.record.id) as errors:
         doing.errors = errors
         reply = execute(doing, asked, adapter, personas_dir) if step.kind == "agent" else None
@@ -206,7 +209,7 @@ def execute(doing, asked, adapter, personas_dir):
     reply = adapter(persona=(personas_dir / f"{doing.step.persona}.md").read_text(), prompt=asked,
                     cwd=doing.checkout.path, capabilities=doing.step.capabilities, timeout=doing.timeout,
                     on_event=doing.emit, raw_sink=doing.store.files.raw_sink(doing.run.id, doing.record.id),
-                    stderr_file=doing.errors, on_child=doing.on_child, model=doing.step.model)
+                    stderr_file=doing.errors, on_child=doing.on_child, model=doing.grade)
     for denial in reply.denials:
         doing.emit("denied", f"{denial.get('action')}: {denial.get('path')}", denial)
     return reply

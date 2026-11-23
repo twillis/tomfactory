@@ -134,10 +134,9 @@ def test_factory_untouched_compares_fingerprints(tmp_path):
 @pytest.mark.fr("FR-088")
 @pytest.mark.parametrize("step", [s for table in tables.TABLES for s in table if s.kind == "agent"] + [tables.LEAD],
                          ids=lambda s: s.name)
-def test_the_steps_that_judge_get_the_strongest_model_and_the_rest_the_standard_one(step):
-    """Judging is where a mistake costs a whole run: the architect's review, and the final review."""
-    # The build's one verdict reports a test it may not change (FR-097); the plan check's sends a plan to be
-    # amended before the operator reads it (FR-104). Neither judges the work.
-    reports = step.name in ("build", "check_plan")
-    judges = step.persona == "architect" or (bool(step.routes) and not reports)   # the retro only summarises
-    assert step.model == ("strongest" if judges else "standard")
+def test_summarising_steps_get_the_light_model_and_no_step_starts_on_the_strongest(step):
+    """FR-088 as amended 2026-11-23 (FR-109): the documenter, the retro and the lead summarise or answer from what
+    is written, on the light grade; every other step, the judges included, on the standard one. The strongest is
+    the operator's to choose, so no step starts there."""
+    summarises = step.persona in ("documenter", "facilitator", "lead")
+    assert step.model == ("light" if summarises else "standard")

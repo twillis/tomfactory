@@ -31,7 +31,8 @@ CAPABILITIES = {
 
 # A step asks for a grade (workflow.GRADES); only this table knows which model that is (FR-088).
 # Without it every step ran on the program's own default, which was the costliest model there is.
-MODELS = {"standard": "claude-opus-5-5", "strongest": "claude-fable-5-2"}
+MODELS = {"light": "claude-haiku-5-5", "middle": "claude-sonnet-5-5", "standard": "claude-opus-5-5",
+          "strongest": "claude-fable-5-2"}
 
 # Keep the operator's own settings, hooks and connected tools out of factory runs.
 ISOLATION = ["--setting-sources", "", "--strict-mcp-config", "--no-session-persistence"]

@@ -30,7 +30,7 @@ def test_the_retro_is_the_last_agent_step_of_a_sprint_and_never_stops_it():
     retro = workflow.get("retro", kit)
     assert workflow.get("converge", kit).on_pass == "retro" and retro.on_pass == "finish"
     assert retro.advisory and retro.persona == "facilitator" and retro.may_change == "docs"
-    assert retro.model == "standard"                                  # it summarises what code measured
+    assert retro.model == "light"                                     # it summarises what code measured
     assert {"run_facts", "friction", "operator_feedback", "findings"} <= set(retro.inputs)
 
 
