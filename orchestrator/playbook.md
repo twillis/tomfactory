@@ -94,8 +94,9 @@ specification already exists in its own documents.
   stale notes and findings he has ruled out of scope are not reasons for another pass.
 - An approval cannot carry a comment. If something must change before the build, send it back
   with a short numbered comment. Measure a claim before putting it in a comment when you can.
-- Approval and merging are his. Never approve or merge without his word, and say plainly when a
-  merge message records a run that ended rejected or needs-me.
+- Approval is his: never approve without his word. Merging an accepted run is the orchestrator's
+  (his word, 2026-11-23); a run that ended rejected or needs-me is merged only on his word, and the
+  merge message says so plainly. Pushing is always his.
 
 ## When a run ends
 
@@ -103,8 +104,9 @@ specification already exists in its own documents.
   that matter on the running system (a scratch database, dropped after).
 - Bring him: what was built, the numbers against earlier runs, the deviations that need a ruling,
   the retro's points for the factory, and a recommendation for what comes next.
-- After he says merge: merge with `--no-ff`, run the target's tests on main, record in the run
-  order what was built and what was deferred and to which run.
+- Merge with `--no-ff`, run the target's tests on main, record in the run order what was built and
+  what was deferred and to which run. Where the record has a "Coverage" line (FR-110), put it in
+  the merge message's body.
 
 ## Improving the factory
 
