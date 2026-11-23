@@ -27,6 +27,17 @@ the relevant factory teams." Specification: `specs/003-fitness-and-feedback/spec
   orchestrator reads a dictated sentence about a later run against what the module already says; list and
   create at a new root's top-level table among the cases.
 
+- **Taken, 2026-11-23, from run 76 (the operator: "Yeah edit the playbook"):** three lines under "Writing a request" in
+  `orchestrator/playbook.md`: state the failing condition the code allows, say whether a recent run's structure is kept
+  or folded in, and name the inputs where the language differs from the reference. This answers part of #56.
+- **Open, from run 76 (the first run of the named personas):** the orchestrator states, for a new keyword, the red condition the
+  code allows (through the gateway a case fails at `_untaken`; through a path it is proved by the build alone), and says
+  whether a structure a recent run introduced is kept or folded in (continues #56); a plan that keeps a reference
+  implementation's rules lists the inputs where the language's own primitive differs, each with a test (new); the plan
+  check asks the loud-or-silent question of every new default (new); a plan that parametrises every case one way names
+  the cases that cannot follow it (new). Threats repeated: keywords threaded by hand (run 69's entry), test modules
+  importing from one another, run-order rows left for merge (#52).
+
 # Retro suggestions for the factory and the orchestrator, and what became of them
 
 Source: the Opportunities and Threats of all 29 retros in `bttr_erp/docs/retros/` (runs 27, 28, 30, 33, 43–63, 66–69; the tidy runs 31–42, 64, 65 and the runs before 27 have no retro). I left out suggestions that change bttr_erp itself (the "Next request:" items and the architect's code warnings). I checked each theme against `tomfactory/specs/001-near-loop-factory/changes/*.md`, the FR notes in `spec.md`, `prompts/*.md` and `prompts/fragments/*.md`, `personas/*.md`, `orchestrator/playbook.md`, the factory code where a prompt did not settle it (`factory/checks.py`, `driver.py`, `tables.py`), and the orchestrator's memory file `scope-idiom-iteration.md`. No retro suggestion for the factory was routed to `bttr_erp/docs/backlog.md`.

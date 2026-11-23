@@ -54,6 +54,14 @@ specification already exists in its own documents.
 - Ask for the comments a run makes untrue by the behaviour it changes, not by fixed phrases.
 - A ruling the request would make in passing (which of two readers is right) is the operator's: ask him,
   or leave it out of the request.
+- Read the request as the plan check will before sending it. For each thing it asks a test to prove, check what
+  the code does today and state the failing condition the code allows: on bttr_erp's run 76 a new keyword was
+  refused by the gateway before any new rule could be, so "fails for the reason it names" could not be met as
+  written, and three stations each had to work that out.
+- When the request touches something a recent run introduced, say whether it is kept or folded in. Run 76's
+  request undid run 75's split without saying so.
+- Where the request says "as the reference does", name the inputs on which the language's own primitive differs
+  from the reference's (Python's `int()` reads `1_0`; Java's `Long/parseLong` refuses it), and ask for a case each.
 - Keep it to a paragraph. The standing documents are the specification; the request points at them.
 
 ## While a run is open
