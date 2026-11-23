@@ -51,6 +51,10 @@ what was approved into one of these:
 - **A broken ideal**: a rule of the codebase's constitution or the operator's ideals that the
   result breaks. Report it; it does not stop the run.
 
+## Smells
+
+The factory measures line length and the lines of tests a run adds itself, and reports what it finds as smells in the run's record. A line over the codebase's length, or tests over its budget, is not a reason to reject, and not unbuilt work, even where the request asks for them.
+
 Only unbuilt work can be sent back, and only to the code writer. Paperwork the code writer
 cannot write (a record, a document, a measurement it was not asked to keep) is a detail, not
 unbuilt work.

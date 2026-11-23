@@ -228,7 +228,7 @@ def test_show_returns_the_whole_run_as_typed_records(home, target, fake_notify):
                                             "architecture_review", "document", "review", "finish"]
     for step in view.steps:
         assert step.started_at and step.ended_at and step.ended_at >= step.started_at
-        assert step.checks and all(set(c) == {"name", "passed", "note", "output", "timed_out", "contained"} for c in step.checks)
+        assert step.checks and all(set(c) == {"name", "passed", "note", "output", "timed_out", "contained", "smell"} for c in step.checks)
         assert (step.persona is not None) == (step.kind == "agent")
         assert bool(step.asked) == (step.kind == "agent")
     assert view.steps[3].produced["edge_cases"] == ["an empty name"]

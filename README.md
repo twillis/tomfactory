@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 433 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 435 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -430,7 +430,8 @@ switch it off, or to your own language's equivalent.
 Left alone, a test writer told to cover edge cases will keep finding more. Two things hold
 it back. Its persona tells it to test each behaviour once, at the level where it lives. And
 each codebase sets a budget, `test_budget_lines` in `.factory.toml` (300 by default; 0 for
-no limit): a run whose new tests add more lines than that is sent back and told the numbers.
+no limit). The factory measures the lines a run's new tests add and, where they are over, reports it as a
+smell in the run's record (below). Nothing is sent back for it.
 
 ### A longest line, if the codebase wants one
 
@@ -439,11 +440,18 @@ line_length = 120       # the longest line a step may add to code or tests; 0, t
 ```
 
 Where it is set, the factory measures the lines each writing step added (the test writer, the
-builder, a mended test), counting indentation, and sends the work back to that step with each
-line that is over, as `file:line (length)`. Lines already there are not measured, and
-documentation is not: prose and tables run long. It is measured by code, before the tests are
-run, so a width nobody checked is not discovered by the final review after everything else has
-passed.
+builder, a mended test, either tidy) and the code a plan gives, counting indentation, and reports
+each line that is over, as `file:line (length)`. Lines already there are not measured, and
+documentation is not: prose and tables run long.
+
+### Smells: measured and reported, never a reason to stop
+
+The longest line and the test budget are **smells**. A step entry names them under `smells=`,
+beside its `checks=`: they are measured after the step's own checks pass, and what they find is
+kept with the step and listed under "Smells" in the run's record, for the operator to tidy at
+merge or in a later tidy. A smell never sends work back, never ends a run, and the final review
+is told it is no reason to reject. On bttr_erp the line check had sent work back seven times and
+once ended a run as needs-me for one line; the budget had never fired.
 
 ### When an agent has a question
 

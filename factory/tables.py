@@ -13,7 +13,7 @@ STEPS: list[Step] = [
     # "spec" allows spec kit's documents where the target uses spec kit, and nothing elsewhere:
     # so in this plain cycle the planner changes no file.
     Step("plan", "agent", persona="planner", capabilities="read+edit", may_change="spec", on_pass=WAIT,
-         on_approve="baseline", commit_after=True, checks=("plan_lines_within_length",), on_fail=Rework("plan"),
+         on_approve="baseline", commit_after=True, smells=("plan_lines_within_length",), on_fail=Rework("plan"),
          inputs=("request", "run_kind", "constitution", "ideals", "previous_plan", "comment", "failure",
                  "test_paths", "docs_paths"),
          envelope={"plan": "text", "ideals_addressed": "list", "conflicts": "list"}),
@@ -21,7 +21,7 @@ STEPS: list[Step] = [
     Step("baseline", "code", on_pass="write_tests", checks=("baseline",)),
 
     Step("write_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
-         on_pass="red", checks=("tests_added", "tests_within_budget", "edge_cases_stated", "lines_within_length"),
+         on_pass="red", checks=("tests_added", "edge_cases_stated"), smells=("tests_within_budget", "lines_within_length"),
          on_fail=Rework("write_tests"),
          inputs=("request", "plan", "test_paths", "failure"),
          envelope={"summary": "text", "test_files": "list", "edge_cases": "list"}),
@@ -33,14 +33,14 @@ STEPS: list[Step] = [
     # reported again, the tests are run and the failure takes its usual course.
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
          on_pass="test", routes={"test_defect": Rework("mend_tests", at_most=1, then="test")},
-         checks=("lines_within_length",), on_fail=Rework("build"),
+         smells=("lines_within_length",), on_fail=Rework("build"),
          inputs=("request", "plan", "constitution", "ideals", "test_files", "failure"),
          envelope={"summary": "text", "files_changed": "list", "verdict": "verdict", "reasons": "list"}),
 
     # Not on the usual path: reached only from the build. It goes on to `test`, not `red`: the build is there,
     # so a mended test is expected to pass.
     Step("mend_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
-         on_pass="test", checks=("tests_within_budget", "lines_within_length"), on_fail=Rework("mend_tests"),
+         on_pass="test", smells=("tests_within_budget", "lines_within_length"), on_fail=Rework("mend_tests"),
          inputs=("request", "plan", "test_paths", "failure"),
          envelope={"summary": "text", "mended": "list"}),
 
@@ -150,7 +150,7 @@ SPRINT_STEPS: list[Step] = [
                  "planning_answers"),
          envelope={"verdict": "verdict", "findings": "list"}),
     Step("amend_plan", "agent", persona="planner", on_pass=WAIT, on_approve="baseline", revise_from="plan",
-         checks=("plan_lines_within_length",), on_fail=Rework("amend_plan"),
+         smells=("plan_lines_within_length",), on_fail=Rework("amend_plan"),
          inputs=("request", "plan", "plan_findings", "constitution", "ideals", "failure", "test_paths",
                  "docs_paths", "planning_answers"),
          envelope={"plan": "text", "taken": "list", "declined": "list", "ideals_addressed": "list",
@@ -175,12 +175,12 @@ def _tidy(step: Step) -> list[Step]:
 
 
 TIDY_TESTS = _tidy(Step("tidy_tests", "agent", persona="test_writer", capabilities="read+edit",
-                        may_change="tests", on_pass="test",
+                        may_change="tests", on_pass="test", smells=("lines_within_length",),
                         inputs=("request", "plan", "test_paths", "failure"),
                         envelope={"summary": "text", "removed": "list", "kept": "list"}))
 
 TIDY_CODE = _tidy(Step("tidy_code", "agent", persona="code_writer", capabilities="read+edit",
-                       may_change="not_tests", on_pass="test",
+                       may_change="not_tests", on_pass="test", smells=("lines_within_length",),
                        inputs=("request", "plan", "constitution", "ideals", "failure"),
                        envelope={"summary": "text", "files_changed": "list"}))
 

@@ -22,8 +22,8 @@ You may create or change files only under: {{test_paths}}
 
 ## Keep them proportionate
 
-As your priorities say. The codebase's budget for the lines of tests one run may add is
-enforced: a set over it is sent back.
+As your priorities say. The codebase sets a budget for the lines of tests one run may add. The
+factory measures it and reports a set over it to the operator; a good set fits well inside it.
 
 ## If your last tests were not accepted
 

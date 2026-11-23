@@ -33,6 +33,7 @@ class CheckResult:
     timed_out: bool = False         # the command it ran hit the time limit
     contained: dict | None = None   # it ran the target's code, contained: {"network": bool}
     name: str = ""
+    smell: bool = False             # run as a smell: what it found is reported and never fails the step (FR-107)
 
 
 @dataclass
@@ -114,6 +115,7 @@ class Step:
     inputs: tuple = ()                  # agent steps: the names its prompt's {{placeholders}} may use
     envelope: dict = field(default_factory=dict)   # agent steps: required key -> text | list | verdict | (values)
     checks: tuple = ()                  # names of the step's own checks, run in order
+    smells: tuple = ()                  # checks run after its own pass: what they find is reported, never a failure
     on_fail: Rework | End = End("needs-me")        # what a failed check of its own leads to
     routes: dict = field(default_factory=dict)     # a step that gives a verdict: verdict -> Rework | Replan | End.
                                                    # A judging step's; and the build's one, for a test no build can pass

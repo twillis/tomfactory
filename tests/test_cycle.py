@@ -124,16 +124,28 @@ def test_the_test_writer_mending_a_test_may_not_touch_the_code(cycle):
 LONG = "def greet(name=''):\n    return 'hello'  # " + "x" * 60 + "\n"
 
 
+LIMITED = {".factory.toml": config.DEFAULT_FACTORY_TOML.replace("line_length = 0", "line_length = 60")}
+
+
+def smells(step):
+    """The smells a step's record holds that found something."""
+    return [c for c in step.checks if c.get("smell") and not c["passed"]]
+
+
+def record_text(target, run):
+    return git(target, "show", f"{run.branch}:docs/runs/{run.branch.removeprefix('factory/')}.md")
+
+
 @pytest.mark.fr("FR-101")
-def test_a_line_longer_than_the_codebase_allows_is_sent_back_naming_it(cycle):
-    limited = {".factory.toml": config.DEFAULT_FACTORY_TOML.replace("line_length = 0", "line_length = 60")}
-    run, fake, store, _ = cycle(script(build=[dict(BUILD, files={"hello.py": LONG}), BUILD]), files=limited)
+@pytest.mark.fr("FR-107")
+def test_a_line_longer_than_the_codebase_allows_is_a_smell_and_sends_nothing_back(cycle):
+    run, fake, store, target = cycle(script(build=dict(BUILD, files={"hello.py": LONG})), files=LIMITED)
     assert run.outcome == "accepted"
-    assert names(store, run)[4:7] == ["build", "build", "test"]                # found before the tests were run
-    first = record(store, run, "build", 0)
-    assert first.failure == "check" and "lines_within_length" in [c["name"] for c in first.checks if not c["passed"]]
-    retry = fake.calls[3]["prompt"]
-    assert "hello.py:2" in retry and "60" in retry                              # told which line, and the limit
+    assert names(store, run).count("build") == 1                               # the run is not stopped or sent back
+    found = smells(record(store, run, "build"))
+    assert [c["name"] for c in found] == ["lines_within_length"] and "hello.py:2" in found[0]["note"]
+    text = record_text(target, run)
+    assert "## Smells" in text and "hello.py:2" in text and "60" in text       # reported to the operator
 
 
 @pytest.mark.fr("FR-101")
@@ -177,20 +189,24 @@ def test_a_build_sent_back_is_named_by_what_it_built_and_the_record_says_why(cyc
 LONG_PLAN = {"envelope": dict(PLAN, plan="Add hello.py:\n\n```python\nGREETING = '" + "h" * 70 + "'\n```\n")}
 
 
+NO_PLAN = {"envelope": {"ideals_addressed": [], "conflicts": []}}     # a reply with no plan: the planner tries again
+
+
 @pytest.mark.fr("FR-104")
-def test_a_plan_whose_code_is_longer_than_the_codebase_allows_is_written_again(cycle):
-    limited = {".factory.toml": config.DEFAULT_FACTORY_TOML.replace("line_length = 0", "line_length = 60")}
-    run, fake, store, _ = cycle(script(plan=[LONG_PLAN, {"envelope": PLAN}]), files=limited)
+@pytest.mark.fr("FR-107")
+def test_a_plan_whose_code_is_longer_than_the_codebase_allows_is_a_smell(cycle):
+    run, fake, store, target = cycle(script(plan=LONG_PLAN), files=LIMITED)
     assert run.outcome == "accepted"
-    assert names(store, run)[:2] == ["plan", "plan"]
-    assert "60" in fake.calls[1]["prompt"] and "lines_within_length" in fake.calls[1]["prompt"]
+    assert names(store, run).count("plan") == 1
+    assert [c["name"] for c in smells(record(store, run, "plan"))] == ["plan_lines_within_length"]
+    assert "## Smells" in record_text(target, run)
 
 
 @pytest.mark.fr("FR-105")
 def test_each_send_back_gives_the_planner_its_attempts_again(home, tmp_path, fake_notify):
     target = commit_files(operations.init_target(tmp_path / "target"),
                           {".factory.toml": config.DEFAULT_FACTORY_TOML.replace("line_length = 0", "line_length = 60")})
-    drive_with(FakeAgent([LONG_PLAN, {"envelope": PLAN}, LONG_PLAN, {"envelope": PLAN}, LONG_PLAN, {"envelope": PLAN},
+    drive_with(FakeAgent([NO_PLAN, {"envelope": PLAN}, NO_PLAN, {"envelope": PLAN}, NO_PLAN, {"envelope": PLAN},
                           *script()[1:]]))
     run = operations.request("Add a greeting", target)
     for comment in ("Keep it to one file.", "Name the function greet."):
@@ -377,15 +393,36 @@ def test_tidying_the_code_must_leave_every_test_passing(home, tmp_path, fake_not
 
 
 @pytest.mark.fr("FR-065")
-def test_a_test_writer_over_budget_is_sent_back_and_told_the_numbers(cycle, monkeypatch):
+@pytest.mark.fr("FR-107")
+def test_a_test_writer_over_budget_is_a_smell_and_the_numbers_are_reported(cycle, monkeypatch):
     monkeypatch.setattr(config, "DEFAULT_FACTORY_TOML", config.DEFAULT_FACTORY_TOML.replace(
         "test_budget_lines = 300", "test_budget_lines = 12"))
     padded = dict(WRITE_TESTS, files={"tests/test_hello.py": TEST + "\n# padding\n" * 20})
-    run, fake, store, _ = cycle(script(write_tests=[padded, WRITE_TESTS]))
+    run, fake, store, target = cycle(script(write_tests=padded))
     assert run.outcome == "accepted"
-    first = record(store, run, "write_tests", 0)
-    assert first.passed is False and [c["name"] for c in first.checks if not c["passed"]] == ["tests_within_budget"]
-    assert "budget" in fake.calls[2]["prompt"] and "12" in fake.calls[2]["prompt"]
+    written = record(store, run, "write_tests")
+    assert written.passed and names(store, run).count("write_tests") == 1
+    assert [c["name"] for c in smells(written)] == ["tests_within_budget"]
+    assert "12" in smells(written)[0]["note"] and "## Smells" in record_text(target, run)
+
+
+@pytest.mark.fr("FR-107")
+def test_a_tidys_long_line_is_a_smell_too(home, tmp_path, fake_notify):
+    """Found on bttr_erp's run 78: a tidy's 147-character line reached the final review unmeasured."""
+    target = commit_files(operations.init_target(tmp_path / "tidy-long"), {**EXISTING, **LIMITED})
+    long = dict(TIDIED, files={"hello.py": "GREETING = 'hello'  # " + "x" * 60 + "\n\n\ndef greet(name=''):\n"
+                                            "    return GREETING\n"})
+    run, _ = to_the_end(target, FakeAgent([{"envelope": PLAN}, long, REVIEW]), "Tidy up", run_kind="tidy-code")
+    store = open_store(home)
+    assert run.outcome == "accepted", run.reason
+    assert [c["name"] for c in smells(record(store, run, "tidy_code"))] == ["lines_within_length"]
+
+
+@pytest.mark.fr("FR-107")
+def test_the_judges_are_told_a_smell_is_no_reason_to_reject():
+    for step in ("review", "converge"):
+        text = (config.PROMPTS_DIR / f"{step}.md").read_text()
+        assert "smell" in text.lower() and "not a reason to reject" in text
 
 
 @pytest.mark.fr("FR-066")

@@ -20,7 +20,7 @@ import pathlib
 import re
 import signal
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 from factory import agent, checks, config, notify, own_files, proc, records, run_record, sandbox, speckit, tables, workflow, workspace
 from factory.config import under
@@ -230,6 +230,11 @@ def verify(doing, reply, before, dirty_before, paths):
                     break
         except sandbox.Unavailable as refused:      # not run at all, rather than run uncontained
             result = StepResult(False, "error", message=str(refused))
+    if result.passed:       # a smell is measured on work that passed, and reported; it never fails the step (FR-107)
+        for name in doing.step.smells:
+            outcome = replace(checks.get(name)(context), smell=True)
+            done.append(outcome)
+            doing.emit("smell", f"{name}: {'none' if outcome.passed else 'found'}", asdict(outcome))
     if doing.step.routes and isinstance(envelope, dict):
         result.verdict = envelope.get("verdict")
     return result, done, context.changed
@@ -439,7 +444,7 @@ def validate(table, personas_dir=None, prompts_dir=None) -> None:
                     and target not in names:
                 problems.append(f"{step.name} leads to {target}, which is not in the table")
         problems += [f"{step.name} uses the check {name}, which is not registered"
-                     for name in workflow.checks_for(step) if name not in checks.REGISTRY]
+                     for name in [*workflow.checks_for(step), *step.smells] if name not in checks.REGISTRY]
         if step.kind != "agent":
             continue
         problems += [f"{step.name} uses the input {name}, which is not defined"

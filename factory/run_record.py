@@ -132,6 +132,7 @@ def render(store, run, checkout) -> str:
                            and isinstance(s.produced, dict)), None)
         if documented and documented.get("summary"):        # the documenter's account, kept (FR-104)
             lines += ["## What changed", "", documented["summary"].strip(), ""]
+        lines += _smells(steps)
         lines += _tests_before_and_after(steps)
         lines += ["## Time and cost", "", *facts(store, run), ""]
         lines += _section("Commits on the run's branch", [f"`{c}`" for c in checkout.log_since_base()])
@@ -155,6 +156,14 @@ def _sprint_review(judged, architect) -> list:
     for heading, items in parts:
         lines += [f"### {heading}", "", *([f"- {item}" for item in items] if items else ["- none"]), ""]
     return lines
+
+
+def _smells(steps) -> list:
+    """What the smells found (FR-107): measured on work that passed, reported here, and never a reason it went back."""
+    found = [f"{s.name} (attempt {s.attempt}), {c['name']}: {c['note']}"
+             for s in steps for c in s.checks or [] if c.get("smell") and not c.get("passed")]
+    return ["## Smells", "", "Measured by the factory and reported, never a reason a step went back: tidy them at merge"
+            " or in a later tidy.", "", *([f"- {item}" for item in found] if found else ["- none"]), ""]
 
 
 def _tests_before_and_after(steps) -> list:

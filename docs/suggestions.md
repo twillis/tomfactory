@@ -38,6 +38,24 @@ the relevant factory teams." Specification: `specs/003-fitness-and-feedback/spec
   the cases that cannot follow it (new). Threats repeated: keywords threaded by hand (run 69's entry), test modules
   importing from one another, run-order rows left for merge (#52).
 
+- **Open, from run 77:** the plan check asks how many statements a new read or write path adds where every input is
+  good, and whether an existing path already solves it (new; would likely have saved a plan round of 13.2 minutes and
+  $4.14); the plan check searches today's message for each refusal fragment as a substring (continues FR-106's theme);
+  the test writer writes every non-printing or non-ASCII character as an escape (new); converge is shown the diff with
+  non-ASCII characters visible (new); the build step keeps a one-line reason for each check verdict, since three build
+  attempts on line length could not be explained afterwards (new); the orchestrator quotes an order from the reference
+  file or leaves it out, never retypes it (continues #56). Threats repeated: a handler can take a filter and list
+  unfiltered rows; test modules importing from one another (third run running); run-order rows left for merge (#52);
+  requests long enough to carry their own mistakes.
+
+- **Taken, 2026-11-23, FR-107 (the operator: "smells that don't stop the build", "By build I mean run"):** the line
+  length and the test budget are smells, reported and never sent back, and the tidy steps are measured too. Answers the
+  item below.
+- **Open, from run 78 (found by the orchestrator, from the review's friction):** the line-length check measures the
+  test writer, the builder and a mended test, not `tidy_code` or `tidy_tests`. Run 78's tidy left a 147-character
+  docstring line that only the final review caught, costing a second tidy and review (about 3 minutes). A change to the
+  factory: give the two tidy steps the same check.
+
 # Retro suggestions for the factory and the orchestrator, and what became of them
 
 Source: the Opportunities and Threats of all 29 retros in `bttr_erp/docs/retros/` (runs 27, 28, 30, 33, 43–63, 66–69; the tidy runs 31–42, 64, 65 and the runs before 27 have no retro). I left out suggestions that change bttr_erp itself (the "Next request:" items and the architect's code warnings). I checked each theme against `tomfactory/specs/001-near-loop-factory/changes/*.md`, the FR notes in `spec.md`, `prompts/*.md` and `prompts/fragments/*.md`, `personas/*.md`, `orchestrator/playbook.md`, the factory code where a prompt did not settle it (`factory/checks.py`, `driver.py`, `tables.py`), and the orchestrator's memory file `scope-idiom-iteration.md`. No retro suggestion for the factory was routed to `bttr_erp/docs/backlog.md`.

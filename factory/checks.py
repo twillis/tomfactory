@@ -138,8 +138,8 @@ def tests_within_budget(ctx) -> CheckResult:
     added = ctx.checkout.lines_added([n for n in ctx.changed if under(n, ctx.target_config.test_paths)])
     if not budget or added <= budget:
         return CheckResult(True, f"{added} lines of tests added")
-    return CheckResult(False, f"the tests added {added} lines; this codebase's budget for one run is {budget}."
-                              " Keep them proportionate, as your priorities say.")
+    return CheckResult(False, f"the tests added {added} lines; this codebase's budget for one run is {budget},"
+                              " so they may not be proportionate")
 
 
 @register("lines_within_length")
@@ -154,7 +154,7 @@ def lines_within_length(ctx) -> CheckResult:
     if not long:
         return CheckResult(True, f"no added line is over {limit}")
     return CheckResult(False, f"these added lines are longer than this codebase's {limit}, counting indentation: "
-                              f"{', '.join(long)}. Wrap them; change nothing else.")
+                              f"{', '.join(long)}")
 
 
 FENCE = re.compile(r"^```.*?$(.*?)^```", re.M | re.S)
@@ -173,7 +173,7 @@ def plan_lines_within_length(ctx) -> CheckResult:
         return CheckResult(True, f"no line of the plan's code is over {limit}")
     shown = "; ".join(f"{len(line)}: {line.strip()[:60]}" for line in long[:5])
     return CheckResult(False, f"{len(long)} lines of the plan's code are longer than this codebase's {limit}, "
-                              f"counting indentation (length: start): {shown}. Wrap them; change nothing else.")
+                              f"counting indentation (length: start): {shown}")
 
 
 @register("edge_cases_stated")

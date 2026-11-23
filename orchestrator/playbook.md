@@ -62,6 +62,8 @@ specification already exists in its own documents.
   request undid run 75's split without saying so.
 - Where the request says "as the reference does", name the inputs on which the language's own primitive differs
   from the reference's (Python's `int()` reads `1_0`; Java's `Long/parseLong` refuses it), and ask for a case each.
+- Do not ask a request to keep to the line length or the test budget: both are smells the factory measures and
+  reports (FR-107), and a request that asks for them turns them back into reasons to reject.
 - Keep it to a paragraph. The standing documents are the specification; the request points at them.
 
 ## While a run is open
