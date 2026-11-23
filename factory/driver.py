@@ -60,7 +60,7 @@ def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) ->
             asked = None
             if result.failure == "question":    # on record the moment it is asked, whatever happens next
                 asked = records.ask(store, run_id, step.name, step.persona, result.failed_check.note)
-            attempts = {entry.name: records.attempts(store, run_id, entry.name) for entry in steps}
+            attempts = {entry.name: records.attempts_counted(store, run_id, entry.name) for entry in steps}
             then = workflow.next_step(step, result, attempts, run.attempt_limit)
             if isinstance(then, End):
                 end_run(store, run_id, then.outcome, then.reason)

@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 428 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 430 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -145,7 +145,9 @@ goes on to `test`, not back to `red`, because the build is already there. The te
 find the builder wrong and change nothing. A second report in the same run is not chased: the
 tests are run and their failure takes its usual course.
 
-No step runs more than three times in one run (you can change the number per request).
+No step runs more than three times in one run (you can change the number per request). What counts is the
+step's own work: a run that asked a question you answered does not count, and sending a plan back gives
+the planner its attempts again. A question the lead answered still counts, so a step that only asks still ends.
 When a step has used its attempts, the run ends as **needs-me** and tells you what failed.
 
 ### How a run ends

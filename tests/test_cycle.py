@@ -186,6 +186,20 @@ def test_a_plan_whose_code_is_longer_than_the_codebase_allows_is_written_again(c
     assert "60" in fake.calls[1]["prompt"] and "lines_within_length" in fake.calls[1]["prompt"]
 
 
+@pytest.mark.fr("FR-105")
+def test_each_send_back_gives_the_planner_its_attempts_again(home, tmp_path, fake_notify):
+    target = commit_files(operations.init_target(tmp_path / "target"),
+                          {".factory.toml": config.DEFAULT_FACTORY_TOML.replace("line_length = 0", "line_length = 60")})
+    drive_with(FakeAgent([LONG_PLAN, {"envelope": PLAN}, LONG_PLAN, {"envelope": PLAN}, LONG_PLAN, {"envelope": PLAN},
+                          *script()[1:]]))
+    run = operations.request("Add a greeting", target)
+    for comment in ("Keep it to one file.", "Name the function greet."):
+        assert run.state == "awaiting_approval", run.reason
+        run = operations.revise(run.id, comment)
+    assert run.state == "awaiting_approval", run.reason                    # six plans: each send-back starts afresh
+    assert operations.approve(run.id).outcome == "accepted"
+
+
 @pytest.mark.fr("FR-011")
 def test_the_attempt_limit_set_on_the_request_is_the_one_used(cycle):
     wrong = dict(BUILD, files={"hello.py": WRONG})

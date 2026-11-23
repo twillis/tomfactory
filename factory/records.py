@@ -134,6 +134,26 @@ def attempts(gw, run_id, name) -> int:
     return len(gw.query("steps", {"run_id": run_id, "name": name}))
 
 
+def attempts_counted(gw, run_id, name) -> int:
+    """How many of this step's runs count toward its attempt limit: its own failures and successes since the
+    operator last sent the work back, leaving out a run that asked a question the operator answered (FR-105).
+    A question the lead answered still counts, so a step that only ever asks still ends."""
+    revised = [p.created_at for p in gw.query("plans", {"run_id": run_id}) if p.decision == "revised"]
+    since = max(revised) if revised else ""
+    answered_by_operator = [q for q in gw.query("questions", {"run_id": run_id, "step": name})
+                            if q.answered_by == "operator"]
+    counted = 0
+    for step in gw.query("steps", {"run_id": run_id, "name": name}):
+        if step.started_at < since:
+            continue                                        # before the operator's latest send-back
+        asked_and_answered = step.failure == "question" and any(
+            q.asked_at >= step.started_at and (step.ended_at is None or q.asked_at <= step.ended_at)
+            for q in answered_by_operator)
+        if not asked_and_answered:
+            counted += 1
+    return counted
+
+
 def start_step(gw, run_id, name, kind, persona, asked):
     """Put a step on record as it begins, so a run in progress shows what it is doing."""
     with gw.transaction():

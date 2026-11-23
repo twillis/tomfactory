@@ -203,3 +203,15 @@ def test_the_command_line_says_a_measurement_is_asked_for(home, target, fake_not
     assert cli.main(["status"]) == 0
     out = capsys.readouterr().out
     assert "a measurement is asked for" in out and "question for you" not in out
+
+
+@pytest.mark.fr("FR-105")
+def test_measurements_the_operator_answers_do_not_use_up_a_steps_attempts(home, target, fake_notify):
+    """bttr_erp run 68: a planner that asked once and was sent back once had no attempts left for a fix."""
+    run, fake = start(target, [{"envelope": PLAN}, WRITE_TESTS, MEASURE, MEASURE, MEASURE, BUILD, *AFTER_BUILD])
+    drive_with(fake)
+    run = operations.approve(run.id)
+    for answer in ("18.6", "it succeeds", "the index is used"):
+        assert run.state == "awaiting_approval", run.reason
+        run = operations.answer(run.id, answer)
+    assert run.outcome == "accepted", run.reason
