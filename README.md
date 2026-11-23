@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 435 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 439 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -476,6 +476,13 @@ documents and cannot measure, so it is not asked. The run waits, the notificatio
 measurement is asked for", and `factory answer` gives the result to the step, which runs again.
 When Claude Code drives the factory (`/factory`), it does the measuring, on a scratch system,
 and tells you afterwards; the playbook says how.
+
+**The work before the question is kept.** A step that wrote files and then asked is run again
+with its work still in the checkout, and what it wrote counts as its own: the next attempt may
+keep it as it is. The same holds after a check sends a step back. Only a step the run comes to
+from another one, or after its head has moved (a resume, your commit), counts afresh. The
+planner amending, the builder and the test writer mending are all told to ask for a measurement
+when they find the database behaving against the plan, not to leave it in a comment.
 
 What was asked and answered travels with the run. The plan check and the final review are given
 every answered question, with who asked and who answered, and are told that where the request

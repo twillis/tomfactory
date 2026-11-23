@@ -385,3 +385,12 @@ Runs 47, 54. Aimed at: orchestrator requests.
 Run 60. Aimed at: orchestrator requests.
 **TAKEN.** Playbook: "A ruling the request would make in passing (which of two readers is right) is the operator's: ask him, or leave it out of the request."
 
+
+**61. A step that runs again after a question should count the work its asking attempt left, not only what it changes after the answer.**
+Run 79. Aimed at: the factory (`driver.run_step`, `workspace.changed`).
+**TAKEN 2026-11-23, FR-108:** `driver.counted_from`; an answered question is no longer shown as a failure. Was: The test writer wrote its tests, asked for a measurement, and was answered. Each attempt reads `dirty_before` afresh, so the tests already in the checkout counted as there before the step began. The resumed test writer rightly kept them as written, `tests_added` saw no change, and it failed three attempts: needs-me with "no test file was written under tests/". `factory resume` discarded the draft (a copy kept outside the run) and the test writer wrote again. Fix: take `dirty_before` from the step's first attempt in a question chain, or let `tests_added` count changes since the step's first start. Measuring and asking are the factory's own path, so this will recur on every asked-for measurement in write_tests or build.
+Run 79's retro saw the same cost from the agent's side: attempt 3 "was spent checking existing work" because the retry note said no test file was written. Its fix: build a retried step's note from the worktree's diff.
+
+**62. Let a step's finding about PostgreSQL come back as a measurement, not a test comment: from amend_plan, and from build.**
+Run 79. Aimed at: the factory (amend_plan's reply format, the build prompt) and check_plan's persona.
+**TAKEN 2026-11-23, FR-108:** in the prompts of amend_plan, build, mend_tests and check_plan. Was: amend_plan could not ask for a measurement without writing a whole plan, so write_tests asked instead (4.0 minutes, $1.65). The builder found that `[2026-01-01,` reads as a date and left it in a test comment, so converge handed the merge an unmeasured finding (the orchestrator measured it at merge: true). check_plan should also check that each measured statement is the one the plan sends (same cast, same type, bound or untyped). Fits the operator's direction of 2026-11-23: make interruptions cheap.

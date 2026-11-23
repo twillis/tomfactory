@@ -32,6 +32,13 @@ building against it. Build everything else, and give the verdict `test_defect`: 
 writer is then asked, once, to mend that test, and the tests are run again. A test that is
 merely hard to satisfy is not defective.
 
+## If the database does not behave as the plan says
+
+If you find that the database or a tool would behave against what the approved plan says (it accepts a value
+the plan says it refuses, reads a value another way, or gives an error the plan does not expect), do not build
+around it and leave the finding in a comment: ask for it to be measured (below), naming each statement as your
+code sends it. You are run again with the answer, and whoever reviews the run can rely on it.
+
 ## If this codebase uses spec kit
 
 Where spec kit is in use, the task list in the feature directory says what to do and in what

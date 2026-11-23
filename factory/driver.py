@@ -116,11 +116,12 @@ class Doing:
 def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompts_dir):
     """Run one step once. Returns (how it went, the agent's envelope if there was one)."""
     paths = config.factory_paths()
-    before, dirty_before = own_files.fingerprint(paths), checkout.dirty()
+    before, (head, dirty_before) = own_files.fingerprint(paths), counted_from(store, run, step, checkout)
     doing = Doing(store, run, step, checkout, settings, step.timeout or settings.step_timeout_seconds)
     asked = prompt(doing, prompts_dir) if step.kind == "agent" else ""
     doing.record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)
-    doing.emit("step_start", step.name, {"attempt": doing.record.attempt, "persona": step.persona})
+    doing.emit("step_start", step.name, {"attempt": doing.record.attempt, "persona": step.persona,
+                                         "head": head, "dirty_before": dirty_before})
     with store.files.stderr_file(run.id, doing.record.id) as errors:
         doing.errors = errors
         reply = execute(doing, asked, adapter, personas_dir) if step.kind == "agent" else None
@@ -139,6 +140,24 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     doing.emit("step_end", f"{step.name}: {'passed' if result.passed else result.failure}",
                {"passed": result.passed, "failure": result.failure})
     return result, reply.envelope if reply else None
+
+
+def counted_from(store, run, step, checkout):
+    """The checkout's head, and its files as they stood when the run came to this step (FR-108).
+
+    A step's change is everything it changed over all its attempts in a row: work an attempt left before it asked
+    a question, or before a check sent it back, is still the step's own when the next attempt keeps it as it is.
+    Read afresh when the run comes to the step from another one, or when the head has moved since (a resume, or
+    the operator's commit). The lead answering between two attempts does not break the row.
+    """
+    head = checkout.head()
+    earlier = [s for s in store.query("steps", {"run_id": run.id}) if s.name != tables.LEAD.name]
+    if earlier and earlier[-1].name == step.name and not earlier[-1].passed:
+        started = store.query("events", {"run_id": run.id, "step_id": earlier[-1].id, "kind": "step_start"})
+        payload = started[0].payload if started else {}
+        if payload.get("head") == head and "dirty_before" in payload:
+            return head, payload["dirty_before"]
+    return head, checkout.dirty()
 
 
 def prompt(doing, prompts_dir) -> str:
@@ -321,8 +340,8 @@ def _test_files(src):
 
 def _failure(src):
     """What went wrong last time, with what the command printed if one ran."""
-    if not src.finished or src.finished[-1].passed:
-        return ""
+    if not src.finished or src.finished[-1].passed or src.finished[-1].failure == "question":
+        return ""       # an answered question is not a failure; the answer is given with the questions
     failed = next((c for c in src.finished[-1].checks or [] if not c["passed"]), None)
     if not failed:      # the agent program failed: say what it said, not only that it failed (FR-094)
         said = (src.finished[-1].produced or {}).get("error") if isinstance(src.finished[-1].produced, dict) else None

@@ -215,3 +215,54 @@ def test_measurements_the_operator_answers_do_not_use_up_a_steps_attempts(home, 
         assert run.state == "awaiting_approval", run.reason
         run = operations.answer(run.id, answer)
     assert run.outcome == "accepted", run.reason
+
+
+@pytest.mark.fr("FR-108")
+def test_tests_written_before_a_measurement_still_count_when_the_test_writer_keeps_them(home, target, fake_notify):
+    """bttr_erp run 79: the test writer wrote its tests, asked for a measurement and, answered, kept them as they
+    were. Each attempt counted only what it changed itself, so `tests_added` failed it until it had no attempts."""
+    wrote_then_asked = {**MEASURE, "files": WRITE_TESTS["files"]}
+    kept = {"envelope": WRITE_TESTS["envelope"]}                       # changes nothing: the tests are already there
+    run, fake = start(target, [{"envelope": PLAN}, wrote_then_asked, kept, BUILD, *AFTER_BUILD])
+    drive_with(fake)
+    run = operations.approve(run.id)
+    run = operations.answer(run.id, "It succeeds. PostgreSQL 18.6.")
+    assert run.outcome == "accepted", run.reason
+    attempts = [s for s in open_store(home).query("steps", {"run_id": run.id}) if s.name == "write_tests"]
+    assert [(s.failure, s.passed) for s in attempts] == [("question", False), (None, True)]
+
+
+@pytest.mark.fr("FR-108")
+def test_work_an_attempt_left_still_counts_when_a_check_sends_the_step_back(home, target, fake_notify):
+    """The same, after a check: the tests stand, only the edge cases were missing, and the next attempt adds them."""
+    no_edge_cases = {"envelope": {**WRITE_TESTS["envelope"], "edge_cases": []}, "files": WRITE_TESTS["files"]}
+    run, fake = start(target, [{"envelope": PLAN}, no_edge_cases, {"envelope": WRITE_TESTS["envelope"]}, BUILD,
+                               *AFTER_BUILD])
+    drive_with(fake)
+    run = operations.approve(run.id)
+    assert run.outcome == "accepted", run.reason
+    attempts = [s for s in open_store(home).query("steps", {"run_id": run.id}) if s.name == "write_tests"]
+    assert [s.passed for s in attempts] == [False, True]
+
+
+@pytest.mark.fr("FR-108")
+def test_a_step_the_run_comes_to_afresh_counts_only_its_own_change(home, target, fake_notify):
+    """The build after the test writer is a new step: the tests the test writer left are not the build's."""
+    run, fake = start(target, [{"envelope": PLAN}, WRITE_TESTS, BUILD, *AFTER_BUILD])
+    drive_with(fake)
+    run = operations.approve(run.id)
+    assert run.outcome == "accepted", run.reason
+    store = open_store(home)
+    build = next(s for s in store.query("steps", {"run_id": run.id}) if s.name == "build")
+    started = store.query("events", {"run_id": run.id, "step_id": build.id, "kind": "step_start"})[0]
+    assert started.payload["dirty_before"] == {} and started.payload["head"]
+
+
+@pytest.mark.fr("FR-108")
+def test_a_finding_about_the_database_comes_back_as_a_measurement_not_a_comment():
+    """bttr_erp run 79: the builder found `[2026-01-01,` read as a day and left it in a test comment; amend_plan
+    left a measurement to the orchestrator; and the plan had measured a cast it did not send."""
+    prompts = config.PACKAGE_DIR.parent / "prompts"
+    for name in ("amend_plan", "build", "mend_tests"):
+        assert "ask for it to be measured" in (prompts / f"{name}.md").read_text(), name
+    assert "measured another statement than the one the plan sends" in (prompts / "check_plan.md").read_text()

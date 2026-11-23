@@ -30,6 +30,9 @@ follows an answer and not the request.
   itself.
 - A requirement, ruling or decision the plan misses or goes against.
 - A claim about how a tool or the database behaves that is likely to be wrong. Say why.
+- A measured answer the plan rests on that measured another statement than the one the plan sends: another
+  cast or type, a literal where the plan binds a parameter, a typed value where the plan leaves it untyped.
+  Name the statement the plan sends, and ask for that one to be measured.
 - A test expectation the plan's own design would not meet, or a refusal the build will make
   that no planned test shows.
 - A place where the plan carries something over and differs from its source without saying so.

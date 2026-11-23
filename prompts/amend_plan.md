@@ -33,6 +33,10 @@ and say why, from the codebase, the request or a measured answer, in one sentenc
 weakening a test or dropping a requirement. Change nothing the findings do not touch: the operator has not
 seen this plan yet, and what you return is what he reads.
 
+A finding that turns on how the database or a tool behaves, which neither the codebase nor a measured answer
+settles, is not left as a step for whoever drives the run: ask for it to be measured (below) instead of
+returning the plan. You are run again with the answer, and amend then.
+
 ## If your last reply was not accepted
 
 {{failure}}

@@ -30,6 +30,9 @@ cannot run the tests; the factory runs them when you finish.
 - If the builder is wrong, and the test asks for what the plan asks for, change nothing and say
   so: the tests are run again and the build is sent back with what they say.
 
+If the builder's report rests on how the database or a tool behaves, and no measured answer settles it,
+ask for it to be measured (below) before you mend anything.
+
 Do not weaken a test: do not delete it, loosen what it compares, or make it pass by expecting
 whatever the code happens to give. Do not add tests. Do not touch the implementation.
 
