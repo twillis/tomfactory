@@ -1,5 +1,14 @@
 # What's next for the factory
 
+## Now (2026-11-23): a fitness function tuned to mutual benefit
+
+The operator's idea, agreed the same day ("Gtg  We can try it see how it goes"): a scorecard per run for the
+operator, the orchestrator, the factory and Anthropic, with his rating as ground truth; modes whose weights
+turn real dials; and the suggestion box, `docs/suggestions.md` (60 themes from bttr_erp's retros: 31 taken,
+7 declined, 22 open), which every retro answers to. Friction history: `docs/friction.csv`. Specification:
+`specs/003-fitness-and-feedback/spec.md`. Part 1 (scorecard, rating, suggestion box, merge checklist) first.
+Later, not scheduled: stations as teams of named personas, the plan check first.
+
 Queued 2026-11-19. Each item names where its thinking already lives. Items are for the
 factory itself; work the factory does on a target codebase (the viewer) is not listed here.
 
