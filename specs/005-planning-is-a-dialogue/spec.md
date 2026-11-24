@@ -2,9 +2,9 @@
 
 **Created**: 2026-11-24
 
-**Status**: The need is agreed (the operator, 2026-11-24: "Yes the statement of need for planning is correct"). Nothing
-is designed. The open questions below are to be worked through with the operator before any design, by this spec's own
-rule. Not run through spec kit. No requirement here carries an FR number until it is built (constitution S8).
+**Status**: The need is agreed (the operator, 2026-11-24: "Yes the statement of need for planning is correct"). The
+eight open questions were answered by the operator the same day, one at a time, from his phone (below). Nothing is
+designed yet. Not run through spec kit. No requirement here carries an FR number until it is built (constitution S8).
 
 ## The need
 
@@ -83,8 +83,38 @@ and the agents aligns the two before anything is built.
 8. **Cost.** What a dialogue may cost against what a misunderstood plan costs today, and how that is measured
    (spec 003's scorecard).
 
-## Out of scope until the questions are answered
+## The answers (the operator, 2026-11-24, one question at a time)
 
-Any design, any step entry, any prompt. The queued factory changes that touch planning (an `architect_plan` step, the
+1. **The shape of the dialogue.**
+   - Who speaks first: the agents ask open questions first, before showing any reading of the ask (B).
+   - Rounds, asynchronous: the agents ask, the asker answers when able, the agents follow up (A), "and it should be an
+     agreement between that alignment is there": alignment is reached when both the asker and the agents agree it is,
+     not when one side says so.
+   - Where the asker answers: both the command line and Claude Code (C).
+   - Found while answering, from his phone: a long, multi-part message cannot be answered from a phone's reply box
+     ("I can't be scrolling back through that massive wall of text"). The dialogue asks one short question at a time,
+     answerable in a word, with lettered choices where it can.
+2. **What is agreed, and approval.**
+   - The outcome and the way: the plan itself is agreed in the dialogue (B), "it also implies the amount of work and
+     money that it will take to achieve the outcome": the agreement carries an estimate of the work and the cost.
+   - Agreement is not approval to build; approval is a separate decision (B), "cuz that is a question of timing. It may
+     be something that after the plan is finished we put it in the backlog to reintroduce at another time that is
+     better". An agreed plan may wait in the backlog.
+3. **Unknowns.** The agents ask for a measurement, as now (A), "and in order to get that measurements the orchestrator
+   might do a spike or research or anything that is required to get the measurement".
+4. **The agent team.** Each agent speaks to the asker directly (B): the planner, the architect and the plan check each
+   raise their own points.
+5. **Today's steps.** The dialogue replaces `check_plan` and `amend_plan` (A): the checker and the architect raise their
+   points in the dialogue, not in separate steps after it. The proposed `architect_plan` step is not built; the
+   architect is a voice in the dialogue.
+6. **Who the asker is.** The same dialogue for everyone: the operator, another person, an orchestrating agent (A).
+7. **When it is light.** The agents decide how much dialogue a change needs, and say so (C).
+8. **Cost.** A budget per dialogue, as a spike has (B). At the budget the dialogue asks the asker whether to spend more
+   (B), rather than stopping.
+
+## Next
+
+The questions are answered; the design is next, worked with the operator the same way, then built tests first. Until
+then: no step entry or prompt changes. The queued factory changes that touch planning (an `architect_plan` step, the
 planner treating a mechanism as a suggestion, a structured request) wait for this spec's answers, since each may be
 folded into the dialogue.
