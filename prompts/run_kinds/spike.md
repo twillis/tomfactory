@@ -1,0 +1,1 @@
+This run is a spike. Its product is an answer, not a change: the probe it builds is never merged, and none of the change cycle's rules apply to it (no test that fails first, no test budget, no line length, no architect, no documenter). The operator's goal governs it: "the simplest thing that gets the answer".

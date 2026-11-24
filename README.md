@@ -57,7 +57,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 478 tests, standard library plus pytest. What is next is in
+About 3,500 lines of Python, 516 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -159,6 +159,9 @@ Every run ends in exactly one of three outcomes, with a reason you can read:
 - **rejected** — the review found a mismatch, or you abandoned the request.
 - **needs-me** — the factory could not finish on its own.
 
+A spike, whose product is an answer and not a change, ends instead as **answered** or
+**inconclusive**, and only a spike ends so (see "Spikes" below); it can also end needs-me.
+
 ### Where the work goes
 
 Each run works in its own checkout of the target codebase, on its own branch
@@ -231,7 +234,8 @@ one `init-target` writes is the example to copy.
 factory request "Add a page that says hello." --target ../my-app
 ```
 
-Add `--kind tidy-tests` or `--kind tidy-code` for a change that must not alter behaviour; see below.
+Add `--kind tidy-tests` or `--kind tidy-code` for a change that must not alter behaviour, or `--kind spike`
+for a question to be answered by a throwaway probe; see below.
 
 This returns at once. A plan is written in the background, and a desktop notification tells
 you when it is ready.
@@ -361,6 +365,63 @@ A tidy run goes: plan, your approval, the existing tests (which must pass), the 
 the tests again (which must still pass), review. One side is held still: tidying the tests
 may not touch the code, and tidying the code may not touch the tests. The architect's
 backlog is the natural source of tidy requests.
+
+### Spikes: a question answered by a throwaway probe
+
+A question whose answer is not known ("what would a third root cost?", "which of two shapes is
+smaller?") is answered by a spike: a run whose product is an answer, not a change.
+
+```bash
+factory request "What is the simplest root for a person that spans tenants?" --target ../my-app --kind spike
+```
+
+A spike goes: `spike_plan` (the question, the guess, the simplest probe that would answer it, and
+what result means yes, no or cannot tell), `probe` (builds it), `run_probe` (the factory runs it),
+`write_findings`, `spike_retro` and `finish`. It does not wait for your approval: when Claude Code drives the factory,
+the orchestrator shows you the question before it starts the spike. None of the change cycle's gates apply: no test that fails
+first, no test budget, no line length, no architect, no documenter. Its plan, probe and findings are
+carried out by its own persona, Juno Halloran, Prospector (`personas/spike.md`): the ugliest thing
+that answers the question, and what surprised her.
+
+- **The probe** may change anything in the run's checkout except what decides how a run is judged
+  (`.factory.toml`, `.gitignore`, the ideals, the constitution). Its reply names its file, and it is
+  committed at once, so the probe is on the branch whatever happens next.
+- **The factory runs it**, contained exactly as it runs the tests (setup first, the codebase's tools,
+  the network only where its tests have it), with the codebase's `probe_command`, `{path}` replaced by
+  the probe's file. What it printed and how it exited go to the findings. Exiting non-zero is not a
+  failure: a probe may measure a refusal. It **cannot run** when its file is not in the checkout, the
+  setup fails, it does not finish in time, or it exits with a code in `probe_cannot_run_exit_codes`
+  (`no_tests_exit_code` alone when that is empty; for pytest, `[2, 5]` adds a collection error); then
+  the probe is mended once, and a second time ends the spike inconclusive. For pytest, a probe is a
+  test file that reuses the codebase's fixtures.
+- **The findings** are one note, `docs/spikes/<run name>.md` on the spike's branch: what was asked,
+  each thing tried with the probe's own lines and what it printed, what surprised, what it would take
+  to build properly, and what it did not find out. The factory's code checks every quote: each code
+  block must be whole lines of a file on the branch the findings step did not write, and each block
+  fenced as `text` must be what the probe printed. A note that is missing, or quotes what is not there,
+  goes back once; a second time ends the spike inconclusive.
+- **The retro** is one paragraph, `docs/retros/<run name>.md`, on the light grade, as advice: was the
+  question answered for what it cost.
+- **A budget** boxes it: `spike_budget_dollars` ($5.00 by default; 0 for none). Before each agent step
+  the factory adds up what the run has cost, and at or over the budget the spike ends inconclusive,
+  saying what it had done.
+
+A spike ends **answered** or **inconclusive**, with the reason its findings give (abandoned at a
+question, it is inconclusive; it is never accepted or rejected). Its commits are `Probe: …`,
+`Findings: …`, `Retro: …` and `Answered: …` or `Inconclusive: …` for its record, which says plainly
+that nothing it built is in the codebase. **The branch is kept and never merged, and the factory
+copies the findings nowhere.** At the review you and the orchestrator decide what comes next; the note
+is copied to the main line then, with your decision added to it in your words. A later request may
+name the note in its reading list, as it names any record.
+
+```toml
+probe_command = ".venv/bin/python -m pytest -q -s -p no:cacheprovider {path}"   # "" (the default): no spikes
+probe_cannot_run_exit_codes = [2, 5]   # pytest: a collection error, no tests; [] (the default): no_tests_exit_code
+spike_budget_dollars = 5.0
+```
+
+A spike on a codebase with no `probe_command`, or one without `{path}`, or whose `docs_paths` do not
+hold `docs/spikes/`, is refused when it is requested, naming the setting.
 
 ### Tests run contained
 
@@ -632,7 +693,7 @@ whatever its entry says. A new step cannot leave them out.
 
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
 `ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`,
-`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, `plan_findings`. Each is one entry in `INPUTS` in
+`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, `plan_findings`, and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 
 ## Adding a persona

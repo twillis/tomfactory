@@ -4,7 +4,10 @@
 
 **Status**: Agreed in conversation, 2026-11-23; to be built after bttr_erp's run 7. Not run through spec kit.
 The requirements are numbered R1 to R12 and are renumbered into the factory's own series when they are built, with
-their tests (constitution S8).
+their tests (constitution S8). Built 2026-11-24 as FR-113 to FR-118 (`specs/001-near-loop-factory/spec.md`): R1 to
+R3 are FR-113, R4 is FR-114 with R8's mend, R5 and R6 are FR-115, R7 and R9 are FR-116, R8's budget is FR-117, R11
+and R12 are FR-118. R9's review and R10 are the orchestrator's (`orchestrator/playbook.md`); R12's scoring waits for
+specification 003.
 
 **Input**: The operator, 2026-11-23: "I wonder how we could fit r and d into this? Like as a lightweight spike."
 On the orchestrator's outline: "2 things. Spike outcome not necessarily feeds into the next thing but it should be
@@ -40,10 +43,13 @@ without the rules that exist to protect code that will be kept.
   quoted in the note, not only named), and what the script printed; then what surprised, what it would take to build
   properly, and what it did not find out. The operator: "I would like to see the code while reading the outcome of
   the spike sort of like as a narrative".
-- **R6**: The findings are filed with the code. The note is committed to the target codebase's main line, in its
-  documentation paths (`docs/spikes/<run name>.md`), and names the branch that holds the whole probe. The probe's
-  branch is kept and is never merged (the operator: "a branch with the code would be the easiest thing"). Every
-  line of code the note quotes is checked by the factory's own code to be on that branch as quoted.
+- **R6**: The findings are filed with the code. The note is committed on the spike's own branch, in the target's
+  documentation paths (`docs/spikes/<run name>.md`, the run name being the branch's, as a run record's is), and
+  names the branch that holds the whole probe. The probe's branch is kept and is never merged (the operator: "a
+  branch with the code would be the easiest thing"). The note reaches the main line through the orchestrator, at
+  the review (R9), never through the factory, which merges nothing; the spike's record says so. Every line of code
+  the note quotes is checked by the factory's own code to be on that branch as quoted. *(Amended 2026-11-24 by the
+  operator: "Findings reach main through the orchestrator, not the factory.")*
 - **R7**: A spike ends as **answered** or **inconclusive**, with a reason. It is never accepted or rejected, and its
   record says plainly that nothing it built is in the codebase.
 - **R8**: A spike is boxed: one attempt at the probe, one mend if the script cannot run, and a budget cap per run
@@ -64,6 +70,15 @@ without the rules that exist to protect code that will be kept.
   ("Agreed").
 - The probe's code lives on a kept branch, and the findings note quotes it as it tells what happened (R5, R6).
 - The review is the two of them deciding what comes next and writing it down (R9).
+
+## Decided by the operator, 2026-11-24
+
+- Findings reach the main line through the orchestrator, not the factory (R6, amended above).
+- The probe is run by a `probe_command` in the target's committed `.factory.toml`, with `{path}` the probe's file
+  (for bttr_erp, `.venv/bin/python -m pytest -q -s -p no:cacheprovider {path}`, so a probe is a pytest file that
+  reuses the target's fixtures), contained as the tests are. A non-zero exit is not a failure by itself: a probe may
+  measure a refusal. A spike on a target with no `probe_command` is refused when it is requested.
+- The budget cap is per spike, $5.00 by default, settable per target (`spike_budget_dollars`).
 
 ## The first spike
 

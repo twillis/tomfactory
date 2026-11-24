@@ -169,6 +169,19 @@ def attempts_counted(gw, run_id, name) -> int:
     return counted
 
 
+def so_far(gw, run_id) -> tuple[float, list[str]]:
+    """What a run's steps have cost so far, by the agent program's own estimates, and the steps that passed (FR-117)."""
+    steps = gw.query("steps", {"run_id": run_id})
+    return sum(s.cost_estimate or 0 for s in steps), [s.name for s in steps if s.passed]
+
+
+def found(gw, run_id) -> dict:
+    """What a spike's findings said (FR-116): the latest passed reply that gives an outcome, or nothing."""
+    said = [s.produced for s in gw.query("steps", {"run_id": run_id})
+            if s.passed and isinstance(s.produced, dict) and "outcome" in s.produced]
+    return said[-1] if said else {}
+
+
 def start_step(gw, run_id, name, kind, persona, asked):
     """Put a step on record as it begins, so a run in progress shows what it is doing."""
     with gw.transaction():

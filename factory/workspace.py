@@ -144,6 +144,10 @@ class Workspace:
         without = [f":(exclude){leaving_out}"] if leaving_out else []
         return _git(self.path, "diff", self.base_commit, "--", ".", *without)[1]
 
+    def on_branch(self) -> list[str]:
+        """The names of the files in the checkout's last commit."""
+        return [name for name in _git(self.path, "ls-tree", "-r", "-z", "--name-only", "HEAD")[1].split("\0") if name]
+
     def files_changed_since_base(self) -> list[str]:
         """The names of the files this run has committed changes to."""
         return _git(self.path, "diff", "--name-only", self.base_commit)[1].split()

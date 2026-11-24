@@ -7,9 +7,10 @@ stamps the name on what it returns. Which checks a step gets is a rule: workflow
 """
 import json
 import re
+import textwrap
 from dataclasses import dataclass, field, replace
 
-from factory import config, own_files, proc, sandbox, speckit, workspace
+from factory import config, own_files, proc, run_record, sandbox, speckit, workspace
 from factory.config import under
 from factory.workflow import ACCEPT, CheckResult, verdicts
 
@@ -75,6 +76,8 @@ PROTECTED = (".factory.toml", ".gitignore", config.IDEALS_FILE, speckit.CONSTITU
 
 
 def _allowed(scope, name, settings, checkout) -> bool:
+    if scope == "checkout":     # a spike's probe: the whole checkout but what decides how a run is judged (FR-113)
+        return name not in PROTECTED
     if scope == "spec":     # spec kit's documents, and only where the target uses spec kit
         return speckit.available(checkout.path) and speckit.owns(name)
     if scope == "tests":
@@ -213,13 +216,18 @@ def run_tests(ctx) -> tuple[int | None, str, dict]:
     code is None if the test command hit the time limit. Raises sandbox.Unavailable, and runs
     nothing, if it cannot be contained.
     """
+    return _set_up_then(ctx, config.test_argv(ctx.target_config))
+
+
+def _set_up_then(ctx, argv) -> tuple[int | None, str, dict]:
+    """The codebase's setup command, if it names one, then `argv`, both contained as its tests are."""
     settings, how = ctx.target_config, {"network": ctx.target_config.test_network}
     if settings.setup_command:
         how["setup"] = {"network": True}
         done, output = _contained(ctx, config.setup_argv(settings), True, home_writable=True)
         if done.timed_out or done.exit_code != 0:
             raise SetupFailed(output, done.timed_out, how)
-    done, output = _contained(ctx, config.test_argv(settings), settings.test_network)
+    done, output = _contained(ctx, argv, settings.test_network)
     return (None if done.timed_out else done.exit_code), output, how
 
 
@@ -354,3 +362,96 @@ def tests_fail_first(ctx) -> CheckResult:
 def tests_pass(ctx) -> CheckResult:
     """Every test passes: the new ones and the ones that were already there."""
     return _tests_judged(ctx, lambda code: (code == 0, "" if code == 0 else "the tests fail"))
+
+
+# ---- a spike: its probe, run by the factory, and its findings (FR-114, FR-115) ----
+
+def probe_runs(store, run_id) -> list[dict]:
+    """Every run of a spike's probe in this run, as its check recorded it, the latest last."""
+    return [c for s in store.query("steps", {"run_id": run_id}) for c in s.checks or [] if c["name"] == "probe_ran"]
+
+
+def _probe_file(ctx) -> str:
+    """The file the probe step's latest reply names as its probe."""
+    named = [s.produced["probe_file"] for s in ctx.store.query("steps", {"run_id": ctx.run.id})
+             if isinstance(s.produced, dict) and isinstance(s.produced.get("probe_file"), str)]
+    return named[-1].strip() if named else ""
+
+
+@register("probe_ran")
+def probe_ran(ctx) -> CheckResult:
+    """The factory runs a spike's probe itself, contained as the tests are (FR-114): the codebase's `probe_command`,
+    with {path} the file the probe step named. Whatever it exits with is what it measured, a refusal included. It
+    cannot run when that file is not in the checkout, the setup fails, it does not finish in time, or it exits with
+    a code that means nothing ran (`probe_cannot_run_exit_codes`, else `no_tests_exit_code`); then it fails, and
+    goes back to be mended."""
+    settings, path = ctx.target_config, _probe_file(ctx)
+    file = (ctx.checkout.path / path).resolve()
+    if not path or not file.is_file() or not file.is_relative_to(ctx.checkout.path.resolve()):
+        return CheckResult(False, f"the probe step named {path or 'no file'} as its probe, and there is no such file"
+                                  " in the run's checkout, so it cannot be run")
+    try:
+        code, output, contained = _set_up_then(ctx, config.probe_argv(settings, path))
+    except SetupFailed as failed:
+        return CheckResult(False, _said("the setup command failed, so the probe was not run", failed.output),
+                           output=failed.output, contained=failed.contained)
+    if code is None:
+        return CheckResult(False, f"the probe {path} did not finish within {ctx.timeout:g} seconds", output=output,
+                           contained=contained)
+    if code in config.cannot_run_codes(settings):
+        return CheckResult(False, _said(f"the probe {path} exited {code}, which on this codebase means nothing ran",
+                                        output), output=output, contained=contained)
+    return CheckResult(True, f"the probe {path} ran, contained, and exited {code}", output=output, contained=contained)
+
+
+QUOTE = re.compile(r"^```[ \t]*(\S*)[^\n]*\n(.*?)^```", re.M | re.S)     # a fenced block: its language, its lines
+
+
+@register("findings_quoted")
+def findings_quoted(ctx) -> CheckResult:
+    """A spike's findings note is where it belongs and quotes only what is there (FR-115): every block of code in it
+    is, line for line, in a file on the branch the findings step did not write, and every block fenced as `text` is
+    in what the probe printed. A person reads the note as what happened; a quote that is not would mislead him."""
+    note = run_record.findings_note(ctx.run)
+    if not (ctx.checkout.path / note).is_file():
+        return CheckResult(False, f"there is no findings note at {note}; the note is written there and nowhere else")
+    printed = [c["output"].splitlines() for c in probe_runs(ctx.store, ctx.run.id)]
+    code = [(ctx.checkout.path / name).read_text(errors="replace").splitlines() for name in ctx.checkout.on_branch()
+            if name != note and name not in ctx.changed and (ctx.checkout.path / name).is_file()]
+    quotes = [(fence, _quoted(block)) for fence, block in QUOTE.findall((ctx.checkout.path / note).read_text())]
+    wrong = [_first_missing(lines, printed if fence == "text" else code) for fence, lines in quotes
+             if lines and not any(_holds(text, lines) for text in (printed if fence == "text" else code))]
+    if wrong:
+        return CheckResult(False, "the note quotes what is not, as quoted, in a file on the branch (code) or in what"
+                                  " the probe printed (a `text` block); quote whole lines, unchanged, and close a"
+                                  " block rather than leave lines out of it. Not found: "
+                                  + "; ".join(repr(line) for line in wrong))
+    return CheckResult(True, f"each of the note's {len(quotes)} quoted blocks is on the branch or in what the probe"
+                             " printed")
+
+
+def _quoted(block) -> list[str]:
+    """A quoted block's lines, without trailing spaces or the blank lines around them."""
+    lines = [line.rstrip() for line in block.splitlines()]
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
+    return lines
+
+
+def _holds(text, quoted) -> bool:
+    """Are the `quoted` lines in `text`, one after another, as written, up to an indentation they share?"""
+    want = textwrap.dedent("\n".join(quoted)).splitlines()
+    for start, line in enumerate(text):
+        if line.strip() == want[0].strip():
+            window = textwrap.dedent("\n".join(kept.rstrip() for kept in text[start:start + len(want)])).splitlines()
+            if window == want:
+                return True
+    return False
+
+
+def _first_missing(quoted, texts) -> str:
+    """The first quoted line found in none of `texts`; or, where each is somewhere, the block's first line."""
+    seen = {line.strip() for text in texts for line in text}
+    return next((line.strip() for line in quoted if line.strip() not in seen), quoted[0].strip())

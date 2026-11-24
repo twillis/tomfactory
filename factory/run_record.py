@@ -7,13 +7,17 @@ rendered from the factory's own records of the run; this module decides nothing.
 import datetime
 import re
 
+from factory.tables import SPIKE
+
 
 # What each step's commit holds, by the step that wrote it (FR-103). A step not named here is named by itself.
 LABELS = {"plan": "Plan", "specify": "Specification", "clarify": "Specification", "tasks": "Tasks",
           "write_tests": "Tests", "mend_tests": "Tests mended", "build": "Build", "tidy_code": "Tidy",
-          "tidy_tests": "Tidy tests", "architecture_review": "Backlog", "document": "Docs", "retro": "Retro"}
+          "tidy_tests": "Tidy tests", "architecture_review": "Backlog", "document": "Docs", "retro": "Retro",
+          "spike_plan": "Plan", "probe": "Probe", "write_findings": "Findings", "spike_retro": "Retro"}
 SUBJECT_LENGTH = 72     # what git log --oneline and most tools show in full
-OUTCOMES = {"accepted": "Accepted", "rejected": "Rejected", "needs-me": "Needs me"}   # the record's subject begins so
+OUTCOMES = {"accepted": "Accepted", "rejected": "Rejected", "needs-me": "Needs me",    # the record's subject begins so
+            "answered": "Answered", "inconclusive": "Inconclusive"}
 
 
 def step_message(store, run, step, envelope) -> str:
@@ -67,11 +71,21 @@ def ended_message(store, run) -> str:
     brief = [run.reason or ""]
     if judged:
         brief += ["", f"The review: {judged['verdict']}", *[f"- {reason}" for reason in judged.get("reasons", [])]]
+    if run.run_kind == SPIKE:
+        brief += ["", not_in_the_codebase(run)]
     totals = [line for line in facts(store, run) if line.startswith("Total:")]
     covered = coverage_line(steps)
     brief += ["", *totals, *([covered] if covered else [])]
     outcome = OUTCOMES.get(run.outcome, run.outcome)
     return _message(run, run.current_step, f"{outcome}: {title(store, run)}", brief)
+
+
+def not_in_the_codebase(run) -> str:
+    """What a spike's record says plainly (FR-116): nothing it built is in the codebase, and where its findings are."""
+    return (f"Nothing this spike built is in the codebase. Its probe is on the branch {run.branch}, which is kept and"
+            f" never merged; its findings are {findings_note(run)} on that branch. They reach the main line at the"
+            " review, when the operator and the orchestrator decide what comes next: the note is copied there then,"
+            " with that decision added to it in the operator's words.")
 
 
 def title(store, run) -> str:
@@ -101,9 +115,20 @@ def _shorten(text, limit) -> str:
     return cut.rstrip(" ,;:") + "…"
 
 
+def stem(run) -> str:
+    """The run's own name, which its record, its retro and a spike's findings share: its branch's, which no other
+    machine shares."""
+    return run.branch.removeprefix("factory/")
+
+
 def name(run) -> str:
-    """Where the record lives in the codebase: under the run's branch's own name, which no other machine shares."""
-    return f"docs/runs/{run.branch.removeprefix('factory/')}.md"
+    """Where the record lives in the codebase."""
+    return f"docs/runs/{stem(run)}.md"
+
+
+def findings_note(run) -> str:
+    """Where a spike's findings are written, on its own branch (FR-115)."""
+    return f"docs/spikes/{stem(run)}.md"
 
 
 def write(store, run, checkout, message) -> None:
@@ -131,6 +156,8 @@ def render(store, run, checkout) -> str:
         lines += [f"## The approved plan (version {plan.version})", "", plan.text.strip(), ""]
         lines += _section("How it follows the ideals", plan.ideals_addressed)
         lines += _section("Where it conflicts with them", plan.conflicts)
+    if run.run_kind == SPIKE:
+        lines += _spike(run, steps)
     if ended:
         lines += ["## How it went", "", "| Step | Attempt | Result |", "|------|---------|--------|"]
         lines += [f"| {s.name} | {s.attempt} | {_result(s)} |" for s in steps]
@@ -153,6 +180,19 @@ def render(store, run, checkout) -> str:
         lines += ["## Time and cost", "", *facts(store, run), ""]
         lines += _section("Commits on the run's branch", [f"`{c}`" for c in checkout.log_since_base()])
     return "\n".join(lines)
+
+
+def _spike(run, steps) -> list:
+    """A spike's plan, which no one approved, and what became of what it built (FR-113, FR-116)."""
+    planned = next((s.produced for s in reversed(steps) if isinstance(s.produced, dict) and "question" in s.produced),
+                   None)
+    lines = ["## Nothing this spike built is in the codebase", "", not_in_the_codebase(run), ""]
+    if planned:
+        lines += ["## The spike's plan", "", f"**The question:** {planned['question']}", "",
+                  f"**The guess:** {planned['guess']}", "", f"**Yes, if:** {planned['yes']}", "",
+                  f"**No, if:** {planned['no']}", "", f"**Cannot tell, if:** {planned['cannot_tell']}", "",
+                  planned["plan"].strip(), ""]
+    return lines
 
 
 def _result(step) -> str:
