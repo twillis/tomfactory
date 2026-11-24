@@ -20,6 +20,14 @@ every table, file or row its setup relies on exists.
 
 You may create or change files only under: {{test_paths}}
 
+## A test of a module the build will create
+
+Where a test imports a module, or a name in one, that the build will create, import it inside the test, in the
+test function itself, not at the top of the file: before the build the test fails on that import, and after it the
+import passes, with nothing to take out. Never guard such an import with `try: ... except ImportError:` and a
+stand-in "until it is built": that scaffolding outlives the build. A module that exists already is imported at the
+top, as usual.
+
 ## Keep them proportionate
 
 As your priorities say. The codebase sets a budget for the lines of tests one run may add. The

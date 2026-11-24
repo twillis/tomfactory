@@ -54,7 +54,8 @@ def test_a_new_code_step_is_one_check_and_one_entry(cycle, monkeypatch):
     assert names == ["plan", "baseline", "write_tests", "red", "build", "test", "count_files",
                      "architecture_review", "document", "review", "finish"]
     added = store.query("steps", {"run_id": run.id})[6]
-    assert [c["name"] for c in added.checks] == ["factory_untouched", "changes_allowed", "count_files"]
+    assert [c["name"] for c in added.checks] == ["factory_untouched", "changes_allowed", "deletions_inside",
+                                                     "count_files"]
     assert added.checks[-1]["note"] == "2 python files" and added.passed
     assert own_files.fingerprint([config.PACKAGE_DIR]) == source_before, "no source file was edited"
 

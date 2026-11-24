@@ -99,7 +99,8 @@ def test_a_sprints_plan_is_checked_in_the_dialogue_before_the_one_approval_and_t
     check = workflow.get("dialogue_check", steps)
     assert (check.persona, check.capabilities, check.may_change, check.model) == ("reviewer", "read", "nothing",
                                                                                   "standard")
-    assert not check.routes and "points" in check.envelope and {"draft", "constitution", "ideals"} <= set(check.inputs)
+    assert not check.routes and {"blocking", "notes"} <= set(check.envelope)
+    assert {"draft", "constitution", "ideals"} <= set(check.inputs)
     assert check.on_pass == workflow.WAIT and check.on_approve == "baseline" and check.revise_from == "dialogue_analyst"
     planner = workflow.get("dialogue_planner", steps)
     assert (planner.persona, planner.capabilities, planner.may_change) == ("planner", "read", "nothing")
@@ -110,8 +111,8 @@ def test_a_sprints_plan_is_checked_in_the_dialogue_before_the_one_approval_and_t
 @pytest.mark.fr("FR-104")
 def test_the_checks_points_go_to_the_planner_who_amends_before_the_asker_is_asked(home, sprint_target, fake_notify):
     script = sprint()
-    fake = FakeAgent([speaks(), planner_says(), speaks(points=()), speaks(points=[POINT]),
-                      speaks(), planner_says(AMENDED), speaks(points=()), speaks(points=()), *script[4:]])
+    fake = FakeAgent([speaks(), planner_says(), speaks(blocking=()), speaks(blocking=[POINT]),
+                      speaks(), planner_says(AMENDED), speaks(blocking=()), speaks(blocking=()), *script[4:]])
     drive_with(fake)
     run = operations.request("Add a greeting", sprint_target)
     assert operations.plan(run.id).text.startswith(AMENDED)                    # amended, then shown once
@@ -224,7 +225,7 @@ def test_what_was_asked_and_answered_in_planning_reaches_the_plan_check_and_the_
     """bttr_erp run 60: the plan check contradicted a measurement it had never been shown."""
     asked = "What does a read of the period column return?"
     script = sprint()
-    fake = FakeAgent([speaks(), planner_says(measure=[asked]), speaks(points=()), speaks(points=()), *script])
+    fake = FakeAgent([speaks(), planner_says(measure=[asked]), speaks(blocking=()), speaks(blocking=()), *script])
     drive_with(fake)
     run = operations.request("Add a greeting", sprint_target)
     run = operations.answer(run.id, "A psycopg Range, measured on 18.6.")

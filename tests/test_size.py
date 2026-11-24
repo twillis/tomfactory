@@ -5,10 +5,11 @@ import pytest
 
 from factory import config
 
-LIMIT = 4100    # non-blank lines in factory/*.py; tests, personas and prompts are not counted.
+LIMIT = 4300    # non-blank lines in factory/*.py; tests, personas and prompts are not counted.
                 # The operator, 2026-11-18: "at this point size is not a thing that matters necessarily".
                 # Kept as a tripwire against runaway growth, not as a target. Raised from 3,500 to 4,100
-                # on 2026-11-24 for the planning dialogue (FR-119 to FR-129), which took it to about 4,030.
+                # on 2026-11-24 for the planning dialogue (FR-119 to FR-129), which took it to about 4,030;
+                # and to 4,300 the same day for its tuning (FR-130 to FR-138), which took it to about 4,250.
 
 
 @pytest.mark.fr("FR-039")

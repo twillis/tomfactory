@@ -40,7 +40,8 @@ def made_up(monkeypatch, tmp_path, home, target, fake_notify):
                                             + ("{{diff}}" if name == "judge" else "{{failure}}") + "\n\n"
                                             + "".join(f"- `{key}`: it\n" for key in workflow.get(name, TABLE).envelope))
     shutil.copytree(config.PROMPTS_DIR / "fragments", prompts / "fragments")        # shared by every prompt
-    (prompts / "answer_question.md").write_text((config.PROMPTS_DIR / "answer_question.md").read_text())
+    for shared in ("answer_question.md", "merge_questions.md"):         # the steps outside every table
+        (prompts / shared).write_text((config.PROMPTS_DIR / shared).read_text())
     monkeypatch.setattr(config, "PROMPTS_DIR", prompts)
     return target
 

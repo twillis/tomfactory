@@ -405,9 +405,13 @@ def _answer_batch(store, run, waiting, text) -> dict:
     more = [workflow.spend_more(answers[q.id]) for q in budget]
     if None in more:
         raise Refused("the budget question takes yes or no: whether to spend more on the dialogue")
+    merged = dialogue.merged_into(store, run.id)
     with store.transaction():
         for q in waiting:
             records.answer(store, q.id, answers[q.id], "operator")
+        for duplicate, kept in merged.items():       # the same answer, to every agent that asked it (FR-132)
+            if kept in answers and store.get("questions", duplicate).answer is None:
+                records.answer(store, duplicate, answers[kept], "operator")
         records.event(store, run.id, "answered", f"round {waiting[0].round}: {len(waiting)} answered",
                       {"round": waiting[0].round})
         if False in more:      # paused at its budget: the run waits, everything kept, to go on later (FR-124)
@@ -417,6 +421,23 @@ def _answer_batch(store, run, waiting, text) -> dict:
         run_record.write(store, run, Workspace.of(run), run_record.paused_message(store, run))
         return store.get("runs", run.id)
     return _carry_on(store, run, "revise")
+
+
+def note(run_id=None, text="", by="the operator") -> dict:
+    """Add a ruling or a fact to a run while it plans in a dialogue (FR-133). Every speaker is given it, with who
+    added it and when, from its next round on; it is in the dialogue's transcript, and so in the run's record."""
+    store = _open()
+    run = _find(store, run_id)
+    if not text.strip():
+        raise Refused("say what the note is: a ruling or a fact for the dialogue's agents")
+    if run.state == "ended":
+        raise Refused(f"run {run.id} has ended; a note reaches only a run that is planning")
+    steps = driver.table_of(run)
+    if not steps[0].dialogue or not workflow.is_planning(run.current_step, steps):
+        raise Refused(f"run {run.id} is not planning in a dialogue, so no agent would read a note;"
+                      " a run planned without one is sent back with factory revise")
+    records.event(store, run.id, "note", f"note from {by}: {text.strip()}", {"text": text.strip(), "by": by})
+    return store.get("runs", run.id)
 
 
 def _resume_paused(store, run, text) -> dict:

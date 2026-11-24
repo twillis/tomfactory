@@ -39,6 +39,12 @@ the plan says it refuses, reads a value another way, or gives an error the plan 
 around it and leave the finding in a comment: ask for it to be measured (below), naming each statement as your
 code sends it. You are run again with the answer, and whoever reviews the run can rely on it.
 
+## Scaffolding left for what you build
+
+Scaffolding put in place until a module existed (a `try: ... except ImportError:` with a stand-in, a stub marked
+"until it is built") is removed once the module is built. Remove any in the code you may change. One in a test,
+which you may not change, name in your `summary`, with its file, so it is removed at review.
+
 ## If this codebase uses spec kit
 
 Where spec kit is in use, the task list in the feature directory says what to do and in what

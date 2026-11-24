@@ -305,13 +305,14 @@ def round_outcome(said, points_in_a_row, limit) -> str:
     """How a round of the dialogue ends, from every speaker's batch in it (FR-120, FR-122).
 
     "questions": a speaker asked the asker something, or asked for a measurement; the run waits for the answers.
-    "points": only points for one another were raised, which the artifacts settle; the agents go round again at
-    once. "stuck": the same, `limit` rounds in a row; the asker is shown the points. "aligned": nobody raised
-    anything, so the planner proposed aligned (its own check makes it ask otherwise); the asker is asked to agree.
+    "points": only blocking points for one another were raised (what would break the build or contradict a ruling),
+    which the artifacts settle; the agents go round again at once. "stuck": the same, `limit` rounds in a row; the
+    asker is shown them. "aligned": nothing blocking and nothing asked, so the planner proposed aligned (its own
+    check makes it ask otherwise); the asker is asked to agree. A note never holds alignment open (FR-130).
     """
     if any(batch.get("questions") or batch.get("measure") for batch in said):
         return "questions"
-    if any(batch.get("points") for batch in said):
+    if any(batch.get("blocking") for batch in said):
         return "stuck" if points_in_a_row + 1 >= limit else "points"
     return "aligned"
 

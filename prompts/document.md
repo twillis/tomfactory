@@ -16,6 +16,14 @@ Write an account of what this run changed, for the operator.
 {{diff}}
 ```
 
+## What the factory measured
+
+{{measured}}
+
+State a number or a claim about the tests (how many lines were added, whether any was cut), the test budget, the
+smells or the coverage only from these facts, never from the plan's hopes or its estimate. Where a fact you would
+state is not here, leave the claim out.
+
 ## Where documentation goes
 
 You may create or change files only under: {{docs_paths}}

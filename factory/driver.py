@@ -29,6 +29,8 @@ from factory.workflow import Ask, CheckResult, End, Replan, StepResult, Wait
 from factory.workspace import Workspace
 
 NO_IDEALS = "No ideals have been stated."
+# What a dialogue's speakers read from the codebase's main line as it is now, not as at the run's start (FR-134).
+STANDING = ("requirements", config.IDEALS_FILE, speckit.CONSTITUTION_FILE)
 
 
 class Stopped(BaseException):
@@ -76,6 +78,7 @@ def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) ->
             if isinstance(then, Wait) and step.dialogue:      # a round has ended (FR-120)
                 then = dialogue.close_round(store, run, steps, settings)
                 if isinstance(then, Wait):
+                    merge_questions(store, run, checkout, settings, adapter, personas_dir, prompts_dir)
                     records.await_operator(store, run_id)
                     now = dialogue.waiting(store, store.get("runs", run_id))
                     tell(store, run_id, f"Run {run_id}: {now['says']}", " ".join(run.request.split()[:12]))
@@ -124,6 +127,7 @@ class Doing:
     record: object = None
     errors: object = None
     grade: str | None = None       # the grade this attempt runs on (FR-109)
+    standing: tuple | None = None  # a dialogue's speaker: the head of main now, and the files copied from it (FR-134)
 
     def emit(self, kind, summary, payload=None):
         records.event(self.store, self.run.id, kind, summary, payload, step_id=self.record.id)
@@ -137,6 +141,8 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     paths = config.factory_paths()
     before, (head, dirty_before) = own_files.fingerprint(paths), counted_from(store, run, step, checkout)
     doing = Doing(store, run, step, checkout, settings, step.timeout or settings.step_timeout_seconds)
+    if step.dialogue:       # the standing documents as on main now: rulings made mid-dialogue reach it (FR-134)
+        doing.standing = checkout.mirror_main(STANDING)
     asked = prompt(doing, prompts_dir) if step.kind == "agent" else ""
     doing.record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)
     doing.grade = workflow.grade_for(step, records.attempts_climbed(store, run.id, step.name), settings.climbs_to) \
@@ -146,7 +152,8 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     with store.files.stderr_file(run.id, doing.record.id) as errors:
         doing.errors = errors
         reply = execute(doing, asked, adapter, personas_dir) if step.kind == "agent" else None
-        result, done, changed = verify(doing, reply, before, dirty_before, paths)
+        refused = delete_asked(doing, reply, paths)
+        result, done, changed = verify(doing, reply, before, dirty_before, paths, refused)
 
     if step.advisory and result.failure not in (None, "guard"):
         checkout.discard(changed)       # a failed advisory step leaves nothing behind for the next to commit
@@ -161,6 +168,31 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     doing.emit("step_end", f"{step.name}: {'passed' if result.passed else result.failure}",
                {"passed": result.passed, "failure": result.failure})
     return result, reply.envelope if reply else None
+
+
+def delete_asked(doing, reply, paths) -> list[str]:
+    """Delete the files the agent's reply lists under `delete` (FR-135): it has no tool that deletes a file, so the
+    factory does it, after the step, inside the checkout only. Returns the paths refused, none deleted then: the
+    step fails as a guard. A deletion made is a change like any other, judged by what the step may change."""
+    asked = reply.envelope.get("delete") if reply and reply.ok and isinstance(reply.envelope, dict) else None
+    if not asked:
+        return []
+    names = asked if isinstance(asked, list) else [asked]
+    refused = checks.refused_deletions(names, doing.checkout.path, paths)
+    gone = [] if refused else doing.checkout.delete(names)
+    doing.emit("deleted", f"deleted: {', '.join(gone) or 'nothing'}", {"asked": names, "deleted": gone,
+                                                                       "refused": refused})
+    return refused
+
+
+def merge_questions(store, run, checkout, settings, adapter, personas_dir, prompts_dir) -> None:
+    """Before the asker sees a round's questions, those from different agents that ask the same thing are merged,
+    by the light model, so each is answered once (FR-132). If it fails, or its merge does not hold, the batches go
+    to the asker as they were asked."""
+    waiting = dialogue.to_merge(store, run.id)
+    if waiting:
+        result, said = run_step(store, run, tables.MERGE, checkout, settings, adapter, personas_dir, prompts_dir)
+        dialogue.merge(store, run.id, said if result.passed else None, waiting)
 
 
 def counted_from(store, run, step, checkout):
@@ -189,7 +221,7 @@ def prompt(doing, prompts_dir) -> str:
     the codebase uses spec kit), how to ask a question, and the shape of the reply.
     """
     step, run = doing.step, doing.run
-    sources = Sources(doing.store, run, doing.checkout, doing.settings, prompts_dir)
+    sources = Sources(doing.store, run, doing.checkout, doing.settings, prompts_dir, doing.standing)
     inputs = {name: INPUTS[name](sources) for name in step.inputs}
     parts = [fill((prompts_dir / f"{step.name}.md").read_text(), inputs)]
     if {"constitution", "ideals"} <= set(step.inputs):
@@ -205,6 +237,8 @@ def prompt(doing, prompts_dir) -> str:
         answers = "\n\n".join(f"You asked: {q.question}\nThe {q.answered_by} answered: {q.answer}"
                               for q in earlier if q.answer is not None)
         parts.append(fill(_fragment(prompts_dir, "asking"), {"answers": answers}))
+    if step.capabilities == "read+edit":     # it cannot delete a file; the factory does, when asked (FR-135)
+        parts.append(_fragment(prompts_dir, "deleting"))
     parts.append(fill(_fragment(prompts_dir, "reply"), {"shape": reply_shape(step)}))
     return "\n".join(part.rstrip() + "\n" for part in parts)
 
@@ -235,15 +269,16 @@ def execute(doing, asked, adapter, personas_dir):
     return reply
 
 
-def verify(doing, reply, before, dirty_before, paths):
-    """Apply the checks. Returns (how the step went, every check's result, the files it changed)."""
+def verify(doing, reply, before, dirty_before, paths, refused=()):
+    """Apply the checks. Returns (how the step went, every check's result, the files it changed). `refused`: the
+    deletions the agent asked for that the factory would not make (FR-135)."""
     result = workflow.reply_failure(reply, doing.checkout.path, doing.timeout) if reply else StepResult(True)
     envelope = reply.envelope if reply else None
     context = checks.CheckContext(
         run=doing.run, step=doing.step, checkout=doing.checkout, target_config=doing.settings,
         changed=workspace.changed(dirty_before, doing.checkout.dirty()), envelope=envelope, before=before,
         factory_paths=paths, stderr_file=doing.errors, on_child=doing.on_child, timeout=doing.timeout,
-        store=doing.store)
+        store=doing.store, refused=list(refused))
     done = []
 
     def check(name):
@@ -297,7 +332,7 @@ def _restore_factory(doing, outcome, paths):
     outcome.note += f"; they were put back, and the changed versions are kept in {kept}"
 
 
-UNDO = {"changes_allowed": _undo_change, "factory_untouched": _restore_factory}
+UNDO = {"changes_allowed": _undo_change, "deletions_inside": _undo_change, "factory_untouched": _restore_factory}
 
 
 def produced(reply, done) -> dict:
@@ -320,6 +355,7 @@ class Sources:
     checkout: Workspace
     settings: object
     prompts_dir: pathlib.Path
+    standing: tuple | None = None
 
     @functools.cached_property
     def plans(self):
@@ -364,12 +400,13 @@ def _test_files(src):
 
 def _failure(src):
     """What went wrong last time, with what the command printed if one ran."""
-    if not src.finished or src.finished[-1].passed or src.finished[-1].failure == "question":
+    finished = [s for s in src.finished if s.name != tables.MERGE.name]     # the merge's failure is not the step's
+    if not finished or finished[-1].passed or finished[-1].failure == "question":
         return ""       # an answered question is not a failure; the answer is given with the questions
-    failed = next((c for c in src.finished[-1].checks or [] if not c["passed"]), None)
+    failed = next((c for c in finished[-1].checks or [] if not c["passed"]), None)
     if not failed:      # the agent program failed: say what it said, not only that it failed (FR-094)
-        said = (src.finished[-1].produced or {}).get("error") if isinstance(src.finished[-1].produced, dict) else None
-        return f"{src.finished[-1].failure}: {said}" if said else str(src.finished[-1].failure)
+        said = (finished[-1].produced or {}).get("error") if isinstance(finished[-1].produced, dict) else None
+        return f"{finished[-1].failure}: {said}" if said else str(finished[-1].failure)
     return f"{failed['name']}: {failed['note']}" + (f"\n{failed['output']}" if failed.get("output") else "")
 
 
@@ -426,6 +463,18 @@ def _codebase_moved(src):
     return src.checkout.moved(moved[-1].payload["from"], moved[-1].payload["to"]) if moved else ""
 
 
+def _standing(src):
+    """Where a dialogue's speaker finds the standing documents as they are on main now (FR-134)."""
+    if not src.standing:
+        return ""
+    head, copied = src.standing
+    return (f"The codebase's main line has moved on since this run's checkout was made, or may have. Its standing"
+            f" documents as they are there now, at {head[:10]}, are copied read-only into `{workspace.MAIN_NOW}/` in"
+            " the current directory. Read the rulings and requirements there: where they differ from the checkout's"
+            " own copies, they are the newer, and they stand.\n\n"
+            + "\n".join(f"- `{workspace.MAIN_NOW}/{name}`" for name in copied))
+
+
 def _probe_output(src):
     """How each run of a spike's probe went, as the factory ran it, the latest last: how it exited, and what it
     printed (FR-114)."""
@@ -469,6 +518,9 @@ INPUTS = {
     "similar_runs": lambda src: "\n".join(f"- {line}" for line in dialogue.similar_runs(src.store, src.run))
                                 or "No run of this kind on this codebase has been accepted yet.",
     "codebase_moved": _codebase_moved,
+    "standing": _standing,
+    "to_merge": lambda src: dialogue.merge_input(src.store, src.run.id),
+    "measured": lambda src: "\n".join(run_record.measured(src.store, src.run, src.checkout, src.settings)),
     "run_name": lambda src: run_record.stem(src.run),
     "branch": lambda src: src.run.branch,
     "probe_command": lambda src: src.settings.probe_command,
@@ -498,7 +550,7 @@ def validate(table, personas_dir=None, prompts_dir=None) -> None:
     prompts_dir = pathlib.Path(prompts_dir or config.PROMPTS_DIR)
     names = {step.name for step in table}
     problems = []
-    for step in [*table, tables.LEAD]:
+    for step in [*table, tables.LEAD, tables.MERGE]:
         leads = [step.on_pass, step.on_approve, step.on_moved, step.revise_from, step.on_fail, *step.routes.values()]
         for target in leads:
             target = getattr(target, "step", target)

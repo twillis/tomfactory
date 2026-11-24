@@ -162,12 +162,19 @@ PLAN = {"plan": "Add hello.py that prints hello.", "ideals_addressed": ["keeps t
 
 # ---- a dialogue's speakers (FR-119 to FR-129): what each says in one round ----
 
-def speaks(questions=(), measure=(), points=None, cost=0.0):
-    """The analyst's batch, or with `points` the architect's or the plan check's."""
+def speaks(questions=(), measure=(), blocking=None, notes=(), cost=0.0):
+    """The analyst's batch, or with `blocking` the architect's or the plan check's: what would break the build or
+    contradict a ruling, and the notes the planner may take or leave (FR-130)."""
     said = {"questions": list(questions), "measure": list(measure)}
-    if points is not None:
-        said["points"] = list(points)
+    if blocking is not None:
+        said.update(blocking=list(blocking), notes=list(notes))
     return {"envelope": said, "cost": cost}
+
+
+def merges(*groups):
+    """The light model's reply to the merge of a round's questions (FR-132): each group, the question ids that ask
+    the same thing, the one to keep first."""
+    return {"envelope": {"merged": [list(group) for group in groups]}}
 
 
 def planner_says(plan=PLAN["plan"], questions=(), measure=(), estimate="small: one file, about $5", declined=(),
@@ -182,7 +189,7 @@ def planner_says(plan=PLAN["plan"], questions=(), measure=(), estimate="small: o
 
 def aligned_round(plan=PLAN["plan"]):
     """One round in which nobody asks anything and the planner proposes aligned."""
-    return [speaks(), planner_says(plan), speaks(points=()), speaks(points=())]
+    return [speaks(), planner_says(plan), speaks(blocking=()), speaks(blocking=())]
 
 
 SPRINT_TOML = 'cycle = "sprint"'

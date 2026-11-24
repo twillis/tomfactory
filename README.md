@@ -114,7 +114,7 @@ by an agent, each with its own persona. Four are done by plain code.
 | 5 | `build` | agent: code writer | Makes the tests pass | anything except tests |
 | 6 | `test` | code | Runs the tests. They must **pass** | nothing |
 | 7 | `architecture_review` | agent: architect | Reviews the change for maintainability; adds suggestions and warnings to a backlog. **Advisory**: it never fails the run | documentation only |
-| 8 | `document` | agent: documenter | Writes an account of what changed | documentation only |
+| 8 | `document` | agent: documenter | Writes an account of what changed, stating figures only from what the factory measured (the record's "What the factory measured") | documentation only |
 | 9 | `review` | agent: reviewer | Judges the whole result against the request, the plan and your ideals | nothing |
 | 10 | `finish` | code | Ends the run as accepted | nothing |
 
@@ -248,6 +248,7 @@ the plan they propose, and then approve it, as "Planning is a dialogue" below de
 factory questions                   # the agents' questions, each agent's on its own
 factory answer                      # opens them in your editor; write each answer under its question, save
 factory answer --file answers.md    # or the same text from a file (or - for standard input)
+factory note "Ruling: ..."          # a ruling or fact every agent reads from its next round on
 factory plan                        # the plan they propose, with its estimate
 factory agree                       # agree to it: this is not yet approval
 factory approve                     # now build it
@@ -376,23 +377,42 @@ outcome you want; the agents have every artifact and can make sense of them. So 
 understanding the artifacts, and a short back-and-forth aligns you and the agents before anything is built
 (specification 005).
 
-**Rounds.** In each round four agents speak, one after another, each with its own batch: the analyst (who opens the
-first round with open questions, before showing any reading of the ask), the planner, the architect and the plan
-check (who both read the planner's plan of that round). A batch holds questions for you, one short item each with
-lettered choices where it can, requests for a measurement, and, from the architect and the plan check, points for
-the planner. Each is told that a mechanism in the ask is one candidate way, to ask you only what you alone can
-answer, and to settle what the artifacts settle by reading them.
+**Rounds.** In each round four agents speak, one after another, each with its own batch: the analyst (who reads the
+ask against the artifacts first and opens the first round with only what they do not settle, without leading with
+a reading of the ask), the planner, the architect and the plan check (who both read the planner's plan of that
+round). A batch holds questions for you, one short item each with lettered choices where it can, requests for a
+measurement, and, from the architect and the plan check, points for the planner: **blocking** (it would make the
+build fail or get stuck, or it contradicts a ruling, an answer or the ask) or **notes** (everything else, which the
+planner takes or declines with a reason, and which never hold the dialogue open). In a dialogue the plan check is a
+colleague at the planning table, not the assayer; it is exacting again in the final review. Each agent is told that
+a mechanism in the ask is one candidate way, to ask you only what you alone can answer, and to settle what the
+artifacts settle by reading them.
+
+**What the agents read.** A run's checkout is frozen at the commit it started from; rulings committed to main
+during a dialogue would be invisible in it. So before each speaker's turn the factory copies the codebase's
+standing documents (`requirements/`, its constitution and `IDEALS.md`) as they are on its head now into
+`.factory-main/` in the checkout, read-only and ignored by git (the folder's own `.gitignore` is `*`), and names the
+commit and the files in the prompt (`standing`). What decides how the run is judged (`.factory.toml`, the table,
+the checks) is still read from the starting commit.
+
+**A note** (`factory note [run] "<text>"`, with `--by` to say who it is from) adds a ruling or a fact to a run while
+it plans. Every speaker is given every note, with who added it and when, from its next round on; notes head the
+transcript, and so the run's record. Refused on a run that has ended, or one not planning in a dialogue.
 
 - Anyone asked something: the run waits for your answers, every agent's questions in one batch, each kept as its
-  own. `factory questions` shows them; `factory answer` opens them in `$EDITOR`, each with `answer:` under it, and
-  saving sends them all; `factory answer --file` takes the same text from a file or standard input. A batch with an
+  own. Where more than one agent asked, `merge_questions` (the facilitator, on the light model) first merges
+  questions from different agents that ask the same thing, so you answer each once and the answer is recorded for
+  each agent that asked; the transcript says what was merged into what. If the merge fails, or proposes one that
+  does not hold, the batches come to you as they were asked. `factory questions` shows them; `factory answer` opens
+  them in `$EDITOR`, each with `answer:` under it, and saving sends them all; `factory answer --file` takes the same text from a file or standard input. A batch with an
   answer missing is refused, naming it, and what you wrote is kept for next time. The next round is given every
   question and answer so far.
-- Only points for the planner: the agents go round again at once, without you. After as many rounds in a row as the
-  run's attempt limit, the points are put to you as a question.
-- Nothing raised: the planner has proposed **aligned**, with the whole plan and its estimate. Only the agents propose
-  it, and only when no one else raised anything that round. You `factory agree`, or reply with
-  `factory revise "..."`, which begins another round.
+- Only blocking points for the planner: the agents go round again at once, without you. After as many rounds in a
+  row as the run's attempt limit, the blocking points are put to you as a question.
+- Nothing blocking and nothing asked: the planner has proposed **aligned**, with the whole plan and its estimate.
+  Only the agents propose it, and only when no one else raised anything blocking that round; notes raised beside it
+  are shown to you with the plan, under "Notes raised on this plan, not taken into it". You `factory agree`, or
+  reply with `factory revise "..."`, which begins another round.
 
 **Agreement is not approval.** An agreed plan waits as a run awaiting approval, approved whenever you choose; one run
 at a time, as always. If the codebase's head has moved since the dialogue read it, `factory approve` starts the run's
@@ -404,6 +424,8 @@ the last five runs of the same kind on the same codebase that ended accepted, wi
 
 **A budget** keeps it short: `dialogue_budget_dollars` ($10.00 by default; 0 for none). A round that ends at or over
 it, counted since you last said to spend more, adds the factory's own question to the batch: spend more, yes or no?
+What the dialogue has cost is one sum, by allowance (from the start, then from each yes), and the run's record
+shows it beside its time-and-cost table: the figure each question quoted, and the total of the speakers' rows.
 No pauses the dialogue: the run waits, nothing lost. `factory status` says "paused at its budget", `factory questions`
 shows every round so far and the planner's latest draft, and the run's record on its branch holds them. From there,
 `factory answer yes` goes on to the next round with a fresh allowance, `factory agree` agrees to the latest draft, or
@@ -536,7 +558,7 @@ Every agent step is given a model on purpose; none is left to the agent program'
 default. A step's entry names a grade, weakest first:
 
 - **light** (Haiku), for the steps that summarise or answer from what is written: the
-  documenter, the retro, and the lead answering a question.
+  documenter, the retro, the lead answering a question, and the merge of a dialogue's questions.
 - **middle** (Sonnet), which no step starts on yet; a light step's second attempt runs on it.
 - **standard** (Opus), for everything else, the architect's review and the final review
   included.
@@ -757,10 +779,17 @@ edit, and may change nothing. The safety checks — the factory itself is untouc
 changed outside what the entry allows, the reply is well-formed — are applied to every step
 whatever its entry says. A new step cannot leave them out.
 
+**Deleting a file.** An agent has no tool that deletes a file. A step that may change files is told it may list
+files under `delete` in its reply; the factory deletes them after the step and judges each deletion like any other
+change, against what the step may change (a builder may delete code, never a test; a test writer only tests). A path
+outside the checkout, in git's own folder or among the factory's own files is refused, nothing is deleted, and the
+step fails as a guard (`deletions_inside`). A deletion is committed with the step's work.
+
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
 `ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`,
 `test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, for a dialogue `round`,
-`dialogue`, `draft`, `similar_runs` and `codebase_moved`, and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
+`dialogue`, `draft`, `similar_runs`, `standing`, `to_merge` and `codebase_moved`, for the documenter `measured`
+(what the factory measured of the tests, budget, smells and coverage, the only figures it may state), and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 
 ## Adding a persona

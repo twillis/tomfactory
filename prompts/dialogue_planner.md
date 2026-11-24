@@ -16,6 +16,10 @@ file.
 
 {{round}}
 
+## The standing documents, as on the codebase's main line now
+
+{{standing}}
+
 ## The dialogue so far
 
 {{dialogue}}
@@ -35,8 +39,11 @@ and show no plan, unless the change plainly needs no dialogue: a tidy whose aim 
 aligned at once.
 
 When nothing is left that only the asker can answer, propose aligned: the whole plan, and your estimate of the work
-and the money it will take. Address every point the architect and the plan check raised in the last round: take
-each one that is right, and decline one that is wrong with its reason, from the codebase, the ask or an answer.
+and the money it will take. Address every point the architect and the plan check raised in the last round. A
+blocking point you settle: take it, or decline it with its reason from the codebase, the ask or an answer. A note
+you may take or leave; one you leave, decline with its reason in a few words. A note never holds you back from
+proposing aligned. A note added to the run (above, under "Notes added to this run") is a ruling or a fact from the
+asker or the operator: it stands over the ask and over an earlier answer.
 Decline a point that is wrong; do not take it by weakening a test or dropping a requirement. Where an answer and the
 ask disagree, the answer stands: the ask was written first.
 
@@ -50,8 +57,9 @@ may write only under: {{test_paths}}. The documenter and the architect may write
 builder may write anywhere except the test paths. The factory itself adds the run's record under `docs/runs/`.
 
 Give no step a file it may not write, and none that does not exist unless the plan has the right step create it. A
-document outside those paths that the change makes out of date is not for any step: name it in the plan as left for
-the operator at merge.
+file the plan deletes is deleted by the step that may change it, which lists it under `delete` in its reply and the
+factory deletes it: name that step. A document outside those paths that the change makes out of date is not for any
+step: name it in the plan as left for the operator at merge.
 
 ## What every plan says, and does not
 

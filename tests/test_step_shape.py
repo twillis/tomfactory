@@ -54,7 +54,7 @@ def test_checks_are_registered_and_found_by_name():
     finally:
         checks.REGISTRY.pop("always_fine")
     assert {"envelope_valid", "changes_allowed", "factory_untouched"} <= set(checks.REGISTRY)
-    assert checks.ALWAYS == ("factory_untouched", "changes_allowed")
+    assert checks.ALWAYS == ("factory_untouched", "changes_allowed", "deletions_inside")      # FR-135
 
 
 SHAPE = {"summary": "text", "files": "list", "verdict": ("accept", "reject")}

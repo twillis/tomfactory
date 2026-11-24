@@ -15,15 +15,23 @@ codebase in the current directory as you need to. Change no file.
 
 {{round}}
 
+## The standing documents, as on the codebase's main line now
+
+{{standing}}
+
 ## The dialogue so far
 
 {{dialogue}}
 
 ## What to do
 
-In the first round, ask your open questions before you show any reading of the ask: what outcome the asker wants,
-who it is for, how they would know it is met, what is out of scope. Do not restate the ask or offer a way to do it.
-In a later round, ask only what the answers so far left open, or what they opened.
+Read the ask against the artifacts first: the codebase's requirements and rulings (the copies from main above are
+the newest), the prior art in `knowledge/`, and the run records under `docs/runs/`. Then ask only what they do not
+settle: what outcome the asker wants, who it is for, how they would know it is met, what is out of scope, where the
+record is silent on it. A question the record already answers is not asked; say in a question what the record says
+only when the asker may want it otherwise. In the first round do not present a reading of the ask as the answer:
+do not restate the ask or offer a way to do it. In a later round, ask only what the answers so far left open, or
+what they opened.
 
 Decide how much dialogue this ask needs. Where the outcome is plain from the ask and the artifacts (a tidy whose
 aim is stated, a follow-up a run record already settled), ask nothing.
