@@ -51,6 +51,22 @@ gate the factory gives a target codebase.
 5. **The retro loop (C).** A retro's suggestion for the factory is queued as a proposed ask; the operator approves which
    ones start.
 
+## Design decisions (the operator, 2026-11-24)
+
+- **D1. Trusting a change and trusting the factory.** Before merge, the new code's own tests are run by the currently
+  installed, trusted factory (as every run already does). After merge, a canary: the known-good copy drives the new
+  factory through one complete tiny run on a scratch codebase with the fake agent (ask, dialogue, build, tests,
+  finish); if it fails, the known-good copy rolls the factory back to itself and says so; once it passes, the known-good
+  copy advances to the new version. The operator asked the orchestrator for a suggestion and took it ("a"). (Not the
+  old tests against new code: a change often updates tests on purpose.)
+- **D2. Gates and guards, hand-built and reviewed by the operator.** For now ("b for now"): containment (`sandbox.py`),
+  the factory's protection of its own files, the checks on what a step may change, the canary and rollback, and also
+  the rules and step tables (`workflow.py`, `tables.py`).
+- **Mechanics (the orchestrator).** Retro suggestions queue in `docs/suggestions.md`, listed by `factory proposals`, the
+  operator choosing which start; tomfactory gets a committed `.factory.toml` on the sprint cycle.
+- **Order.** The bootstrap (known-good install, canary, rollback) is a gate, so it is hand-built first; 8e on bttr_erp
+  runs before it (the operator: "b").
+
 ## Next
 
 Design, then build, by the factory's own process where the answers allow; the gates and guards that the build itself
