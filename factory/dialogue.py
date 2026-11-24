@@ -29,8 +29,11 @@ def rounds(store, run_id) -> list:
 
 
 def batch(store, run_id) -> list:
-    """The dialogue's questions still waiting for the asker, in the order they were asked."""
-    return [q for q in store.query("questions", {"run_id": run_id}) if q.round is not None and q.answer is None]
+    """The dialogue's questions still waiting for the asker, in the order they were asked; a question merged into
+    another is answered with it, so it is not in the batch (FR-132)."""
+    merged = merged_into(store, run_id)
+    return [q for q in store.query("questions", {"run_id": run_id})
+            if q.round is not None and q.answer is None and q.id not in merged]
 
 
 # ---- the end of a round ----
@@ -49,7 +52,7 @@ def close_round(store, run, steps, settings) -> workflow.Run | workflow.Wait:
             break
         in_a_row += 1
     outcome = workflow.round_outcome([s.produced for s in said.values()], in_a_row, run.attempt_limit)
-    spent = _spent(store, run.id, done, said)
+    spent = allowances(store, run.id, said)[-1]
     over = outcome != "aligned" and workflow.dialogue_over_budget(spent, settings.dialogue_budget_dollars)
     with store.transaction():
         for name, record in said.items():
@@ -58,9 +61,9 @@ def close_round(store, run, steps, settings) -> workflow.Run | workflow.Wait:
             for text in record.produced.get("measure") or []:
                 records.ask(store, run.id, name, record.persona, text, number, measure=True)
         if outcome == "stuck":
-            points = [f"{role(r.persona)}: {p}" for r in said.values() for p in r.produced.get("points") or []]
-            records.ask(store, run.id, POINTS, "factory", f"The agents have raised points for {in_a_row + 1} rounds"
-                        " without settling them among themselves:\n" + "\n".join(f"- {p}" for p in points)
+            points = [f"{role(r.persona)}: {p}" for r in said.values() for p in r.produced.get("blocking") or []]
+            records.ask(store, run.id, POINTS, "factory", f"The agents have raised blocking points for {in_a_row + 1}"
+                        " rounds without settling them among themselves:\n" + "\n".join(f"- {p}" for p in points)
                         + "\nWhat should they do?", number)
         if over:
             cap = settings.dialogue_budget_dollars
@@ -69,7 +72,8 @@ def close_round(store, run, steps, settings) -> workflow.Run | workflow.Wait:
         version = None
         if outcome == "aligned":
             proposed = next(r.produced for r in said.values() if "aligned" in r.produced)
-            version = records.add_plan(store, run.id, proposal(store, run, proposed),
+            notes = [f"{role(r.persona)}: {n}" for r in said.values() for n in r.produced.get("notes") or []]
+            version = records.add_plan(store, run.id, proposal(store, run, proposed, notes),
                                        proposed.get("ideals_addressed") or [], proposed.get("conflicts") or []).version
         records.event(store, run.id, "round", f"round {number}: {outcome}",
                       {"round": number, "outcome": outcome, "said": {n: r.id for n, r in said.items()},
@@ -77,17 +81,24 @@ def close_round(store, run, steps, settings) -> workflow.Run | workflow.Wait:
     return workflow.Wait() if over else workflow.after_round(outcome, speakers[0].name)
 
 
-def _spent(store, run_id, done, said) -> float:
-    """What the dialogue's speakers have cost since the asker last said to spend more (FR-124)."""
-    more = [q.answered_at for q in store.query("questions", {"run_id": run_id, "step": BUDGET})
-            if q.answer and workflow.spend_more(q.answer)]
-    since = max(more, default="")
-    return sum(s.cost_estimate or 0 for s in done if s.name in said and s.started_at >= since)
+def allowances(store, run_id, speakers=()) -> list[float]:
+    """What the dialogue's speakers have cost in each allowance, oldest first: from the start to the asker's first
+    yes to spend more, then to each next yes, the last still open (FR-124). The one computation of what a dialogue
+    cost: the budget question quotes the last, and the run's record shows them all beside its table (FR-137).
+    The speakers are every step that has spoken in a round, and `speakers`, the names of a round being closed."""
+    names = set(speakers) | {name for closed in rounds(store, run_id) for name in closed.payload["said"]}
+    yeses = sorted(q.answered_at for q in store.query("questions", {"run_id": run_id, "step": BUDGET})
+                   if q.answer and workflow.spend_more(q.answer))
+    costs = [0.0] * (len(yeses) + 1)
+    for s in store.query("steps", {"run_id": run_id}):
+        if s.name in names:
+            costs[sum(1 for yes in yeses if s.started_at >= yes)] += s.cost_estimate or 0
+    return [round(cost, 2) for cost in costs]
 
 
-def proposal(store, run, said) -> str:
+def proposal(store, run, said, notes=()) -> str:
     """The plan the asker is asked to agree to: the planner's plan and estimate, beside similar past runs (FR-123),
-    and the points it declined, each with its reason."""
+    the points it declined, each with its reason, and the notes raised on it that held nothing open (FR-130)."""
     similar = similar_runs(store, run)
     estimate = said.get("estimate", "").strip() or "The planner gave none: it had not yet proposed aligned."
     text = (said["plan"].strip() + "\n\n## The estimate\n\n" + estimate + "\n\nBeside it, from the"
@@ -95,6 +106,9 @@ def proposal(store, run, said) -> str:
             + "\n".join(f"- {line}" for line in similar or ["none yet"]))
     if said.get("declined"):
         text += "\n\n## Declined by the planner, with its reason\n\n" + "\n".join(f"- {d}" for d in said["declined"])
+    if notes:
+        text += ("\n\n## Notes raised on this plan, not taken into it\n\nNotes never hold the dialogue open; the plan"
+                 " above is what is built. Reply with any you want taken.\n\n" + "\n".join(f"- {n}" for n in notes))
     return text
 
 
@@ -236,8 +250,8 @@ def parse_batch(text, questions) -> dict[int, str]:
 def round_now(store, run_id) -> str:
     number = len(rounds(store, run_id)) + 1
     if number == 1:
-        return ("This is round 1 of the dialogue. It is the first: nothing has been asked or answered yet, so ask"
-                " your open questions now.")
+        return ("This is round 1 of the dialogue. It is the first: nothing has been asked or answered yet. Read the"
+                " artifacts first, then ask your open questions: only what they do not settle.")
     return f"This is round {number} of the dialogue."
 
 
@@ -253,7 +267,14 @@ def transcript(store, run) -> str:
     what the asker did with it; and each re-check of an approved plan against a codebase that had moved."""
     asked = store.query("questions", {"run_id": run.id})
     plans = {p.version: p for p in store.query("plans", {"run_id": run.id})}
+    into = merged_into(store, run.id)
     lines = []
+    added = notes(store, run.id)
+    if added:                                   # rulings and facts added while it plans, for every speaker (FR-133)
+        lines += ["### Notes added to this run", "", "Rulings and facts added while the dialogue runs. A ruling here"
+                  " stands over the ask and over any earlier answer.", "",
+                  *[f"- {n.at[:16].replace('T', ' ')} UTC, from {n.payload['by']}: {n.payload['text']}"
+                    for n in added], ""]
     for closed in rounds(store, run.id):
         number = closed.payload["round"]
         lines += [f"### Round {number}", ""]
@@ -263,11 +284,12 @@ def transcript(store, run) -> str:
             heading = role(record.persona).capitalize()
             if "aligned" in said:
                 heading += f" (aligned: {said['aligned']}; how much dialogue this needs: {said['how_much']})"
-            items = [_asked(q) for q in asked if q.round == number and q.step == name]
-            items += [f"- A point for the planner: {point}" for point in said.get("points") or []]
+            items = [_asked(q, into) for q in asked if q.round == number and q.step == name]
+            items += [f"- Blocking: {point}" for point in said.get("blocking") or []]
+            items += [f"- A note for the planner: {note}" for note in said.get("notes") or []]
             items += [f"- Declined, with its reason: {item}" for item in said.get("declined") or []]
             lines += [f"{heading}:", "", *(items or ["- nothing to raise"]), ""]
-        own = [_asked(q) for q in asked if q.round == number and q.asked_by == "factory"]
+        own = [_asked(q, into) for q in asked if q.round == number and q.asked_by == "factory"]
         lines += ["The factory:", "", *own, ""] if own else []
         if closed.payload.get("plan"):
             plan = plans[closed.payload["plan"]]
@@ -282,6 +304,56 @@ def transcript(store, run) -> str:
     return "\n".join(lines).strip()
 
 
-def _asked(q) -> str:
-    said = f"- {'Asked for a measurement' if q.measure else 'Asked'}: {q.question}"
+def _asked(q, into=None) -> str:
+    said = f"- {'Asked for a measurement' if q.measure else 'Asked'} (Q{q.id}): {q.question}"
+    if (into or {}).get(q.id):
+        said += f"\n  The same as another agent's question: merged into Q{into[q.id]}, so the asker answered it once."
     return said + ("\n  Answered: " + q.answer if q.answer is not None else "\n  Not yet answered.")
+
+
+# ---- rulings and facts added to a run while it plans (FR-133) ----
+
+def notes(store, run_id) -> list:
+    """Every note added to the run, oldest first: each event's payload has its text and who added it."""
+    return store.query("events", {"run_id": run_id, "kind": "note"})
+
+
+# ---- questions from different agents that ask the same thing, answered once (FR-132) ----
+
+def to_merge(store, run_id) -> list:
+    """The waiting questions the merge reads: the agents' own, where more than one agent asked; else none."""
+    waiting = [q for q in batch(store, run_id) if q.asked_by != "factory"]
+    return waiting if len({q.step for q in waiting}) > 1 else []
+
+
+def merge_input(store, run_id) -> str:
+    return "\n".join(f"[Q{q.id}] {role(q.asked_by)}{', a measurement' if q.measure else ''}: {q.question}"
+                     for q in to_merge(store, run_id))
+
+
+def merge(store, run_id, said, waiting) -> dict[int, int]:
+    """Record the merge the light model proposed, if it holds: each group two or more waiting questions, from more
+    than one agent, all questions or all measurements, none in two groups; the first is the one the asker answers.
+    Anything else, or no reply, merges nothing: the batches go to the asker as they were asked. Returns what was
+    merged into what."""
+    by_id, into, seen = {q.id: q for q in waiting}, {}, set()
+    groups = (said or {}).get("merged") if isinstance(said, dict) else None
+    for group in groups if isinstance(groups, list) else []:
+        ids = [int(str(i).lstrip("Q")) if str(i).lstrip("Q").isdigit() else None for i in
+               (group if isinstance(group, list) else [])]
+        found = [by_id.get(i) for i in ids]
+        if len(ids) < 2 or None in found or seen & set(ids) or len({q.step for q in found}) < 2 \
+                or len({q.measure for q in found}) > 1:
+            into = {}
+            break
+        seen |= set(ids)
+        into.update({i: ids[0] for i in ids[1:]})
+    if into:
+        records.event(store, run_id, "merged", f"{len(into)} questions merged into others", {"into": into})
+    return into
+
+
+def merged_into(store, run_id) -> dict[int, int]:
+    """Each question merged into another, by its id: the id of the one the asker answers for it."""
+    return {int(dup): kept for e in store.query("events", {"run_id": run_id, "kind": "merged"})
+            for dup, kept in e.payload["into"].items()}

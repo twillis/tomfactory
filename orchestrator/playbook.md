@@ -101,7 +101,8 @@ A dialogue run waits for one of three things, and `factory status` or the end of
   Do not answer for him, or soften a question into one you think he means. When he has answered every one, write
   each answer under its question in that text, word for word, and send it all at once with
   `factory answer --file <path>` (or `--file -`): one batch, so each agent pays one turn per round. A batch with an
-  answer missing is refused; nothing is recorded until all are there.
+  answer missing is refused; nothing is recorded until all are there. Questions two agents asked alike are already
+  merged (the light model does it before the run waits): he answers each once, and the answer goes to both.
 - **Agreement.** Read the proposed plan (`factory plan`) and its estimate beside the similar runs. Summarise it for
   him as at the approval (below): what it builds, what it will cost against the runs beside it, the points the
   planner declined. He agrees (`factory agree`) or replies; a reply goes in with `factory revise "<his words>"`, and
@@ -110,10 +111,26 @@ A dialogue run waits for one of three things, and `factory status` or the end of
   other run starts. Approve only on his word. If main moved meanwhile, the approval re-checks the plan against it
   first, and a stale plan comes back to the dialogue.
 
+**Blocking and notes.** The architect and the plan check give their points in two lists. Only a blocking point (it
+would make the build fail or get stuck, or contradicts a ruling, an answer or the ask) holds the dialogue open; a
+note is the planner's to take or decline, and never holds alignment. A proposed plan may carry "Notes raised on
+this plan, not taken into it": read them, and bring him only one that is really blocking, as a reply. Do not ask
+for another round to polish; a good plan agreed today beats a perfect one in round twelve.
+
+**A ruling mid-dialogue.** When he rules on something, or you learn a fact the agents need, while the run plans:
+`factory note <run> "<his words>"` (`--by` to say who, when it is not him). Every agent reads it from its next round
+on, and it is in the record. Commit a ruling that belongs in the codebase's `requirements/` to main as well: each
+round the agents read the standing documents from main as it is now (`.factory-main/` in the checkout), not from the
+commit the run started at.
+
+**Deleting a file.** An agent cannot delete, but it may ask the factory to: a plan that deletes a file names the step
+that does it, and that step lists it under `delete`. Do not `git rm` in a run's checkout by hand.
+
 The factory's own questions sit in the batch too: whether to spend more when the dialogue reaches its budget (yes or
 no, his; no pauses it with everything kept, and `factory questions` then shows what it has: bring him that, and his
-later yes goes in with `factory answer yes`, or his agreement to the draft with `factory agree`), and the points the agents could not settle among themselves (his ruling, or "take the plan check's points
-as written").
+later yes goes in with `factory answer yes`, or his agreement to the draft with `factory agree`), and the
+blocking points the agents could not settle among themselves (his ruling, or "take the plan check's points as
+written").
 
 ## At the approval
 

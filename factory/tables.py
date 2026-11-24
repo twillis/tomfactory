@@ -55,9 +55,10 @@ STEPS: list[Step] = [
          envelope={"summary": "text", "suggestions": "list", "warnings": "list"}),
 
     # Documented before it is reviewed, so the reviewer judges the whole change.
+    # Given what the factory measured, so it claims nothing about tests, budget or coverage it was not (FR-136).
     Step("document", "agent", persona="documenter", capabilities="read+edit", may_change="docs",
          on_pass="review", commit_after=True, model="light",
-         inputs=("request", "plan", "diff", "docs_paths"),
+         inputs=("request", "plan", "diff", "docs_paths", "measured"),
          envelope={"summary": "text", "files_changed": "list"}),
 
     # A reply that contradicts itself (accept, with broken ideals) is asked for again.
@@ -76,6 +77,11 @@ _plain = {entry.name: entry for entry in STEPS}
 LEAD = Step("answer_question", "agent", persona="lead", on_pass="", may_ask=False, model="light",
             inputs=("request", "constitution", "ideals", "plan", "question"),
             envelope={"answer": "text", "confident": ("yes", "no")})
+
+# Not part of any table either: after a round, questions from different agents that ask the same thing are merged,
+# so the asker answers each once (FR-132). Advice: if it fails, the batches go to the asker as they were asked.
+MERGE = Step("merge_questions", "agent", persona="facilitator", on_pass="", may_ask=False, model="light",
+             advisory=True, inputs=("to_merge",), envelope={"merged": "list"})
 
 
 # ---- the table for a codebase that uses spec kit: a persona for each of spec kit's stages ----
@@ -141,17 +147,19 @@ _retro = next(entry for entry in SPEC_KIT_STEPS if entry.name == "retro")
 
 # ---- a planning dialogue: from an ask to an agreed plan, with the asker (FR-119 to FR-126) ----
 # Each round every speaker speaks, in this order, each with its own batch for the asker: questions, measurements,
-# and (the architect and the plan check) points for the planner, on its plan of this round. The round's end is the
-# one wait: for the asker's answers, or for agreement to the plan the planner proposed aligned; then approval.
+# and (the architect and the plan check) points for the planner, on its plan of this round: blocking, which holds
+# alignment open, and notes, which never do (FR-130). The round's end is the one wait: for the asker's answers, or
+# for agreement to the plan the planner proposed aligned; then approval.
 
 _SPEAKS = {"questions": "list", "measure": "list"}
-_HEARS = ("request", "run_kind", "round", "dialogue", "constitution", "ideals", "failure")
+_POINTS = {"blocking": "list", "notes": "list"}
+_HEARS = ("request", "run_kind", "round", "dialogue", "standing", "constitution", "ideals", "failure")
 
 
 def _speaker(name, persona, on_pass, inputs=(), envelope=None, **entry) -> Step:
     return Step(name, "agent", persona=persona, on_pass=on_pass, dialogue=True, may_ask=False, on_fail=Rework(name),
                 inputs=(*_HEARS, *inputs), **entry,
-                envelope={**_SPEAKS, **({"points": "list"} if envelope is None else envelope)})
+                envelope={**_SPEAKS, **(_POINTS if envelope is None else envelope)})
 
 
 DIALOGUE = [

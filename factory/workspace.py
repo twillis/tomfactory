@@ -6,10 +6,12 @@ working copy is never touched. This is the only module that runs git. It decides
 import hashlib
 import pathlib
 import re
+import shutil
 
 from factory import proc
 
 AUTHOR = ["-c", "user.name=tomfactory", "-c", "user.email=tomfactory@localhost"]
+MAIN_NOW = ".factory-main"      # in a checkout: standing documents as on the codebase's main line now (FR-134)
 
 
 class WorkspaceError(Exception):
@@ -101,6 +103,47 @@ class Workspace:
 
     def head(self) -> str:
         return _git(self.path, "rev-parse", "HEAD")[1].strip()
+
+    def delete(self, names) -> list[str]:
+        """Delete these files from the checkout, as an agent asked (FR-135); return the ones deleted. A path that
+        is not a file here is left as it is. Which paths may be asked for is decided before, by the checks."""
+        gone = []
+        for name in names:
+            file = self.path / name
+            if file.is_file() or file.is_symlink():
+                file.unlink()
+                gone.append(name)
+        return gone
+
+    def mirror_main(self, names) -> tuple[str, list[str]]:
+        """Copy these files and folders, as committed at the codebase's head now, into MAIN_NOW in the checkout,
+        read-only, in place of any copy made before (FR-134). A .gitignore of `*` inside keeps the folder out of
+        git, so no step's change, commit or undo includes it. Returns the head and the files copied."""
+        head = head_of(self.target)
+        folder = self.path / MAIN_NOW
+        shutil.rmtree(folder, ignore_errors=True)
+        listed = _git(self.target, "ls-tree", "-r", "-z", "--name-only", head, "--", *names)[1].split("\0")
+        copied = [name for name in listed if name]
+        for name in copied:
+            file = folder / name
+            file.parent.mkdir(parents=True, exist_ok=True)
+            text = _git(self.target, "show", f"{head}:{name}")[1]
+            file.write_text(text + "\n" if text else "")         # what git printed, line by line
+            file.chmod(0o444)
+        folder.mkdir(exist_ok=True)
+        (folder / ".gitignore").write_text("*\n")
+        return head, copied
+
+    def lines_since_base(self, paths) -> tuple[int, int, list[str]]:
+        """What the run has done under these paths since it started: lines added, lines removed, files deleted."""
+        added = removed = 0
+        if not paths:
+            return 0, 0, []
+        for line in _git(self.path, "diff", "--numstat", self.base_commit, "--", *paths)[1].splitlines():
+            plus, minus = line.split("\t")[:2]
+            added, removed = added + int(plus if plus.isdigit() else 0), removed + int(minus if minus.isdigit() else 0)
+        deleted = _git(self.path, "diff", "--name-only", "--diff-filter=D", self.base_commit, "--", *paths)[1].split()
+        return added, removed, deleted
 
     def set_aside(self, back_to) -> str:
         """Keep everything since `back_to` on a side branch, and return the checkout to `back_to`."""

@@ -14,5 +14,11 @@ That work is yours, not the asker's.
   ("Who uses it first? a) you  b) a client"). Never a long question in several parts.
 - Ask only what would change the plan. Asking nothing is a good answer when the ask is plain.
 - Decide how much dialogue this change needs, and keep to it: a tidy or a small follow-up may need none.
-- Every agent in the dialogue speaks each round, beside you. Your batch reaches the asker as you write it, one
-  question per item, so do not repeat what the dialogue already settled.
+- Read before you ask. The rulings live in the standing documents (read them from the copy of main named above:
+  rulings made during the dialogue are there, not in the checkout), the prior art in `knowledge/` and the run
+  records. A question they answer is not asked.
+- A note added to the run, under "Notes added to this run" in the dialogue so far, is a ruling or a fact given while
+  the dialogue runs. It stands over the ask and over an earlier answer.
+- Every agent in the dialogue speaks each round, beside you. Your batch reaches the asker one question per item;
+  where another agent asks the same thing, the two are merged and answered once. Do not repeat what the dialogue
+  already settled.

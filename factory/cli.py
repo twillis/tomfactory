@@ -73,6 +73,10 @@ def build_parser() -> argparse.ArgumentParser:
     with_run(command("questions", questions, "The questions a dialogue is waiting on, each with a place for its"
                                              " answer.")).add_argument("--json", action="store_true")
     with_run(command("agree", agree, "Agree to the plan a dialogue proposed. Agreement is not approval."))
+    sub = command("note", note, "Add a ruling or a fact to a run while its dialogue plans; every agent reads it"
+                                " from its next round on.")
+    sub.add_argument("words", nargs="+", metavar="[run] note")
+    sub.add_argument("--by", default="the operator", help="who it is from (default: the operator)")
 
     command("status", status, "What each recent run is doing, one line per run.").add_argument("--json", action="store_true")
     sub = with_run(command("show", show, "A whole run: every step, what it was asked and what it produced."))
@@ -145,6 +149,11 @@ def questions(args):
 def agree(args):
     run = operations.agree(args.run_id)
     print(f"Run {run.id}: the plan is agreed. It waits for your approval:  {PROG} approve")
+
+
+def note(args):
+    run = operations.note(*run_and_text(args.words), by=args.by)
+    print(f"Run {run.id}: the note is added. Every agent in the dialogue reads it from its next round on.")
 
 
 def approve(args):

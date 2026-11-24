@@ -12,7 +12,8 @@ from factory import cli, config, dialogue, operations, records, run_record, tabl
 from factory.operations import Refused
 from factory.store import open_store
 from tests.conftest import (ARCHITECT, BUILD, CODE, DOCUMENT, PLAN, REVIEW, TEST, WRITE_TESTS, aligned_round,
-                            commit_files, drive_with, git, planner_says, speaks, sprint_settings, to_the_end)
+                            commit_files, drive_with, git, merges, planner_says, speaks, sprint_settings,
+                            to_the_end)
 from tests.fake_agent import FakeAgent
 
 SPEAKERS = ["dialogue_analyst", "dialogue_planner", "dialogue_architect", "dialogue_check"]
@@ -90,10 +91,11 @@ def test_a_whole_run_from_an_ask_through_the_dialogue_to_the_end(home, sprint, f
 @pytest.mark.parametrize("said, in_a_row, outcome", [
     ([{"questions": ["a?"]}, {}, {}, {}], 0, "questions"),
     ([{}, {"measure": ["b?"]}, {}, {}], 0, "questions"),
-    ([{}, {}, {"points": ["c"], "questions": ["d?"]}, {}], 0, "questions"),         # the asker is asked first
-    ([{}, {}, {"points": ["c"]}, {}], 0, "points"),                                # the agents go round again
-    ([{}, {}, {}, {"points": ["c"]}], 2, "stuck"),                                 # at the limit: shown to the asker
-    ([{}, {"aligned": "yes"}, {"points": []}, {"points": []}], 0, "aligned"),
+    ([{}, {}, {"blocking": ["c"], "questions": ["d?"]}, {}], 0, "questions"),       # the asker is asked first
+    ([{}, {}, {"blocking": ["c"]}, {}], 0, "points"),                              # the agents go round again
+    ([{}, {}, {}, {"blocking": ["c"]}], 2, "stuck"),                               # at the limit: shown to the asker
+    ([{}, {"aligned": "yes"}, {"blocking": []}, {"blocking": []}], 0, "aligned"),
+    ([{}, {"aligned": "yes"}, {"notes": ["x"]}, {"blocking": [], "notes": ["y"]}], 0, "aligned"),   # FR-130
 ])
 def test_how_a_round_ends(said, in_a_row, outcome):
     assert workflow.round_outcome(said, in_a_row, 3) == outcome
@@ -103,9 +105,9 @@ def test_how_a_round_ends(said, in_a_row, outcome):
 
 @pytest.mark.fr("FR-120")
 def test_every_speaker_speaks_in_a_round_and_the_run_waits_with_each_ones_batch_kept_apart(home, sprint, fake_notify):
-    run, fake = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(points=()),
-                               speaks(points=())])
-    assert names(home, run) == SPEAKERS and run.state == "awaiting_approval"
+    run, fake = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(blocking=()),
+                               speaks(blocking=()), merges()])
+    assert names(home, run) == [*SPEAKERS, "merge_questions"] and run.state == "awaiting_approval"
     asked = open_store(home).query("questions", {"run_id": run.id})
     assert [(q.step, q.asked_by, q.round) for q in asked] == [("dialogue_analyst", "analyst", 1),
                                                               ("dialogue_planner", "planner", 1)]
@@ -116,21 +118,23 @@ def test_every_speaker_speaks_in_a_round_and_the_run_waits_with_each_ones_batch_
 
 @pytest.mark.fr("FR-120")
 def test_the_next_round_is_given_every_question_and_answer_so_far(home, sprint, fake_notify):
-    run, fake = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(points=()),
-                               speaks(points=()), *aligned_round()])
+    run, fake = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(blocking=()),
+                               speaks(blocking=()), merges(), *aligned_round()])
     operations.answer(run.id, filled(run.id, {WHO: "a", HOW_LOUD: "b, never"}))
-    later = fake.calls[4:8]
+    later = fake.calls[5:9]
     assert len(later) == 4
     for call in later:
         assert WHO in call["prompt"] and "b, never" in call["prompt"] and "round 2" in call["prompt"].lower()
 
 
 @pytest.mark.fr("FR-120")
-def test_the_first_round_asks_open_questions_before_any_reading_of_the_ask(home, sprint, fake_notify):
+@pytest.mark.fr("FR-131")
+def test_the_first_round_asks_open_questions_without_leading_with_a_reading_of_the_ask(home, sprint, fake_notify):
     run, fake = start(sprint, aligned_round())
     analyst = fake.calls[0]["prompt"]
     assert "This is round 1" in analyst and "open questions" in analyst
-    assert "before you show any reading of the ask" in (config.PROMPTS_DIR / "dialogue_analyst.md").read_text()
+    told = " ".join((config.PROMPTS_DIR / "dialogue_analyst.md").read_text().split())
+    assert "do not present a reading of the ask as the answer" in told
 
 
 @pytest.mark.fr("FR-120")
@@ -143,7 +147,7 @@ def test_the_architect_and_the_plan_check_are_shown_the_planners_plan_from_their
 @pytest.mark.fr("FR-120")
 def test_points_for_the_planner_alone_go_round_again_without_the_asker(home, sprint, fake_notify):
     point = "greet() is named hello() in the plan's test; use one name"
-    run, fake = start(sprint, [speaks(), planner_says(), speaks(points=[point]), speaks(points=()),
+    run, fake = start(sprint, [speaks(), planner_says(), speaks(blocking=[point]), speaks(blocking=()),
                                *aligned_round()])
     assert names(home, run) == SPEAKERS * 2 and run.state == "awaiting_approval"
     assert point in fake.calls[5]["prompt"]                                   # the planner, in round 2
@@ -153,7 +157,7 @@ def test_points_for_the_planner_alone_go_round_again_without_the_asker(home, spr
 @pytest.mark.fr("FR-120")
 def test_points_still_raised_after_the_attempt_limit_of_rounds_are_put_to_the_asker(home, sprint, fake_notify):
     point = "the plan never says where hello.py goes"
-    stubborn = [speaks(), planner_says(), speaks(points=[point]), speaks(points=())]
+    stubborn = [speaks(), planner_says(), speaks(blocking=[point]), speaks(blocking=())]
     run, fake = start(sprint, stubborn * 2, attempts=2)
     assert names(home, run) == SPEAKERS * 2
     waiting = operations.questions(run.id).questions
@@ -162,13 +166,13 @@ def test_points_still_raised_after_the_attempt_limit_of_rounds_are_put_to_the_as
 
 @pytest.mark.fr("FR-120")
 def test_a_measurement_is_part_of_the_batch_and_answered_with_it(home, sprint, fake_notify):
-    run, fake = start(sprint, [speaks([WHO]), planner_says(measure=[MEASURE]), speaks(points=()),
-                               speaks(points=()), *aligned_round()])
+    run, fake = start(sprint, [speaks([WHO]), planner_says(measure=[MEASURE]), speaks(blocking=()),
+                               speaks(blocking=()), merges(), *aligned_round()])
     waiting = operations.waiting(run.id)
     assert waiting["measure"] and "a measurement" in waiting["says"]
     assert "asks for a measurement" in operations.questions(run.id).text
     operations.answer(run.id, filled(run.id, {WHO: "a", MEASURE: "Python 3.13.1, measured"}))
-    assert "Python 3.13.1, measured" in fake.calls[5]["prompt"]
+    assert "Python 3.13.1, measured" in fake.calls[6]["prompt"]
 
 
 # ---- FR-121: answering a batch, in the editor or from a file or stdin ----
@@ -176,7 +180,7 @@ def test_a_measurement_is_part_of_the_batch_and_answered_with_it(home, sprint, f
 @pytest.mark.fr("FR-121")
 def test_a_batch_is_written_with_a_place_for_each_answer_and_read_back(home, sprint, fake_notify):
     run, _ = start(sprint, [speaks([WHO, HOW_LOUD]), planner_says(questions=["Which file? a) hello.py  b) app.py"]),
-                            speaks(points=()), speaks(points=())])
+                            speaks(blocking=()), speaks(blocking=()), merges()])
     batch = operations.questions(run.id)
     assert batch.text.count("\nanswer:\n") == 3 and all(f"[Q{q.id}]" in batch.text for q in batch.questions)
     text = filled(run.id, {WHO: "a", HOW_LOUD: "no\n# a note to myself", "Which file?": "a"})
@@ -189,7 +193,8 @@ def test_a_batch_is_written_with_a_place_for_each_answer_and_read_back(home, spr
     (lambda text, ids: text.replace("answer:", "answer: yes") + "\n[Q999] made up\nanswer: x\n", "Q999"),
 ])
 def test_a_batch_with_an_answer_missing_or_a_question_not_asked_is_refused(home, sprint, fake_notify, change, says):
-    run, _ = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(points=()), speaks(points=())])
+    run, _ = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(blocking=()), speaks(blocking=()),
+                            merges()])
     batch = operations.questions(run.id)
     with pytest.raises(Refused, match=says):
         operations.answer(run.id, change(batch.text, [q.id for q in batch.questions]))
@@ -198,8 +203,8 @@ def test_a_batch_with_an_answer_missing_or_a_question_not_asked_is_refused(home,
 
 @pytest.mark.fr("FR-121")
 def test_factory_answer_with_no_words_opens_the_batch_in_the_editor(home, sprint, fake_notify, tmp_path, monkeypatch):
-    run, fake = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(points=()),
-                               speaks(points=()), *aligned_round()])
+    run, fake = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(blocking=()),
+                               speaks(blocking=()), merges(), *aligned_round()])
     editor = tmp_path / "editor"
     editor.write_text("#!/bin/sh\nsed -i 's/^answer:$/answer: b/' \"$1\"\n")
     editor.chmod(editor.stat().st_mode | stat.S_IEXEC)
@@ -213,8 +218,8 @@ def test_factory_answer_with_no_words_opens_the_batch_in_the_editor(home, sprint
 @pytest.mark.fr("FR-121")
 def test_an_editor_left_with_an_answer_missing_keeps_the_draft_for_next_time(home, sprint, fake_notify, tmp_path,
                                                                              monkeypatch, capsys):
-    run, _ = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(points=()), speaks(points=()),
-                            *aligned_round()])
+    run, _ = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(blocking=()), speaks(blocking=()),
+                            merges(), *aligned_round()])
     editor = tmp_path / "editor"
     editor.write_text("#!/bin/sh\nsed -i '0,/^answer:$/s//answer: a/' \"$1\"\n")         # answers the first only
     editor.chmod(editor.stat().st_mode | stat.S_IEXEC)
@@ -230,8 +235,8 @@ def test_an_editor_left_with_an_answer_missing_keeps_the_draft_for_next_time(hom
 @pytest.mark.parametrize("how", ["file", "stdin"])
 def test_answers_can_be_given_from_a_file_or_stdin_for_an_orchestrator(home, sprint, fake_notify, tmp_path,
                                                                         monkeypatch, how):
-    run, _ = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(points=()),
-                            speaks(points=()), *aligned_round()])
+    run, _ = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(blocking=()),
+                            speaks(blocking=()), merges(), *aligned_round()])
     text = filled(run.id, {WHO: "a", HOW_LOUD: "b"})
     if how == "file":
         (tmp_path / "answers.md").write_text(text)
@@ -246,10 +251,11 @@ def test_answers_can_be_given_from_a_file_or_stdin_for_an_orchestrator(home, spr
 
 @pytest.mark.fr("FR-121")
 def test_one_waiting_question_may_be_answered_in_words_and_several_may_not(home, sprint, fake_notify):
-    run, _ = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(points=()), speaks(points=())])
+    run, _ = start(sprint, [speaks([WHO]), planner_says(questions=[HOW_LOUD]), speaks(blocking=()), speaks(blocking=()),
+                            merges()])
     with pytest.raises(Refused, match="2 questions are waiting"):
         operations.answer(run.id, "a")
-    run, _ = start_again(home, sprint, [speaks([WHO]), planner_says(), speaks(points=()), speaks(points=()),
+    run, _ = start_again(home, sprint, [speaks([WHO]), planner_says(), speaks(blocking=()), speaks(blocking=()),
                                         *aligned_round()])
     operations.answer(run.id, "a")
     assert operations.waiting(run.id)["for"] == "agreement"
@@ -262,7 +268,7 @@ def start_again(home, target, entries):
 
 @pytest.mark.fr("FR-121")
 def test_factory_questions_prints_the_batch_and_its_json(home, sprint, fake_notify, capsys):
-    run, _ = start(sprint, [speaks([WHO]), planner_says(), speaks(points=()), speaks(points=())])
+    run, _ = start(sprint, [speaks([WHO]), planner_says(), speaks(blocking=()), speaks(blocking=())])
     capsys.readouterr()
     assert cli.main(["questions"]) == 0
     out = capsys.readouterr().out
@@ -314,7 +320,7 @@ def test_agreement_is_not_approval_and_approval_waits_for_it(home, sprint, fake_
 
 @pytest.mark.fr("FR-122")
 def test_an_aligned_planner_with_a_point_raised_beside_it_is_not_aligned(home, sprint, fake_notify):
-    run, _ = start(sprint, [speaks(), planner_says(), speaks(points=()), speaks(points=["a refusal has no test"]),
+    run, _ = start(sprint, [speaks(), planner_says(), speaks(blocking=()), speaks(blocking=["a refusal has no test"]),
                             *aligned_round()])
     assert names(home, run) == SPEAKERS * 2
     assert records.current_plan(open_store(home), run.id).version == 1       # one plan: the one aligned on
@@ -335,8 +341,9 @@ def test_replying_to_a_proposed_plan_continues_the_dialogue(home, sprint, fake_n
 @pytest.mark.fr("FR-104")
 def test_a_point_the_planner_declines_is_shown_with_its_reason(home, sprint, fake_notify):
     reason = "NOT NULL is checked first: it is not; the column is optional (measured)"
-    run, _ = start(sprint, [speaks(), planner_says(), speaks(points=()), speaks(points=["NOT NULL is checked first"]),
-                            speaks(), planner_says(declined=[reason]), speaks(points=()), speaks(points=())])
+    run, _ = start(sprint, [speaks(), planner_says(), speaks(blocking=()),
+                            speaks(blocking=["NOT NULL is checked first"]), speaks(), planner_says(declined=[reason]),
+                            speaks(blocking=()), speaks(blocking=())])
     shown = operations.plan(run.id).text
     assert reason in shown and "Declined by the planner" in shown
 
@@ -366,8 +373,8 @@ def test_a_home_made_before_the_dialogue_keeps_its_plans_and_gains_agreement_and
 @pytest.mark.fr("FR-123")
 def test_the_estimate_is_shown_beside_the_last_accepted_runs_of_its_kind_on_its_codebase(home, sprint, fake_notify):
     first, _ = to_the_end(sprint, FakeAgent([*aligned_round(), *BUILD_TO_THE_END]))
-    run, fake = start(sprint, [speaks(), planner_says(estimate="half an hour, about $6"), speaks(points=()),
-                               speaks(points=())])
+    run, fake = start(sprint, [speaks(), planner_says(estimate="half an hour, about $6"), speaks(blocking=()),
+                               speaks(blocking=())])
     shown = operations.plan(run.id).text
     assert "half an hour, about $6" in shown and f"Run {first.id} (accepted" in shown
     assert f"Run {first.id} (accepted" in fake.calls[1]["prompt"]            # the planner is shown them too
@@ -408,7 +415,7 @@ def over_budget(target, planner=None, then=()):
     toml = sprint_settings()[".factory.toml"].replace("dialogue_budget_dollars = 10.0", "dialogue_budget_dollars = 1.0")
     commit_files(target, {".factory.toml": toml})
     run, fake = start(target, [speaks([WHO], cost=0.6), planner or planner_says(questions=[HOW_LOUD], cost=0.6),
-                               speaks(points=()), speaks(points=()), *then])
+                               speaks(blocking=()), speaks(blocking=()), merges(), *then])
     budget = next(q for q in operations.questions(run.id).questions if q.asked_by == "factory")
     return run, fake, budget
 
@@ -429,7 +436,7 @@ def test_no_at_the_budget_pauses_the_dialogue_with_everything_kept_and_a_later_y
     run, fake, budget = over_budget(target, then=aligned_round())
     run = operations.answer(run.id, filled(run.id, {WHO: "a visitor", HOW_LOUD: "b", budget.question: "no"}))
     assert (run.state, run.outcome, operations.waiting(run.id)["for"]) == ("awaiting_approval", None, "paused")
-    assert len(fake.calls) == 4                                                 # nothing more was spent
+    assert len(fake.calls) == 5                                 # nothing more was spent, after the merge
     kept = operations.questions(run.id)
     assert kept.questions == [] and WHO in kept.text and "a visitor" in kept.text and "paused" in kept.text
     record = git(target, "show", f"{run.branch}:{run_record.name(run)}")
@@ -439,8 +446,8 @@ def test_no_at_the_budget_pauses_the_dialogue_with_everything_kept_and_a_later_y
     with pytest.raises(Refused, match="paused at its budget"):
         operations.answer(run.id, "no")
     operations.answer(run.id, "yes")                                            # spend more after all
-    assert WHO in fake.calls[4]["prompt"] and "a visitor" in fake.calls[4]["prompt"]
-    assert "round 2" in fake.calls[4]["prompt"].lower()
+    assert WHO in fake.calls[5]["prompt"] and "a visitor" in fake.calls[5]["prompt"]
+    assert "round 2" in fake.calls[5]["prompt"].lower()
     assert operations.waiting(run.id)["for"] == "agreement"                    # a fresh allowance: not asked again
 
 
@@ -506,7 +513,7 @@ def test_a_tidy_may_reach_aligned_in_its_first_round_with_no_questions(home, spr
     tidied = {"envelope": {"summary": "gave the greeting one home", "files_changed": ["hello.py"]},
               "files": {"hello.py": "GREETING = 'hello'\n\n\ndef greet(name=''):\n    return GREETING\n"}}
     run, waits = to_the_end(sprint, FakeAgent([speaks(), planner_says(how_much="none: a tidy with a plain aim"),
-                                               speaks(points=()), speaks(points=()), tidied, REVIEW]),
+                                               speaks(blocking=()), speaks(blocking=()), tidied, REVIEW]),
                             run_kind="tidy-code")
     assert run.outcome == "accepted", run.reason
     assert names(home, run)[:4] == SPEAKERS and waits == 1
@@ -525,9 +532,9 @@ def test_every_speaker_is_told_to_decide_how_much_dialogue_the_change_needs():
 
 @pytest.mark.fr("FR-127")
 def test_the_record_holds_every_round_question_answer_measurement_and_the_agreed_plan(home, sprint, fake_notify):
-    run, _ = start(sprint, [speaks([WHO]), planner_says(measure=[MEASURE]), speaks(points=["name the file"]),
-                            speaks(points=()), speaks(), planner_says(estimate="a quarter hour, $4"),
-                            speaks(points=()), speaks(points=()), *BUILD_TO_THE_END])
+    run, _ = start(sprint, [speaks([WHO]), planner_says(measure=[MEASURE]), speaks(blocking=["name the file"]),
+                            speaks(blocking=()), merges(), speaks(), planner_says(estimate="a quarter hour, $4"),
+                            speaks(blocking=()), speaks(blocking=()), *BUILD_TO_THE_END])
     operations.answer(run.id, filled(run.id, {WHO: "a visitor", MEASURE: "Python 3.13.1"}))
     run = operations.approve(operations.agree(run.id).id)
     assert run.outcome == "accepted", run.reason
@@ -543,7 +550,7 @@ def test_the_record_holds_every_round_question_answer_measurement_and_the_agreed
 
 @pytest.mark.fr("FR-128")
 def test_status_watch_and_plan_say_what_the_dialogue_waits_for(home, sprint, fake_notify, monkeypatch, capsys):
-    run, _ = start(sprint, [speaks([WHO]), planner_says(), speaks(points=()), speaks(points=()),
+    run, _ = start(sprint, [speaks([WHO]), planner_says(), speaks(blocking=()), speaks(blocking=()),
                             *aligned_round()])
     capsys.readouterr()
     assert cli.main(["status"]) == 0
@@ -562,7 +569,7 @@ def test_status_watch_and_plan_say_what_the_dialogue_waits_for(home, sprint, fak
 
 @pytest.mark.fr("FR-128")
 def test_a_plan_replied_to_is_never_shown_as_the_current_one(home, sprint, fake_notify):
-    run, _ = start(sprint, [*aligned_round(), speaks([WHO]), planner_says(), speaks(points=()), speaks(points=())])
+    run, _ = start(sprint, [*aligned_round(), speaks([WHO]), planner_says(), speaks(blocking=()), speaks(blocking=())])
     operations.revise(run.id, "Say hi.")
     with pytest.raises(Refused, match="version 1 was replied to"):
         operations.plan(run.id)

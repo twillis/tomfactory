@@ -7,7 +7,7 @@ rendered from the factory's own records of the run; this module decides nothing.
 import datetime
 import re
 
-from factory import dialogue, records
+from factory import config, dialogue, records
 from factory.tables import SPIKE
 
 
@@ -183,6 +183,8 @@ def render(store, run, checkout) -> str:
         if documented and documented.get("summary"):        # the documenter's account, kept (FR-104)
             lines += ["## What changed", "", documented["summary"].strip(), ""]
         lines += _smells(steps)
+        settings = config.read_target_config(run.target, run.base_commit)
+        lines += ["## What the factory measured", "", *measured(store, run, checkout, settings), ""]
         covered = coverage_line(steps)
         lines += ["## Coverage", "", covered, ""] if covered else []
         lines += _tests_before_and_after(steps)
@@ -223,10 +225,29 @@ def _sprint_review(judged, architect) -> list:
     return lines
 
 
+def _smells_found(steps) -> list[str]:
+    return [f"{s.name} (attempt {s.attempt}), {c['name']}: {c['note']}"
+            for s in steps for c in s.checks or [] if c.get("smell") and not c.get("passed")]
+
+
+def measured(store, run, checkout, settings) -> list[str]:
+    """What the factory measured of the run's tests, their budget, its smells and its coverage (FR-136): the facts
+    the documenter may state, shown in the record too, in place of what a plan hoped."""
+    steps = [s for s in store.query("steps", {"run_id": run.id}) if s.ended_at]
+    added, removed, deleted = checkout.lines_since_base(settings.test_paths)
+    budget = settings.test_budget_lines
+    within = f"{budget}, so {'within' if added <= budget else 'over'} it" if budget else "none"
+    smells = _smells_found(steps)
+    return [f"- Lines of tests this run added: {added}; the codebase's budget for one run: {within}.",
+            f"- Lines of tests this run removed or rewrote: {removed}; test files deleted: "
+            + (", ".join(deleted) or "none") + ". A test cut removes lines: none were cut only if this is 0.",
+            "- Smells found: " + ("; ".join(smells) if smells else "none."),
+            "- " + (coverage_line(steps) or "Coverage: not measured on this codebase.")]
+
+
 def _smells(steps) -> list:
     """What the smells found (FR-107): measured on work that passed, reported here, and never a reason it went back."""
-    found = [f"{s.name} (attempt {s.attempt}), {c['name']}: {c['note']}"
-             for s in steps for c in s.checks or [] if c.get("smell") and not c.get("passed")]
+    found = _smells_found(steps)
     return ["## Smells", "", "Measured by the factory and reported, never a reason a step went back: tidy them at merge"
             " or in a later tidy.", "", *([f"- {item}" for item in found] if found else ["- none"]), ""]
 
@@ -261,6 +282,12 @@ def facts(store, run) -> list:
                      f"${(s.cost_estimate or 0):.2f} |")
     lines += ["", f"Total: {minutes:.1f} minutes of steps, ${cost:.2f}.",
               f"Waiting for the operator, and between steps: {waited:.1f} minutes."]
+    if dialogue.rounds(store, run.id):          # the figures the budget questions quoted, from the same sum (FR-137)
+        spent = dialogue.allowances(store, run.id)
+        each = ", then ".join(f"${c:.2f}" for c in spent)
+        lines.append(f"The dialogue's speakers: ${sum(spent):.2f} in all, the sum of their rows above"
+                     + (f"; from the start and from each yes to spend more: {each} (a budget question quotes the"
+                        " allowance it ends)" if len(spent) > 1 else "") + ".")
     return lines
 
 

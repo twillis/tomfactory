@@ -17,7 +17,7 @@ from factory.workflow import ACCEPT, CheckResult, verdicts
 REGISTRY: dict = {}
 
 # Applied by the driver to every step, whatever its entry says. A step cannot leave these out.
-ALWAYS = ("factory_untouched", "changes_allowed")
+ALWAYS = ("factory_untouched", "changes_allowed", "deletions_inside")
 
 
 @dataclass
@@ -35,6 +35,7 @@ class CheckContext:
     on_child: object = None     # told the process group of a command the check runs
     timeout: float | None = None
     store: object = None        # the factory's records, for a smell that compares with an earlier step (FR-110)
+    refused: list = field(default_factory=list)     # deletions the agent asked for that were not made (FR-135)
 
 
 def register(name):
@@ -59,6 +60,28 @@ def factory_untouched(ctx) -> CheckResult:
     """The factory's own code, personas, prompts and the ideals are as they were (FR-030)."""
     same = own_files.fingerprint(ctx.factory_paths) == ctx.before
     return CheckResult(same, "" if same else "the factory's own code, personas, prompts or ideals were changed")
+
+
+@register("deletions_inside")
+def deletions_inside(ctx) -> CheckResult:
+    """Every file the agent asked the factory to delete is inside the run's checkout, and neither git's nor the
+    factory's own (FR-135). A deletion inside is a change like any other, and changes_allowed judges it."""
+    note = ("the factory deletes only files inside the run's checkout, never git's or its own; it was asked to"
+            " delete: " + ", ".join(ctx.refused)) if ctx.refused else ""
+    return CheckResult(not ctx.refused, note)
+
+
+def refused_deletions(names, checkout, factory_paths) -> list[str]:
+    """Which of the paths an agent asked to delete the factory refuses: one outside the checkout, in git's own
+    folder, among the factory's own files, or not a path at all (FR-135)."""
+    root = checkout.resolve()
+    refused = []
+    for name in names:
+        file = (root / name).resolve() if isinstance(name, str) and name.strip() else None
+        if file is None or not file.is_relative_to(root) or ".git" in file.relative_to(root).parts \
+                or any(file.is_relative_to(own.resolve()) for own in factory_paths):
+            refused.append(str(name))
+    return refused
 
 
 @register("changes_allowed")

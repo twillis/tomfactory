@@ -112,8 +112,8 @@ def test_the_plan_step_is_recorded_with_its_persona_and_checks(home, target, fak
     step = open_store(home).query("steps", {"run_id": run.id})[0]
     assert (step.name, step.kind, step.persona, step.attempt, step.passed) == ("plan", "agent", "planner", 1, True)
     assert step.produced == PLAN and step.failure is None
-    assert [c["name"] for c in step.checks] == ["factory_untouched", "changes_allowed", "envelope_valid",
-                                                "plan_lines_within_length"]
+    assert [c["name"] for c in step.checks] == ["factory_untouched", "changes_allowed", "deletions_inside",
+                                                "envelope_valid", "plan_lines_within_length"]
     assert all(c["passed"] for c in step.checks)
     assert "## Expertise" in fake.calls[0]["persona"]                # the persona file's text
     assert "Create a hello page" in fake.calls[0]["prompt"] and step.asked == fake.calls[0]["prompt"]
