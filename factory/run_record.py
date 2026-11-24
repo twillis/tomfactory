@@ -7,6 +7,7 @@ rendered from the factory's own records of the run; this module decides nothing.
 import datetime
 import re
 
+from factory import dialogue, records
 from factory.tables import SPIKE
 
 
@@ -43,6 +44,11 @@ def step_message(store, run, step, envelope) -> str:
 def approved_message(store, run) -> str:
     """The message for the commit of the approved plan: the plan, by its title."""
     return _message(run, "plan", f"Plan: {title(store, run)}")
+
+
+def paused_message(store, run) -> str:
+    """The record of a dialogue paused at its budget: everything so far, kept on the branch (FR-124)."""
+    return _message(run, run.current_step, f"Paused at the dialogue's budget: {title(store, run)}")
 
 
 def resumed_message(run) -> str:
@@ -151,6 +157,9 @@ def render(store, run, checkout) -> str:
     lines = [f"# Run {run.id}" + (f": {run.outcome}" if ended else ""), "", meta, "",
              "## The request", "", run.request.strip(), ""]
     lines += _section("Sent back with", comments)
+    said = dialogue.transcript(store, run)
+    if said:                                    # the whole dialogue, every round (FR-127)
+        lines += ["## The dialogue", "", said, ""]
     if approved:
         plan = approved[-1]
         lines += [f"## The approved plan (version {plan.version})", "", plan.text.strip(), ""]
@@ -243,22 +252,16 @@ def facts(store, run) -> list:
     started = {e.step_id: e.payload.get("model") for e in store.query("events", {"run_id": run.id, "kind": "step_start"})}
     minutes = cost = waited = 0.0
     for before, s in zip([None, *steps], steps):
-        took = _minutes(s.started_at, s.ended_at)
+        took = records.minutes(s.started_at, s.ended_at)
         minutes, cost = minutes + took, cost + (s.cost_estimate or 0)
         if before:
-            waited += max(0.0, _minutes(before.ended_at, s.started_at))
+            waited += max(0.0, records.minutes(before.ended_at, s.started_at))
         outcome = "passed" if s.passed else s.failure
         lines.append(f"| {s.name} | {s.attempt} | {started.get(s.id) or '-'} | {outcome} | {took:.1f} | "
                      f"${(s.cost_estimate or 0):.2f} |")
     lines += ["", f"Total: {minutes:.1f} minutes of steps, ${cost:.2f}.",
               f"Waiting for the operator, and between steps: {waited:.1f} minutes."]
     return lines
-
-
-def _minutes(started, ended) -> float:
-    def at(text):
-        return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
-    return (at(ended) - at(started)).total_seconds() / 60
 
 
 def _section(heading, items) -> list:

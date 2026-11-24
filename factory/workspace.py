@@ -113,6 +113,19 @@ class Workspace:
         _git(self.path, "clean", "-fdq")
         return aside
 
+    def move_to(self, commit) -> None:
+        """Start the checkout again from `commit`, the codebase's head now: only for a run that has built nothing on
+        its branch yet (FR-125)."""
+        _git(self.path, "reset", "-q", "--hard", commit)
+        _git(self.path, "clean", "-fdq")
+        self.base_commit = commit
+
+    def moved(self, since, to) -> str:
+        """What the codebase gained between two commits: each commit's subject, and the files that changed."""
+        log = _git(self.path, "log", "--format=%h %s", f"{since}..{to}")[1].strip()
+        changed = _git(self.path, "diff", "--stat", since, to)[1].rstrip()
+        return f"From {since[:10]} to {to[:10]}:\n\n{log}\n\n{changed}"
+
     def discard(self, names) -> None:
         """Put back just these files: a changed one to its last commit, a new one removed."""
         for name in names:

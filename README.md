@@ -4,6 +4,8 @@ A small software factory you run on your own machine, so you can work *near* the
 instead of *in* it.
 
 You hand it a short written request for a change to a codebase. It writes a plan and stops.
+(On a codebase that chooses the sprint cycle, the request is an ask: the agents talk it through
+with you, a few short questions at a time, until you and they agree on a plan.)
 You read the plan and approve it, or send it back with a comment. Once you approve, it does
 the rest on its own — writes failing tests, builds until they pass, has an architect look
 it over, documents the change, reviews the whole result — and notifies you when it has finished. You are not needed in between.
@@ -57,7 +59,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 3,500 lines of Python, 516 tests, standard library plus pytest. What is next is in
+About 4,000 lines of Python, 593 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -115,6 +117,11 @@ by an agent, each with its own persona. Four are done by plain code.
 | 8 | `document` | agent: documenter | Writes an account of what changed | documentation only |
 | 9 | `review` | agent: reviewer | Judges the whole result against the request, the plan and your ideals | nothing |
 | 10 | `finish` | code | Ends the run as accepted | nothing |
+
+On a codebase that chooses the sprint cycle (below), step 1 is a dialogue instead: rounds of `dialogue_analyst`,
+`dialogue_planner`, `dialogue_architect` and `dialogue_check`, each asking you its own few short questions, until the
+planner proposes a plan you agree to; then your approval; then, if the codebase moved meanwhile, `recheck_plan`.
+See "Planning is a dialogue".
 
 The idea underneath is **agents propose, code disposes**. An agent is only ever asked to
 think and to write files. Whether the tests pass is found out by running them, never by
@@ -234,6 +241,18 @@ one `init-target` writes is the example to copy.
 factory request "Add a page that says hello." --target ../my-app
 ```
 
+On a sprint codebase this starts a dialogue, not a plan: the agents ask before they plan, and you answer, agree to
+the plan they propose, and then approve it, as "Planning is a dialogue" below describes:
+
+```bash
+factory questions                   # the agents' questions, each agent's on its own
+factory answer                      # opens them in your editor; write each answer under its question, save
+factory answer --file answers.md    # or the same text from a file (or - for standard input)
+factory plan                        # the plan they propose, with its estimate
+factory agree                       # agree to it: this is not yet approval
+factory approve                     # now build it
+```
+
 Add `--kind tidy-tests` or `--kind tidy-code` for a change that must not alter behaviour, or `--kind spike`
 for a question to be answered by a throwaway probe; see below.
 
@@ -336,19 +355,65 @@ cycle in its committed `.factory.toml`, even where spec kit is set up:
 cycle = "sprint"
 ```
 
-A sprint is: `plan` (the planner reads the codebase's standing documents and writes one plan),
-`check_plan` (a reviewer reads the plan for contradictions, missed rulings, wrong claims and
-untested refusals; it is never a gate), `amend_plan` where the check found something (the planner
-takes each finding that is right and declines, with its reason, each that is not, once), your one
+A sprint is: a planning dialogue with you (below), in which the plan check reads each round's
+plan for contradictions, missed rulings, wrong claims and untested refusals and the planner takes
+or declines, with its reason, each point it raised; your agreement, then your one
 approval, then the build, the tests, the architect, the documenter, `converge` (the
 final review: unbuilt work goes back to the build once, everything else is recorded), `retro`
-and `finish`. No spec kit stage runs. The planner and the plan check are told where each later
+and `finish`. No spec kit stage runs. A tidy on a sprint codebase is planned in the dialogue too. The planner and
+the plan check are told where each later
 step may write, so a plan gives no step a file it may not touch; the diff the architect and the
 final review are given leaves out the run's own record, which repeats the plan they already
 have; and the retro is given the constitution and the ideals, so it can say which rule a run
 missed. The record ends with the sprint review, what the new
 tests said before the build and the tests after it, the time and cost, and the retro. `cycle = "auto"`, the default, picks spec kit where
 it is set up and the plain cycle elsewhere.
+
+### Planning is a dialogue
+
+On a sprint codebase a request is an ask, the start of the work on a plan with you, never a directive. You know the
+outcome you want; the agents have every artifact and can make sense of them. So the factory carries the work of
+understanding the artifacts, and a short back-and-forth aligns you and the agents before anything is built
+(specification 005).
+
+**Rounds.** In each round four agents speak, one after another, each with its own batch: the analyst (who opens the
+first round with open questions, before showing any reading of the ask), the planner, the architect and the plan
+check (who both read the planner's plan of that round). A batch holds questions for you, one short item each with
+lettered choices where it can, requests for a measurement, and, from the architect and the plan check, points for
+the planner. Each is told that a mechanism in the ask is one candidate way, to ask you only what you alone can
+answer, and to settle what the artifacts settle by reading them.
+
+- Anyone asked something: the run waits for your answers, every agent's questions in one batch, each kept as its
+  own. `factory questions` shows them; `factory answer` opens them in `$EDITOR`, each with `answer:` under it, and
+  saving sends them all; `factory answer --file` takes the same text from a file or standard input. A batch with an
+  answer missing is refused, naming it, and what you wrote is kept for next time. The next round is given every
+  question and answer so far.
+- Only points for the planner: the agents go round again at once, without you. After as many rounds in a row as the
+  run's attempt limit, the points are put to you as a question.
+- Nothing raised: the planner has proposed **aligned**, with the whole plan and its estimate. Only the agents propose
+  it, and only when no one else raised anything that round. You `factory agree`, or reply with
+  `factory revise "..."`, which begins another round.
+
+**Agreement is not approval.** An agreed plan waits as a run awaiting approval, approved whenever you choose; one run
+at a time, as always. If the codebase's head has moved since the dialogue read it, `factory approve` starts the run's
+checkout again from the head, and `recheck_plan` reads the plan against the codebase as it is now: still holding, the
+build starts; gone stale, the plan is marked stale and the dialogue takes it up again.
+
+**The estimate** is the planner's own judgement of the work and the money, shown beside the factory's own records:
+the last five runs of the same kind on the same codebase that ended accepted, with their minutes and cost.
+
+**A budget** keeps it short: `dialogue_budget_dollars` ($10.00 by default; 0 for none). A round that ends at or over
+it, counted since you last said to spend more, adds the factory's own question to the batch: spend more, yes or no?
+No pauses the dialogue: the run waits, nothing lost. `factory status` says "paused at its budget", `factory questions`
+shows every round so far and the planner's latest draft, and the run's record on its branch holds them. From there,
+`factory answer yes` goes on to the next round with a fresh allowance, `factory agree` agrees to the latest draft, or
+`factory abandon`.
+
+**How much dialogue** a change needs is the agents' call, and the planner says it in every reply: a tidy whose aim
+is stated may be aligned in its first round, with nothing asked. The whole dialogue, every round, question, answer,
+measurement, point and plan proposed, is in the run's record under "The dialogue". `factory status`, `watch` and
+`plan` say what the run is waiting for (answers, from which agents; agreement; approval), and `factory plan` never
+shows a plan you replied to, or one found stale, as the current one.
 
 ### Tidying: a change that must not alter behaviour
 
@@ -577,7 +642,8 @@ from another one, or after its head has moved (a resume, your commit), counts af
 planner amending, the builder and the test writer mending are all told to ask for a measurement
 when they find the database behaving against the plan, not to leave it in a comment.
 
-What was asked and answered travels with the run. The plan check and the final review are given
+What was asked and answered travels with the run (in a dialogue, every round's too). The plan check and the final
+review are given
 every answered question, with who asked and who answered, and are told that where the request
 and an answer disagree, the answer stands: the request was written first.
 
@@ -693,7 +759,8 @@ whatever its entry says. A new step cannot leave them out.
 
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
 `ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`,
-`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, `plan_findings`, and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
+`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, for a dialogue `round`,
+`dialogue`, `draft`, `similar_runs` and `codebase_moved`, and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 
 ## Adding a persona
@@ -745,6 +812,7 @@ The rest of the code carries those decisions out and decides nothing:
 | `checks.py` | control | The checks applied to each step's result |
 | `records.py` | control | The rules about what a run's record must say |
 | `run_record.py` | control | A run's record as a document in the codebase: `docs/runs/`, from approval to its end |
+| `dialogue.py` | control | A planning dialogue's rounds, the batch you answer, what it waits for, and its transcript |
 | `agent.py` | effect | The only code that knows which agent program is used |
 | `workspace.py` | effect | Git, and only this module runs it: the run's checkout, commits, undo |
 | `own_files.py` | effect | Fingerprints, snapshots and restores the factory's own files |

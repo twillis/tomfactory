@@ -65,8 +65,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub = command("revise", revise, "Send the waiting plan back with a comment.")
     sub.add_argument("words", nargs="+", metavar="[run] comment")
 
-    sub = command("answer", answer, "Answer the question a run is waiting on.")
-    sub.add_argument("words", nargs="+", metavar="[run] answer")
+    sub = command("answer", answer, "Answer what a run is waiting on. A dialogue's questions: with no words, they open"
+                                    " in your editor, each with a place for its answer; saving sends them all.")
+    sub.add_argument("words", nargs="*", metavar="[run] answer")
+    sub.add_argument("--file", metavar="path", help="the answers, written into the batch factory questions shows;"
+                                                    " - for standard input")
+    with_run(command("questions", questions, "The questions a dialogue is waiting on, each with a place for its"
+                                             " answer.")).add_argument("--json", action="store_true")
+    with_run(command("agree", agree, "Agree to the plan a dialogue proposed. Agreement is not approval."))
 
     command("status", status, "What each recent run is doing, one line per run.").add_argument("--json", action="store_true")
     sub = with_run(command("show", show, "A whole run: every step, what it was asked and what it produced."))
@@ -105,6 +111,10 @@ def init_target(args):
 
 def request(args):
     run = operations.request(args.text, args.target, attempts=args.attempts, run_kind=args.kind)
+    if operations.is_dialogue(run):
+        print(f"Run {run.id} started: the agents are reading your ask. You will be notified when they have"
+              " questions for you, or a plan to agree.")
+        return
     print(f"Run {run.id} started: a plan is being written. You will be notified when it is ready.")
     print(f"  then read it with:  {PROG} plan")
 
@@ -113,12 +123,28 @@ def plan(args):
     current = operations.plan(args.run_id)
     if args.json:
         return print_json(current)
-    print(f"Run {current.run_id}, plan version {current.version} ({current.decision})\n")
+    now = operations.waiting(current.run_id) or {}
+    shown = {"agreement": f"proposed in round {now.get('round')}", "approval": "agreed"}.get(now.get("for"))
+    print(f"Run {current.run_id}, plan version {current.version} ({shown or current.decision})\n")
     print(current.text.rstrip())
     print_list("\nHow it follows your ideals:", current.ideals_addressed)
     print_list("\nConflicts with your ideals:", current.conflicts)
-    if current.decision == "pending":
+    if now:
+        print(f"\nNext:  {now['next']}   |   {PROG} abandon")
+    elif current.decision == "pending":
         print(f"\nNext:  {PROG} approve   |   {PROG} revise \"<comment>\"   |   {PROG} abandon")
+
+
+def questions(args):
+    batch = operations.questions(args.run_id)
+    if args.json:
+        return print_json([dict(q) for q in batch.questions])
+    print(batch.text.rstrip())
+
+
+def agree(args):
+    run = operations.agree(args.run_id)
+    print(f"Run {run.id}: the plan is agreed. It waits for your approval:  {PROG} approve")
 
 
 def approve(args):
@@ -143,7 +169,19 @@ def revise(args):
 
 
 def answer(args):
-    run = operations.answer(*run_and_text(args.words))
+    run_id, text = run_and_text(args.words)
+    if args.file:
+        run_id = int(args.words[0]) if args.words and args.words[0].isdigit() else None
+        try:
+            text = sys.stdin.read() if args.file == "-" else open(args.file).read()
+        except OSError as problem:
+            raise operations.Refused(f"the answers could not be read: {problem}") from None
+    if text.strip():
+        run = operations.answer(run_id, text)
+    else:
+        run = operations.answer_in_editor(run_id)
+    if run.state == "ended":
+        return print(ended(run))
     print(f"Run {run.id}: answered. It carries on; you will be notified when it next needs you or has finished.")
 
 
@@ -172,7 +210,9 @@ def status(args):
     for view in views:
         run, last = view.run, (view.steps[-1] if view.steps else None)
         waiting = [q.question for q in view.questions if q.answer is None]
-        if waiting:        # a measurement is for whoever drives the run; any other question is the operator's
+        if view.waiting:        # a dialogue: answers, agreement or approval, and from whom (FR-128)
+            doing = view.waiting["short"]
+        elif waiting:        # a measurement is for whoever drives the run; any other question is the operator's
             measure = last and any(check["name"] == "measure" for check in last.checks or [])
             doing = "a measurement is asked for" if measure else "a question for you"
         elif run.state == "ended":
@@ -246,8 +286,11 @@ def watch(args):
         if run.state in ("awaiting_approval", "ended") and not operations.follow(run.id, after=seen):
             break
         time.sleep(1)
+    now = operations.waiting(run.id)
     if run.state == "ended":
         print(ended(run))
+    elif now:
+        print(f"Run {run.id} is waiting for {now['says']}:  {now['next']}")
     else:
         print(f"Run {run.id} is waiting for you:  {PROG} plan")
 

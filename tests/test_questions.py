@@ -261,8 +261,9 @@ def test_a_step_the_run_comes_to_afresh_counts_only_its_own_change(home, target,
 @pytest.mark.fr("FR-108")
 def test_a_finding_about_the_database_comes_back_as_a_measurement_not_a_comment():
     """bttr_erp run 79: the builder found `[2026-01-01,` read as a day and left it in a test comment; amend_plan
-    left a measurement to the orchestrator; and the plan had measured a cast it did not send."""
+    (since FR-119 the planner in the dialogue) left a measurement to the orchestrator; and the plan had measured a cast
+    it did not send."""
     prompts = config.PACKAGE_DIR.parent / "prompts"
-    for name in ("amend_plan", "build", "mend_tests"):
+    for name in ("dialogue_planner", "build", "mend_tests"):
         assert "ask for it to be measured" in (prompts / f"{name}.md").read_text(), name
-    assert "measured another statement than the one the plan sends" in (prompts / "check_plan.md").read_text()
+    assert "measured another statement than the one the plan sends" in (prompts / "dialogue_check.md").read_text()

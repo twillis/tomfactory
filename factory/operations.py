@@ -7,11 +7,13 @@ When an operation cannot go ahead it raises `Refused` with a reason the operator
 """
 import os
 import pathlib
+import shlex
 import shutil
 import sys
 from dataclasses import dataclass, field
 
-from factory import agent, config, driver, own_files, proc, records, run_record, sandbox, speckit, tables, workflow, workspace
+from factory import (agent, config, dialogue, driver, own_files, proc, records, run_record, sandbox, speckit, tables,
+                     workflow, workspace)
 from factory.store import open_store
 from factory.workspace import Workspace
 
@@ -28,6 +30,15 @@ class RunView:
     steps: list
     events: list
     questions: list = field(default_factory=list)      # every question asked in the run, and its answer
+    waiting: dict | None = None                        # what a dialogue waiting for the asker waits for (FR-128)
+
+
+@dataclass
+class Batch:
+    """A dialogue's questions waiting for the asker, and the text the asker writes the answers into (FR-121)."""
+    run: dict
+    questions: list
+    text: str
 
 
 @dataclass
@@ -213,31 +224,88 @@ def _can_spike(settings) -> None:
 
 
 def plan(run_id=None) -> dict:
-    """The current version of a run's plan."""
+    """The current version of a run's plan. A dialogue's plan that was replied to, or found stale, is not shown as
+    the current one, nor is there one while the agents' questions wait (FR-128)."""
     store = _open()
     run = _find(store, run_id)
     current = records.current_plan(store, run.id)
+    why = dialogue.not_current(store, run)
+    if why:
+        raise Refused(why)
     if current is None:
         raise Refused(f"run {run.id} has no plan yet")
     return current
 
 
-def _carry_on(store, run, decision) -> dict:
+def waiting(run_id=None) -> dict | None:
+    """What a dialogue run waits for: answers, agreement or approval; None if it is not waiting on its dialogue."""
+    store = _open()
+    return dialogue.waiting(store, _find(store, run_id))
+
+
+def _carry_on(store, run, decision, moved=False) -> dict:
     """After a decision at a wait: launch a driver at whatever step that decision leads to."""
-    then = workflow.after_wait(decision, workflow.get(run.current_step, driver.table_of(run)))
+    then = workflow.after_wait(decision, workflow.get(run.current_step, driver.table_of(run)), moved=moved)
     return _launch_at(store, run, then.step)
 
 
 def approve(run_id=None) -> dict:
-    """Approve what is waiting. The run carries on to its next wait, or to its end, unattended."""
+    """Approve what is waiting. The run carries on to its next wait, or to its end, unattended. A dialogue's plan is
+    approved only once agreed; approved after the codebase moved, it is re-checked against it first (FR-122, FR-125)."""
     store = _open()
     run = _waiting(store, run_id)
+    step = workflow.get(run.current_step, driver.table_of(run))
+    moved = False
+    if step.dialogue:
+        current = records.current_plan(store, run.id)
+        if not current or current.decision != "agreed":
+            raise Refused(f"run {run.id}'s plan is not agreed, and agreement is not approval: read it with"
+                          " factory plan, agree with factory agree, then approve")
+        moved = _restart_if_moved(store, run, step)
+        run = store.get("runs", run.id)
     records.decide(store, run.id, "approved")
     checkout = Workspace.of(run)
-    if not workflow.get(run.current_step, driver.table_of(run)).speckit:     # spec kit commits its own documents
+    if not step.speckit:     # spec kit commits its own documents
         run_record.write(store, run, checkout, run_record.approved_message(store, run))
     records.event(store, run.id, "approved", f"approved at {run.current_step}", {"commit": checkout.head()})
-    return _carry_on(store, run, "approve")
+    return _carry_on(store, run, "approve", moved)
+
+
+def _restart_if_moved(store, run, step) -> bool:
+    """Where the codebase has moved since the dialogue read it, start the run's checkout again from its head, so the
+    plan is re-checked against it and built on it (FR-125). Refused if anything was built, or the new head's
+    settings would give a run of this kind another table."""
+    head = workspace.head_of(run.target)
+    if head == run.base_commit:
+        return False
+    checkout = Workspace.of(run)
+    built = set(checkout.files_changed_since_base()) - {run_record.name(run)}
+    names = {entry.name for entry in resolved_table(run.target, head, run.run_kind)}
+    if built or not {step.name, step.on_moved} <= names:
+        raise Refused(f"the codebase has moved since run {run.id}'s dialogue read it, and the run cannot start again"
+                      " from its head" + (f": {', '.join(sorted(built))} were built" if built else
+                                          ": its settings there give this kind of run another table")
+                      + "; abandon it and request again")
+    checkout.move_to(head)
+    records.restart_from(store, run.id, head)
+    return True
+
+
+def agree(run_id=None) -> dict:
+    """Agree to the plan the agents proposed aligned. Agreement is not approval: the run waits for that (FR-122)."""
+    store = _open()
+    run = _waiting(store, run_id)
+    current = records.current_plan(store, run.id)
+    drafted = dialogue.latest_draft(store, run.id)
+    if dialogue.paused(store, run.id) and drafted and not (current and current.decision == "pending"):
+        current = records.add_plan(store, run.id, dialogue.proposal(store, run, drafted),     # the draft (FR-124)
+                                   drafted.get("ideals_addressed") or [], drafted.get("conflicts") or [])
+    if not dialogue.rounds(store, run.id) or not current or current.decision != "pending":
+        raise Refused(f"run {run.id} has no plan proposed for agreement"
+                      + (f"; plan version {current.version} is {current.decision}" if current else ""))
+    records.decide(store, run.id, "agreed")
+    records.event(store, run.id, "agreed", f"plan version {current.version} agreed", {"version": current.version})
+    return store.get("runs", run.id)
 
 
 def revise(run_id=None, comment="") -> dict:
@@ -246,6 +314,9 @@ def revise(run_id=None, comment="") -> dict:
     run = _waiting(store, run_id)
     if not comment.strip():
         raise Refused("say what to change: a plan is sent back with a comment")
+    if records.current_plan(store, run.id) is None:
+        raise Refused(f"run {run.id} has no plan to send back; it is waiting for {dialogue.waiting(store, run)['says']}"
+                      if dialogue.waiting(store, run) else f"run {run.id} has no plan to send back")
     records.decide(store, run.id, "revised", comment=comment.strip())
     return _carry_on(store, run, "revise")
 
@@ -298,23 +369,114 @@ def resume(run_id=None) -> dict:
 
 
 def answer(run_id=None, text="") -> dict:
-    """Answer the question a run is waiting on. The step that asked runs again with the answer."""
+    """Answer what a run is waiting on. A dialogue's batch is answered as one (FR-121): `text` is the batch with each
+    answer under its question, or plain words where one question waits; the next round then begins. Any other
+    question: the step that asked runs again with the answer."""
     store = _open()
     run = _find(store, run_id)
+    waiting = dialogue.batch(store, run.id)
+    if waiting:
+        return _answer_batch(store, run, waiting, text)
     asked = records.pending_question(store, run.id)
+    if asked is None and dialogue.paused(store, run.id):
+        return _resume_paused(store, run, text)
     if asked is None:
-        raise Refused(f"run {run.id} has no question waiting for an answer")
+        now = dialogue.waiting(store, run)
+        raise Refused(f"run {run.id} has no questions waiting for an answer"
+                      + (f"; it is waiting for {now['says']}: {now['next']}" if now else ""))
     if not text.strip():
         raise Refused(f"give an answer to: {asked.question}")
     records.answer(store, asked.id, text.strip(), "operator")
     return _launch_at(store, run, run.current_step)
 
 
+def _answer_batch(store, run, waiting, text) -> dict:
+    if any(dialogue.MARK.match(line) for line in text.splitlines()):
+        try:
+            answers = dialogue.parse_batch(text, waiting)
+        except ValueError as problem:
+            raise Refused(str(problem)) from None
+    elif len(waiting) == 1 and text.strip():
+        answers = {waiting[0].id: text.strip()}
+    else:
+        raise Refused(f"{len(waiting)} questions are waiting: answer them with factory answer, which opens them in"
+                      " your editor, or with factory answer --file, from the batch factory questions shows")
+    budget = [q for q in waiting if q.step == dialogue.BUDGET]
+    more = [workflow.spend_more(answers[q.id]) for q in budget]
+    if None in more:
+        raise Refused("the budget question takes yes or no: whether to spend more on the dialogue")
+    with store.transaction():
+        for q in waiting:
+            records.answer(store, q.id, answers[q.id], "operator")
+        records.event(store, run.id, "answered", f"round {waiting[0].round}: {len(waiting)} answered",
+                      {"round": waiting[0].round})
+        if False in more:      # paused at its budget: the run waits, everything kept, to go on later (FR-124)
+            records.event(store, run.id, "paused", f"paused at its budget, after round {waiting[0].round}",
+                          {"round": waiting[0].round})
+    if False in more:
+        run_record.write(store, run, Workspace.of(run), run_record.paused_message(store, run))
+        return store.get("runs", run.id)
+    return _carry_on(store, run, "revise")
+
+
+def _resume_paused(store, run, text) -> dict:
+    """A dialogue paused at its budget goes on when the asker says yes: the next round, with a fresh allowance."""
+    if workflow.spend_more(text) is not True:
+        raise Refused(f"run {run.id}'s dialogue is paused at its budget: answer yes to spend more, agree to its"
+                      " draft plan with factory agree, or abandon it")
+    number = dialogue.rounds(store, run.id)[-1].payload["round"]
+    with store.transaction():
+        asked = records.ask(store, run.id, dialogue.BUDGET, "factory", "Spend more, after the pause at the budget?"
+                            " yes / no", number)
+        records.answer(store, asked.id, "yes", "operator")
+        records.event(store, run.id, "answered", f"round {number}: spend more, after the pause", {"round": number})
+    return _carry_on(store, run, "revise")
+
+
+def questions(run_id=None) -> Batch:
+    """The dialogue's questions waiting for the asker, as the text the answers are written into (FR-121)."""
+    store = _open()
+    run = _find(store, run_id)
+    waiting = dialogue.batch(store, run.id)
+    if not waiting and dialogue.paused(store, run.id):       # what it has so far, kept (FR-124)
+        return Batch(run, [], dialogue.so_far(store, run))
+    if not waiting:
+        raise Refused(f"run {run.id} has no questions waiting for the asker")
+    return Batch(run, waiting, dialogue.render_batch(run, waiting))
+
+
+def answer_in_editor(run_id=None) -> dict:
+    """Open the waiting batch in the asker's editor, each question with a place for its answer; saving sends them
+    all at once (FR-121). Answers refused are kept in the draft, which opens again next time."""
+    store = _open()
+    if not dialogue.batch(store, _find(store, run_id).id):
+        return answer(run_id, "")                   # refused, saying what is waiting instead
+    batch = questions(run_id)
+    draft = store.files.answers_draft(batch.run.id)
+    asked = {f"[Q{q.id}]" for q in batch.questions}
+    if not draft.exists() or {line.split(" ")[0] for line in draft.read_text().splitlines()
+                              if dialogue.MARK.match(line)} != asked:
+        draft.write_text(batch.text)
+    if proc.interactive([*shlex.split(os.environ.get("EDITOR") or "nano"), str(draft)]) != 0:
+        raise Refused(f"the editor did not finish; your answers are kept in {draft}")
+    try:
+        run = answer(batch.run.id, draft.read_text())
+    except Refused as problem:
+        raise Refused(f"{problem}; your answers are kept in {draft}, and open again with factory answer") from None
+    draft.unlink()
+    return run
+
+
+def is_dialogue(run) -> bool:
+    """Does this run plan in a dialogue (FR-119)?"""
+    return driver.table_of(run)[0].dialogue
+
+
 def status(limit=10) -> list[RunView]:
     """The most recent runs, newest first, each with its steps so far."""
     store = _open()
     return [RunView(run, [], store.query("steps", {"run_id": run.id}), [],
-                    store.query("questions", {"run_id": run.id}))
+                    store.query("questions", {"run_id": run.id}), dialogue.waiting(store, run))
             for run in store.query("runs", order="-id", limit=limit)]
 
 

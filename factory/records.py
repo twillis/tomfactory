@@ -12,7 +12,9 @@ factory's own rules about its records live, each stated once:
 
 Everything here is done through the gateway's five plain operations.
 """
-from factory.store import gt, is_null, ne, now
+import datetime
+
+from factory.store import gt, is_null, ne, not_null, now
 from factory.workspace import slug
 
 MOVING = ("current_step", "driver_pid", "driver_started", "child_pgid")    # what changes as a run is carried on
@@ -90,6 +92,17 @@ def end(gw, run_id, outcome, reason):
     return run
 
 
+def restart_from(gw, run_id, commit):
+    """The one way a run's starting commit changes: a plan agreed in a dialogue, approved after the codebase moved,
+    is built from the codebase as it is now, nothing having been built on it yet (FR-125)."""
+    with gw.transaction():
+        run = gw.get("runs", run_id)
+        moved = gw.update("runs", {"id": run_id}, {"base_commit": commit})[0]
+        event(gw, run_id, "restarted_from", f"the codebase moved: {run.base_commit[:10]} to {commit[:10]}",
+              {"from": run.base_commit, "to": commit})
+    return moved
+
+
 def reopen(gw, run_id, state):
     """Take back a run's needs-me ending so it can carry on. The ending it had stays in its history."""
     with gw.transaction():
@@ -127,6 +140,13 @@ def decide(gw, run_id, decision, comment=None):
     return gw.update("plans", {"run_id": run_id, "version": current_plan(gw, run_id).version}, changes)[0]
 
 
+def set_plan_aside(gw, run_id, reason):
+    """The approved plan, when the run goes back to planning from it: marked stale, with why (FR-125)."""
+    plan = current_plan(gw, run_id)
+    if plan and plan.decision == "approved":
+        decide(gw, run_id, "stale", comment=reason)
+
+
 # ---- steps ----
 
 def attempts(gw, run_id, name) -> int:
@@ -138,13 +158,20 @@ def attempts(gw, run_id, name) -> int:
 NOT_THE_WORK = ("error", "timeout", "question")
 
 
+def sent_back_at(gw, run_id) -> str:
+    """When the operator last sent the work back: a plan sent back, or a dialogue's batch answered (FR-105, FR-120).
+    "" if never."""
+    revised = [p.created_at for p in gw.query("plans", {"run_id": run_id}) if p.decision == "revised"]
+    answered = [q.answered_at for q in gw.query("questions", [{"run_id": run_id}, not_null("round")]) if q.answered_at]
+    return max([*revised, *answered], default="")
+
+
 def attempts_climbed(gw, run_id, name) -> int:
     """How many grades this step's next attempt climbs (FR-109): its earlier attempts since the operator last sent
     the work back whose work was found wanting, by its own check, its reply's shape, a guard, or a later step
     sending it back. An attempt that ended in an error of the agent program, a timeout or a question is left out:
     a stronger model would not have helped. The attempt now starting is left out too."""
-    revised = [p.created_at for p in gw.query("plans", {"run_id": run_id}) if p.decision == "revised"]
-    since = max(revised) if revised else ""
+    since = sent_back_at(gw, run_id)
     earlier = [s for s in gw.query("steps", {"run_id": run_id, "name": name}) if s.ended_at and s.started_at >= since]
     return sum(1 for s in earlier if s.failure not in NOT_THE_WORK)
 
@@ -153,8 +180,7 @@ def attempts_counted(gw, run_id, name) -> int:
     """How many of this step's runs count toward its attempt limit: its own failures and successes since the
     operator last sent the work back, leaving out a run that asked a question the operator answered (FR-105).
     A question the lead answered still counts, so a step that only ever asks still ends."""
-    revised = [p.created_at for p in gw.query("plans", {"run_id": run_id}) if p.decision == "revised"]
-    since = max(revised) if revised else ""
+    since = sent_back_at(gw, run_id)
     answered_by_operator = [q for q in gw.query("questions", {"run_id": run_id, "step": name})
                             if q.answered_by == "operator"]
     counted = 0
@@ -173,6 +199,19 @@ def so_far(gw, run_id) -> tuple[float, list[str]]:
     """What a run's steps have cost so far, by the agent program's own estimates, and the steps that passed (FR-117)."""
     steps = gw.query("steps", {"run_id": run_id})
     return sum(s.cost_estimate or 0 for s in steps), [s.name for s in steps if s.passed]
+
+
+def minutes(started, ended) -> float:
+    """The minutes between two of the store's times."""
+    def at(text):
+        return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    return (at(ended) - at(started)).total_seconds() / 60
+
+
+def took(gw, run_id) -> tuple[float, float]:
+    """The minutes a run's steps took and what they cost, as the factory measured them (FR-092, FR-123)."""
+    steps = [s for s in gw.query("steps", {"run_id": run_id}) if s.ended_at]
+    return sum(minutes(s.started_at, s.ended_at) for s in steps), sum(s.cost_estimate or 0 for s in steps)
 
 
 def found(gw, run_id) -> dict:
@@ -214,11 +253,11 @@ def events_after(gw, run_id, last_seen=0, limit=500):
 
 # ---- questions ----
 
-def ask(gw, run_id, step, asked_by, question):
-    """Put a question on record as it is asked."""
+def ask(gw, run_id, step, asked_by, question, round=None, measure=False):
+    """Put a question on record as it is asked: in a dialogue, with its round, and whether it asks for a measurement."""
     with gw.transaction():
-        asked = gw.insert("questions", {"run_id": run_id, "step": step, "asked_by": asked_by,
-                                        "question": question, "asked_at": now()})
+        asked = gw.insert("questions", {"run_id": run_id, "step": step, "asked_by": asked_by, "question": question,
+                                        "asked_at": now(), "round": round, "measure": measure})
         event(gw, run_id, "question", f"{asked_by} asks: {question}", {"question_id": asked.id, "step": step})
     return asked
 

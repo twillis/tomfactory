@@ -26,7 +26,7 @@ def test_each_overridable_field_is_applied_and_smells_are_added_never_removed():
     assert (entry(table, "document").model, entry(table, "document").timeout) == ("middle", 600)
     assert entry(table, "build").smells == ("lines_within_length", "tests_within_budget")
     assert entry(table, "converge").routes["rework"] == Rework("build", at_most=1, then="retro")
-    assert entry(table, "plan") == entry(tables.SPRINT_STEPS, "plan")                 # untouched steps are the same
+    assert entry(table, "dialogue_planner") == entry(tables.SPRINT_STEPS, "dialogue_planner")    # untouched: the same
 
 
 @pytest.mark.fr("FR-112")
@@ -39,7 +39,8 @@ def test_each_overridable_field_is_applied_and_smells_are_added_never_removed():
     ({"test": {"model": "light"}}, "[steps.test]: model must be one of light, middle, standard, strongest, on an agent step"),
     ({"build": {"timeout": True}}, "[steps.build]: timeout must be a whole number of seconds"),
     ({"build": {"smells": "lines_within_length"}}, "[steps.build]: smells must be a list of check names"),
-    ({"plan": {"rework_at_most": 2}}, "[steps.plan]: rework_at_most needs a capped rework route; it has none"),
+    ({"dialogue_planner": {"rework_at_most": 2}},
+     "[steps.dialogue_planner]: rework_at_most needs a capped rework route; it has none"),
     ({"converge": {"rework_at_most": 0}}, "[steps.converge]: rework_at_most must be a whole number, at least 1"),
 ])
 def test_an_override_that_is_not_allowed_is_refused_naming_it(overrides, says):
