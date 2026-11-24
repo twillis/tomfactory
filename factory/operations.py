@@ -174,7 +174,7 @@ def request(text, target, attempts=3, run_kind="change") -> dict:
     target = pathlib.Path(target).resolve()
     try:
         base = workspace.head_of(target)
-        config.read_target_config(target, base)
+        settings = config.read_target_config(target, base)
     except (workspace.WorkspaceError, config.ConfigError) as problem:
         raise Refused(str(problem)) from None
     open_run = records.open_run(store)
@@ -183,6 +183,8 @@ def request(text, target, attempts=3, run_kind="change") -> dict:
                       " let it finish, or stop or abandon it, before making another request")
     if run_kind not in tables.RUN_KINDS:
         raise Refused(f"a run is one of: {', '.join(tables.RUN_KINDS)}; not {run_kind!r}")
+    if run_kind == tables.SPIKE:
+        _can_spike(settings)
     resolved_table(target, base, run_kind)          # a project's overrides are checked before anything is paid for
 
     run = records.new_run(store, text.strip(), target, base, ideals=config.ideals_for(target, base),
@@ -194,6 +196,20 @@ def request(text, target, attempts=3, run_kind="change") -> dict:
         driver.end_run(store, run.id, "needs-me", f"the run's checkout could not be created: {problem}")
         raise Refused(f"the run's checkout could not be created: {problem}") from None
     return _launch_at(store, run, driver.table_of(run)[0].name)    # the table of its own checkout
+
+
+def _can_spike(settings) -> None:
+    """A spike is refused, naming the setting, on a codebase that could not run its probe or keep its findings
+    (FR-113)."""
+    if not settings.probe_command:
+        raise Refused("a spike's probe is run by the codebase's `probe_command`, which its committed .factory.toml"
+                      " does not set; add one, with {path} where the probe's file goes")
+    if "{path}" not in settings.probe_command:
+        raise Refused(f"this codebase's `probe_command` ({settings.probe_command}) has no {{path}}, so the probe's"
+                      " file could not be given to it")
+    if not config.under("docs/spikes/", settings.docs_paths):
+        raise Refused("a spike's findings are written to docs/spikes/, which is not in this codebase's `docs_paths`"
+                      f" ({', '.join(settings.docs_paths)})")
 
 
 def plan(run_id=None) -> dict:
@@ -240,7 +256,8 @@ def abandon(run_id=None) -> dict:
     run = _waiting(store, run_id, with_question=True)
     if records.current_plan(store, run.id):
         records.decide(store, run.id, "abandoned")
-    then = workflow.after_wait("abandon", workflow.get(run.current_step, driver.table_of(run)))
+    steps = driver.table_of(run)
+    then = workflow.after_wait("abandon", workflow.get(run.current_step, steps), steps)
     Workspace.of(run).remove()
     return driver.end_run(store, run.id, then.outcome, then.reason)
 

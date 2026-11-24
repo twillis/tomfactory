@@ -96,6 +96,7 @@ def test_a_judging_step_passes_only_on_an_accept_that_agrees_with_itself(envelop
 
 
 @pytest.mark.fr("FR-032")
+@pytest.mark.fr("FR-113")
 @pytest.mark.parametrize("scope, changed, offending", [
     ("nothing", [], []),
     ("nothing", ["app.py"], ["app.py"]),
@@ -107,13 +108,16 @@ def test_a_judging_step_passes_only_on_an_accept_that_agrees_with_itself(envelop
     ("not_tests", ["app.py", ".factory.toml", ".gitignore", "IDEALS.md"], [".factory.toml", ".gitignore", "IDEALS.md"]),
     ("docs", ["docs/guide.md", "CHANGELOG.md"], []),
     ("docs", ["docs/guide.md", "app.py", "CHANGELOG.md.bak"], ["CHANGELOG.md.bak", "app.py"]),
+    ("checkout", ["app.py", "tests/test_probe.py", "docs/notes.md"], []),                 # a spike's probe
+    ("checkout", ["app.py", ".factory.toml", "IDEALS.md", ".specify/memory/constitution.md"],
+     [".factory.toml", ".specify/memory/constitution.md", "IDEALS.md"]),
 ])
 def test_changes_allowed_holds_each_step_to_its_scope(scope, changed, offending):
     result = checks.get("changes_allowed")(context(agent_step(may_change=scope), changed=changed))
     assert result.passed is (not offending)
     for name in offending:
         assert name in result.note
-    assert workflow.SCOPES == ("nothing", "tests", "not_tests", "docs", "spec")
+    assert workflow.SCOPES == ("nothing", "tests", "not_tests", "docs", "spec", "checkout")
 
 
 @pytest.mark.fr("FR-030")

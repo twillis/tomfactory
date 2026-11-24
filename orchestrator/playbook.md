@@ -108,6 +108,19 @@ specification already exists in its own documents.
   what was deferred and to which run. Where the record has a "Coverage" line (FR-110), put it in
   the merge message's body.
 
+## A spike
+
+- A question whose answer is not known is a spike (`--kind spike`), not an argument in a plan. The target needs
+  `probe_command` in its committed `.factory.toml` (for bttr_erp, `.venv/bin/python -m pytest -q -s -p
+  no:cacheprovider {path}`); the factory refuses a spike without it.
+- Show him the question, one or two sentences with what would count as an answer, before requesting it. The plan
+  does not wait for approval ("Agreed", 2026-11-23).
+- When it ends, answered or inconclusive, read the note at `docs/spikes/<run name>.md` on the spike's branch with
+  him. The two of you decide what comes next; add the decision to the note in his words, copy the note to the
+  target's main line, and record in the run order what it schedules or drops. Never merge the spike's branch: it
+  is kept as the probe's record.
+- A later request may name the note in its reading list.
+
 ## Improving the factory
 
 - Between runs, from the retros. Tests first, the factory's whole suite green, the README and the

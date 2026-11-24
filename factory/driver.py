@@ -58,12 +58,17 @@ def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) ->
             if run.state == "ended":        # ended from outside while we were working
                 return
             step = workflow.get(run.current_step, steps)
+            spent, done = records.so_far(store, run_id)
+            boxed = workflow.over_budget(steps, step, spent, settings.spike_budget_dollars, done)
+            if boxed:                           # a spike at its budget (FR-117)
+                end_run(store, run_id, boxed.outcome, boxed.reason)
+                return
             result, envelope = run_step(store, run, step, checkout, settings, adapter, personas_dir, prompts_dir)
             asked = None
             if result.failure == "question":    # on record the moment it is asked, whatever happens next
                 asked = records.ask(store, run_id, step.name, step.persona, result.failed_check.note)
             attempts = {entry.name: records.attempts_counted(store, run_id, entry.name) for entry in steps}
-            then = workflow.next_step(step, result, attempts, run.attempt_limit)
+            then = workflow.next_step(step, result, attempts, run.attempt_limit, records.found(store, run_id))
             if isinstance(then, End):
                 end_run(store, run_id, then.outcome, then.reason)
                 return
@@ -412,6 +417,19 @@ def _plan_findings(src):
     return "\n".join(f"- {item}" for item in _checked(src.finished).get("findings") or [])
 
 
+def _probe_output(src):
+    """How each run of a spike's probe went, as the factory ran it, the latest last: how it exited, and what it
+    printed (FR-114)."""
+    return "\n\n".join(f"{ran['note']}\n\nWhat it printed:\n\n```text\n{ran['output'].strip()}\n```"
+                       for ran in checks.probe_runs(src.store, src.run.id))
+
+
+def _spike_answer(src):
+    """What a spike's findings said: answered or inconclusive, why, and in a sentence (FR-118)."""
+    said = records.found(src.store, src.run.id)
+    return "\n".join(f"{key}: {said[key]}" for key in ("outcome", "reason", "summary") if said.get(key))
+
+
 # The inputs a prompt may use, by name. A new input is one entry here.
 INPUTS = {
     "request": _request,
@@ -437,7 +455,11 @@ INPUTS = {
     "findings": _findings,
     "planning_answers": _planning_answers,
     "plan_findings": _plan_findings,
-    "run_name": lambda src: run_record.name(src.run).removeprefix("docs/runs/").removesuffix(".md"),
+    "run_name": lambda src: run_record.stem(src.run),
+    "branch": lambda src: src.run.branch,
+    "probe_command": lambda src: src.settings.probe_command,
+    "probe_output": _probe_output,
+    "spike_answer": _spike_answer,
 }
 
 
@@ -466,7 +488,8 @@ def validate(table, personas_dir=None, prompts_dir=None) -> None:
         leads = [step.on_pass, step.on_approve, step.revise_from, step.on_fail, *step.routes.values()]
         for target in leads:
             target = getattr(target, "step", target)
-            if isinstance(target, str) and target and target not in (workflow.WAIT, workflow.END_ACCEPTED) \
+            if isinstance(target, str) and target and target not in (workflow.WAIT, workflow.END_ACCEPTED,
+                                                                     workflow.END_AS_FOUND) \
                     and target not in names:
                 problems.append(f"{step.name} leads to {target}, which is not in the table")
         problems += [f"{step.name} uses the check {name}, which is not registered"

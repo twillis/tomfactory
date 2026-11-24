@@ -131,7 +131,18 @@ def _v4_question_is_a_failure(db) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS steps_by_run ON steps (run_id, id)")
 
 
-MIGRATIONS = [_v3_kind_of_run, _v4_question_is_a_failure]     # each takes a home up one version
+def _v5_a_spike_ends_answered_or_inconclusive(db) -> None:
+    """A spike ends answered or inconclusive (FR-116). SQLite cannot widen a CHECK in place, so runs is remade."""
+    made = db.execute("SELECT sql FROM sqlite_master WHERE name = 'runs'").fetchone()["sql"]
+    widened = made.replace("'rejected','needs-me')", "'rejected','needs-me','answered','inconclusive')")
+    db.execute(widened.replace("CREATE TABLE runs", "CREATE TABLE runs_widened", 1))
+    db.execute("INSERT INTO runs_widened SELECT * FROM runs")
+    db.execute("DROP TABLE runs")
+    db.execute("ALTER TABLE runs_widened RENAME TO runs")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_open_run ON runs ((state != 'ended')) WHERE state != 'ended'")
+
+
+MIGRATIONS = [_v3_kind_of_run, _v4_question_is_a_failure, _v5_a_spike_ends_answered_or_inconclusive]   # each one up
 VERSION = OLDEST + len(MIGRATIONS)
 
 

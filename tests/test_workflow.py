@@ -39,7 +39,8 @@ def path_through(table):
 
 @pytest.mark.fr("FR-006")
 @pytest.mark.fr("FR-037")
-@pytest.mark.parametrize("table", tables.TABLES, ids=["change", "spec-kit", "sprint", "tidy-tests", "tidy-code"])
+@pytest.mark.parametrize("table", tables.TABLES, ids=["change", "spec-kit", "sprint", "tidy-tests", "tidy-code",
+                                                                  "spike"])
 def test_every_table_names_only_steps_checks_inputs_personas_and_prompts_that_exist(table):
     driver.validate(table)
 

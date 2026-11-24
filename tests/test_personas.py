@@ -26,6 +26,7 @@ def test_the_planner_states_expertise_priorities_and_what_it_must_not_do():
 
 
 @pytest.mark.fr("FR-042")
+@pytest.mark.fr("FR-118")
 def test_all_six_personas_exist_with_the_three_headings():
     from factory import workflow
     named = {step.persona for step in tables.STEPS if step.kind == "agent"}
@@ -34,7 +35,9 @@ def test_all_six_personas_exist_with_the_three_headings():
     assert with_spec_kit == named | {"analyst", "facilitator"}   # specify and clarify, and the sprint's retro
     for name in with_spec_kit:
         sections(name)
-    assert {f.stem for f in config.PERSONAS_DIR.glob("*.md")} == with_spec_kit | {"lead"}   # the lead answers questions
+    spike = {step.persona for step in tables.SPIKE_STEPS if step.kind == "agent"}          # a spike's own (FR-118)
+    assert spike == {"spike", "facilitator"}
+    assert {f.stem for f in config.PERSONAS_DIR.glob("*.md")} == with_spec_kit | spike | {"lead"}   # the lead answers
     assert "answer" in sections("lead")["expertise"].lower()
 
 

@@ -13,6 +13,7 @@ returning one) with any of:
     error          a message: report that the agent program failed
     block          True: run a real child process that waits until it is stopped
                    a path: wait until that file exists, then carry on
+    cost           what the agent program reports the step cost, in dollars (0 unless given)
 
 A detached driver cannot be handed a Python object, so a script can also be loaded from
 the JSON file named by TOMFACTORY_FAKE_SCRIPT; calls are then recorded in a file beside it.
@@ -73,7 +74,7 @@ def play(entry, cwd, timeout, on_event, raw_sink, stderr_file, on_child):
     raw_sink(json.dumps({"type": "result", "result": text}))
     return AgentResult(ok=not timed_out and not error, text=text, envelope=envelope, timed_out=timed_out,
                        denials=entry.get("denials", []), duration_seconds=0.01,
-                       tokens={"input": 10, "output": 5}, cost_estimate=0.0, error=error)
+                       tokens={"input": 10, "output": 5}, cost_estimate=entry.get("cost", 0.0), error=error)
 
 
 def run_agent(persona, prompt, cwd, capabilities, timeout, on_event, raw_sink, stderr_file,

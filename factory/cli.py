@@ -53,7 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--attempts", type=int, default=3, help="how many times any one step may run (default 3)")
     sub.add_argument("--kind", choices=operations.run_kinds(), default="change",
                      help="change (the default, tests first), or a tidy that must not alter behaviour:"
-                          " tidy-tests holds the code still, tidy-code holds the tests still")
+                          " tidy-tests holds the code still, tidy-code holds the tests still; or a spike,"
+                          " a question answered by a throwaway probe")
 
     with_run(command("plan", plan, "Show the current plan.")).add_argument("--json", action="store_true")
     with_run(command("approve", approve, "Approve the waiting plan; the rest runs unattended."))

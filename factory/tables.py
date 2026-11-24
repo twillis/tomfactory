@@ -5,7 +5,7 @@ change what the factory does, change a table. Nothing here reads or writes anyth
 """
 from dataclasses import replace
 
-from factory.workflow import END_ACCEPTED, GRADES, End, Rework, Step, WAIT
+from factory.workflow import END_ACCEPTED, END_AS_FOUND, FOUND, GRADES, End, Rework, Step, WAIT
 
 # ---- the plain table: a change, test first ----
 
@@ -186,6 +186,46 @@ TIDY_CODE = _tidy(Step("tidy_code", "agent", persona="code_writer", capabilities
                        envelope={"summary": "text", "files_changed": "list"}))
 
 
+# ---- a spike: a run whose product is an answer, not a change (FR-113 to FR-118) ----
+# No wait for approval: the orchestrator shows the operator the question before it starts. None of the change
+# cycle's gates: no test that fails first, no test budget or line length, no architect, no documenter. The probe
+# is on the spike's own branch, which is never merged; the run ends answered or inconclusive, as its findings say.
+
+SPIKE = "spike"
+
+SPIKE_STEPS: list[Step] = [
+    Step("spike_plan", "agent", persona="spike", on_pass="probe",
+         inputs=("request", "run_kind", "constitution", "ideals", "failure", "test_paths", "probe_command"),
+         envelope={"plan": "text", "question": "text", "guess": "text", "yes": "text", "no": "text",
+                   "cannot_tell": "text"}),
+
+    # Committed as soon as it is written, so the probe is on the branch whatever happens to it next.
+    Step("probe", "agent", persona="spike", capabilities="read+edit", may_change="checkout", on_pass="run_probe",
+         commit_after=True,
+         inputs=("request", "plan", "test_paths", "probe_command", "failure"),
+         envelope={"summary": "text", "probe_file": "text", "files_changed": "list"}),
+
+    # The factory runs the probe; no agent runs anything (FR-114). One that cannot run is mended once.
+    Step("run_probe", "code", on_pass="write_findings", checks=("probe_ran",),
+         on_fail=Rework("probe", at_most=2, then=End("inconclusive", "the probe could not be run, mended once"))),
+
+    # The note is checked to quote only what is on the branch and what the probe printed (FR-115).
+    Step("write_findings", "agent", persona="spike", capabilities="read+edit", may_change="docs", on_pass="spike_retro",
+         checks=("findings_quoted",), commit_after=True,
+         on_fail=Rework("write_findings", at_most=2, then=End("inconclusive", "the findings note was sent back twice")),
+         inputs=("request", "plan", "diff", "probe_output", "failure", "docs_paths", "run_name", "branch"),
+         envelope={"summary": "text", "outcome": FOUND, "reason": "text"}),
+
+    # Advice, never a gate: was the question answered for what it cost (FR-118).
+    Step("spike_retro", "agent", persona="facilitator", capabilities="read+edit", may_change="docs",
+         on_pass="finish", commit_after=True, advisory=True, model="light",
+         inputs=("request", "run_facts", "spike_answer", "friction", "operator_feedback", "docs_paths", "run_name"),
+         envelope={"summary": "text"}),
+
+    Step("finish", "code", on_pass=END_AS_FOUND),
+]
+
+
 # ---- the kinds of run: each one's table, without spec kit and with it ----
 # What the planner and reviewer are told about each kind is in prompts/run_kinds/<kind>.md.
 
@@ -193,8 +233,9 @@ RUN_KINDS = {
     "change": (STEPS, SPEC_KIT_STEPS),
     "tidy-tests": (TIDY_TESTS, TIDY_TESTS),
     "tidy-code": (TIDY_CODE, TIDY_CODE),
+    SPIKE: (SPIKE_STEPS, SPIKE_STEPS),
 }
-TABLES = [STEPS, SPEC_KIT_STEPS, SPRINT_STEPS, TIDY_TESTS, TIDY_CODE]
+TABLES = [STEPS, SPEC_KIT_STEPS, SPRINT_STEPS, TIDY_TESTS, TIDY_CODE, SPIKE_STEPS]
 CYCLES = ("auto", "sprint")
 
 
@@ -247,7 +288,8 @@ def overridden(table, overrides) -> list[Step]:
 
 
 def table_for(spec_kit, run_kind, cycle="auto") -> list[Step]:
-    """The steps a run goes through: chosen by its kind, its codebase's cycle, and whether it uses spec kit."""
+    """The steps a run goes through: chosen by its kind, its codebase's cycle, and whether it uses spec kit.
+    A codebase's cycle chooses how a change is made; a tidy or a spike is the same whatever it says."""
     if run_kind not in RUN_KINDS:
         raise ValueError(f"a run is one of: {', '.join(RUN_KINDS)}; not {run_kind!r}")
     if cycle not in CYCLES:

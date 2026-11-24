@@ -49,6 +49,10 @@ class TargetConfig:
     coverage_report: str = _setting("", "the coverage.py JSON report its test command writes; \"\" if not measured")
     coverage_floor: float = _setting(0.0, "a smell when coverage after a run is below this percent; 0 for none")
     coverage_drop: float = _setting(0.0, "a smell when a run lowers coverage by more than this many points; 0 for none")
+    probe_command: str = _setting("", "how a spike's probe is run, contained, {path} its file; \"\" means no spikes")
+    probe_cannot_run_exit_codes: tuple = _setting((), "a probe exiting with one of these never ran;"
+                                                  " [] means no_tests_exit_code alone")
+    spike_budget_dollars: float = _setting(5.0, "a spike ends inconclusive once it has cost this much; 0 for no cap")
     climbs_to: str = _setting("standard", "the highest grade a retried step climbs to (FR-109)")
     # [steps.<name>] tables: per-step overrides (FR-112). Not written into a new codebase's file: none are needed.
     steps: dict = field(default_factory=dict, metadata={"says": "", "unlisted": True})
@@ -83,7 +87,7 @@ def read_target_config(target, commit) -> TargetConfig:
     except tomllib.TOMLDecodeError as error:
         raise ConfigError(f"{target}/.factory.toml is not valid TOML: {error}") from error
     known = {name: values[name] for name in TargetConfig.__dataclass_fields__ if name in values}
-    for name in ("test_paths", "docs_paths", "tools"):
+    for name in ("test_paths", "docs_paths", "tools", "probe_cannot_run_exit_codes"):
         if name in known:
             known[name] = tuple(known[name])
     if known.get("climbs_to", "standard") not in ("light", "middle", "standard", "strongest"):
@@ -112,6 +116,16 @@ def setup_argv(settings: TargetConfig) -> list[str]:
 
 def tests_readable_argv(settings: TargetConfig) -> list[str]:
     return _argv(settings.tests_readable_command)
+
+
+def cannot_run_codes(settings: TargetConfig) -> tuple:
+    """The exit codes that mean a spike's probe never ran (FR-114): the codebase's list, else its "no tests" code."""
+    return settings.probe_cannot_run_exit_codes or (settings.no_tests_exit_code,)
+
+
+def probe_argv(settings: TargetConfig, path) -> list[str]:
+    """A spike's probe command, with {path} its file (FR-114). Replaced word by word, so a path stays one word."""
+    return [word.replace("{path}", str(path)) for word in _argv(settings.probe_command)]
 
 
 def codebase_home(target) -> pathlib.Path:

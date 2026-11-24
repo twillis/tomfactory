@@ -13,14 +13,16 @@ from pathlib import PurePath
 
 KINDS = ("agent", "code")                               # of step
 CAPABILITIES = ("read", "read+edit")
-SCOPES = ("nothing", "tests", "not_tests", "docs", "spec")      # what a step may change in the checkout
+SCOPES = ("nothing", "tests", "not_tests", "docs", "spec", "checkout")      # what a step may change in the checkout
 GRADES = ("light", "middle", "standard", "strongest")    # how strong a model an agent step is given, weakest first (FR-088)
 CLIMBS_TO = "standard"      # a retry climbs a grade at a time, never past this one unless the step starts above it (FR-109)
-OUTCOMES = ("accepted", "rejected", "needs-me")
+FOUND = ("answered", "inconclusive")       # how a spike ends, and only a spike (FR-116)
+OUTCOMES = ("accepted", "rejected", "needs-me", *FOUND)
 FAILURES = ("timeout", "error", "guard", "malformed", "check", "question")     # how a step can fail
 ACCEPT = "accept"               # the verdict that passes a judging step; every other verdict is a route
 WAIT = "WAIT"                   # as an on_pass: stop and wait for the operator
 END_ACCEPTED = "END_ACCEPTED"   # as an on_pass: the run is finished and accepted
+END_AS_FOUND = "END_AS_FOUND"   # as an on_pass: the run ends as its findings say, answered or inconclusive (FR-116)
 
 
 # ---- what a step's execution produced, and where the run goes next ----
@@ -56,12 +58,12 @@ class StepResult:
 class Rework:
     """Run a step again (an earlier one, or the same one), telling it what failed.
 
-    With `at_most`, once `step` has run that many times this route goes on to the step named
-    `then` instead: the finding is recorded, not chased.
+    With `at_most`, once `step` has run that many times this route goes on to `then` instead: the
+    step it names, the finding recorded and not chased; or an End, the run boxed (FR-114).
     """
     step: str
     at_most: int | None = None
-    then: str | None = None
+    then: "str | End | None" = None
 
 
 @dataclass(frozen=True)
@@ -219,11 +221,12 @@ def grade_for(step, tries, climbs_to=CLIMBS_TO) -> str:
 
 # ---- what happens next ----
 
-def next_step(step, result, attempts, limit) -> Run | Wait | Ask | Replan | End:
+def next_step(step, result, attempts, limit, found=None) -> Run | Wait | Ask | Replan | End:
     """Given how a step went, what the run does now. The whole decision logic, in order.
 
     `attempts` maps a step's name to how many times it has run in this run. An attempt is
     one execution of a step, whatever caused it; no step runs more than `limit` times.
+    `found` is what a spike's findings said, its outcome and reason, for a step that ends the run as found.
     """
     note = result.failed_check.note if result.failed_check else ""
     if result.failure == "guard":
@@ -244,6 +247,8 @@ def next_step(step, result, attempts, limit) -> Run | Wait | Ask | Replan | End:
         route = step.routes.get(result.verdict) or step.on_fail     # a judging step's verdict says where
         if isinstance(route, Rework):
             if route.at_most and attempts.get(route.step, 0) >= route.at_most:
+                if isinstance(route.then, End):         # boxed: had its tries, the run ends saying why
+                    return End(route.then.outcome, f"{route.then.reason}: {note}")
                 return Run(route.then)
             return _rework(route.step, step, note, attempts, limit)
         if isinstance(route, Replan):
@@ -259,7 +264,34 @@ def next_step(step, result, attempts, limit) -> Run | Wait | Ask | Replan | End:
     if step.on_pass == END_ACCEPTED:
         return End("accepted", "the tests pass and the review found the result matches the request,"
                                " the plan and the ideals")
+    if step.on_pass == END_AS_FOUND:
+        return as_found(found)
     return Run(step.on_pass)
+
+
+# ---- a spike: a run whose product is an answer (FR-113 to FR-117) ----
+
+def ends_as_found(steps) -> bool:
+    """Is this a spike's table: one whose run ends as its findings say, never accepted or rejected?"""
+    return any(entry.on_pass == END_AS_FOUND for entry in steps)
+
+
+def as_found(found) -> End:
+    """How a spike ends: as its findings said, with their reason (FR-116)."""
+    outcome = (found or {}).get("outcome")
+    if outcome not in FOUND:
+        return End("needs-me", "the spike came to its end with no findings that say answered or inconclusive")
+    return End(outcome, str(found.get("reason") or "").strip() or f"the findings say {outcome}, and give no reason")
+
+
+def over_budget(steps, step, spent, cap, done) -> End | None:
+    """A spike is boxed by a budget (FR-117): before each of its agent steps, at or over the cap (0 for none) it
+    ends inconclusive, saying what it had. `spent` is what the run's steps have cost; `done`, the steps that passed."""
+    if not ends_as_found(steps) or step.kind != "agent" or not cap or spent < cap:
+        return None
+    had = ", ".join(dict.fromkeys(done)) or "nothing"
+    return End("inconclusive", f"the spike reached its budget of ${cap:.2f}, with ${spent:.2f} spent, before the"
+                               f" {step.name} step; it had done: {had}")
 
 
 def _rework(target, step, note, attempts, limit) -> Run | End:
@@ -270,14 +302,15 @@ def _rework(target, step, note, attempts, limit) -> Run | End:
     return Run(target)
 
 
-def after_wait(decision, step) -> Run | End:
-    """What the operator's decision on a waiting step leads to."""
+def after_wait(decision, step, steps=()) -> Run | End:
+    """What the operator's decision on a waiting step, in this table, leads to. A spike abandoned is
+    inconclusive: it is never rejected (FR-116)."""
     if decision == "approve":
         return Run(step.on_approve)
     if decision == "revise":
         return Run(step.revise_from or step.name)       # back to the start of the stage that is waiting
     if decision == "abandon":
-        return End("rejected", "abandoned by operator")
+        return End("inconclusive" if ends_as_found(steps) else "rejected", "abandoned by operator")
     raise ValueError(f"a waiting run can be approved, revised or abandoned; not {decision!r}")
 
 
