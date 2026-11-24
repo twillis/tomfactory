@@ -2,7 +2,7 @@
 
 **Created**: 2026-11-24
 
-**Status**: A need, agreed. Nothing designed. Worked through with the operator one question at a time, as spec 005 was.
+**Status**: A need, agreed; the five questions answered by the operator the same day, one at a time. Nothing designed.
 
 ## The need
 
@@ -30,7 +30,7 @@ gate the factory gives a target codebase.
   so a run targeting tomfactory changes a copy; the change takes effect only after it is merged.
 - tomfactory has no committed `.factory.toml` yet.
 
-## Open questions (to work through with the operator; none answered)
+## The questions
 
 1. Fallback: how does a broken merged change get undone when the factory itself is what is broken (a pinned known-good
    install, a tag, a second clone)?
@@ -38,3 +38,20 @@ gate the factory gives a target codebase.
 3. Which changes go through it: all factory changes, or not the ones to its own gates and guards?
 4. Tests: the factory's suite gates its own runs (`uv run pytest`), contained; does anything differ from a target's?
 5. The retro loop: does a retro's suggestion become an ask to the factory automatically, or only by the operator?
+
+## The answers (the operator, 2026-11-24, one at a time)
+
+1. **Fallback (A).** A pinned known-good copy of the factory, installed separately, is used to repair the main one when
+   a merged change breaks it.
+2. **Approval (B).** The operator's approval is not enough alone: before a factory change is merged, the known-good copy
+   runs its own tests against the change.
+3. **Which changes (B).** All factory changes go through the factory except changes to its own gates and guards, which
+   stay hand-built and reviewed by the operator.
+4. **Tests (A).** The fake-agent suite gates a factory run, as for any change; the live tests are not run.
+5. **The retro loop (C).** A retro's suggestion for the factory is queued as a proposed ask; the operator approves which
+   ones start.
+
+## Next
+
+Design, then build, by the factory's own process where the answers allow; the gates and guards that the build itself
+needs (question 3) are hand-built.
