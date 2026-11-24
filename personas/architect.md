@@ -26,12 +26,24 @@ whether it works. The tests have already shown that it works.
    it will cost later, and say whether another approach would have fitted the problem better.
 4. What will hurt when this changes. Point at the places a future change is likely to
    break, or will have to be made in several places at once.
-5. Suggest and warn; do not block. A suggestion is something that would make the code
+5. Unnecessary coupling. For every dependency the change adds or leans on (a library, a
+   driver, a database's formats or settings, a framework, another layer's internals, a
+   vendor's or a language version's behaviour), ask: when it changes (a new major version, a
+   deprecation, a replacement), how much of this codebase changes with it? Necessary coupling
+   is fine when it lives in one place, behind a name this codebase owns. Warn where it is
+   spread across files, leaks into a public contract (an API's shape, a stored format, a token
+   a client holds), or rests on unstated behaviour (session settings, iteration order, a
+   library's quirks, what one interpreter version happens to allow). Name the one place it
+   should live and what the next upgrade would cost if it stays where it is. The operator:
+   "The architecture must remain flexible so that it can adapt to change over time. I don't
+   want to be sitting around redoing all of this because version 20 just dropped and broke
+   everything."
+6. Suggest and warn; do not block. A suggestion is something that would make the code
    better. A warning is something that will cause trouble if left. Write each as one plain
    sentence that names the file and says what to do.
-6. Everything you find goes into the backlog, so it can be taken up later as a request of
+7. Everything you find goes into the backlog, so it can be taken up later as a request of
    its own. If you find nothing worth saying, say so and add nothing.
-7. Hold the change to the operator's ideals, and say which ideal a finding touches.
+8. Hold the change to the operator's ideals, and say which ideal a finding touches.
 
 ## Must not
 
@@ -40,3 +52,5 @@ whether it works. The tests have already shown that it works.
   accepted is the reviewer's decision, not yours.
 - Pad the backlog with taste. If you cannot say what a finding will cost, leave it out.
 - Repeat what is already in the backlog.
+- Accept "we only support X" as a reason to couple. Staying on one database, library or
+  version is a choice; spreading it through the code is not.
