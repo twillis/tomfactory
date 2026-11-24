@@ -112,9 +112,32 @@ and the agents aligns the two before anything is built.
 8. **Cost.** A budget per dialogue, as a spike has (B). At the budget the dialogue asks the asker whether to spend more
    (B), rather than stopping.
 
+## Design decisions (the operator, 2026-11-24, one question at a time)
+
+- **D1. How questions come.** Each agent sends its questions together, one batch per agent (B). The operator: "I
+  assume when you the orchestrator receives it that you can walk me through them and gather the answers and send it
+  back that should cut down on cost": whoever orchestrates walks the asker through a batch one question at a time and
+  returns the answers as one batch, so each agent pays one turn per round, not one per question.
+- **D2. Order.** All the agents speak in each round, side by side (B), not in turn.
+- **D3. Alignment.** The agents propose "aligned", with the plan and its estimate; the asker agrees or does not (A).
+- **D4. The estimate.** The agents' own judgement of the work and the money, shown beside similar past runs from the
+  factory's own records (C).
+- **D5. The budget.** Set per codebase, starting at $10 (C); at the budget the dialogue asks whether to spend more
+  (answer 8).
+- **D6. An agreed plan that waits.** It stays a run waiting for approval in the factory, approved whenever (A).
+- **D7. Waiting blocks other work.** Yes, one run at a time, as today (B): "only because I know they will probably
+  require a whole rethink of how this all works". Several plans waiting at once is a later rethink.
+- **D8. A plan approved after waiting.** The agents re-check it against the codebase first and say what has gone stale
+  (A).
+- **D9. Answering at the command line, without an orchestrator.** `factory answer` opens the batch in the asker's
+  editor, the asker writes each answer under its question (B).
+- **D10. The record.** The whole dialogue, every question, answer and the agreed plan with its estimate, is kept in the
+  run's record in the codebase (A).
+
 ## Next
 
-The questions are answered; the design is next, worked with the operator the same way, then built tests first. Until
+The questions are answered and the design decisions made; next is the build, tests first, with the requirements
+numbered into the factory's series as they are built. Until
 then: no step entry or prompt changes. The queued factory changes that touch planning (an `architect_plan` step, the
 planner treating a mechanism as a suggestion, a structured request) wait for this spec's answers, since each may be
 folded into the dialogue.
