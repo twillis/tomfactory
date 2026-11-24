@@ -220,7 +220,7 @@ What it lets the operator do that he cannot today, from bttr_erp's history:
   this, the grades become the factory's defaults and each project's choice; a cost experiment is one committed line,
   undone by reverting it.
 - **FR-110**: coverage as a smell on `test` was a factory edit; with this, a project that wants it on `tidy_tests` too adds it.
-- **Spec 003 part 2, modes** (FR-311, FR-312): a mode's dials (plan-check rounds, the retro's length) are mostly
+- **Spec 003 part 2, modes** (P-311, P-312): a mode's dials (plan-check rounds, the retro's length) are mostly
   `rework_at_most`, `model` and `advisory`. A mode then becomes a named set of these overrides, not new code. The
   "nannyware design-thinking run, budget about $15" could be tried as a mode without touching the tables.
 - **Timeouts**: bttr_erp's 2400 s is sized for the builder; the light documenter gets the same.

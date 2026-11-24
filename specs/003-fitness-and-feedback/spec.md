@@ -2,7 +2,7 @@
 
 **Created**: 2026-11-23
 
-**Status**: Agreed in conversation; part 1 to be built first. Not run through spec kit.
+**Status**: Agreed in conversation; part 1 to be built first. Not run through spec kit. Its requirements are numbered P-301 onward while they are proposed, and become FR-3nn, each with its tests, when built (constitution S8; renumbered 2026-11-24 because unbuilt FR numbers stopped the whole suite from collecting).
 
 **Input**: The operator, 2026-11-23, reading bttr_erp's retros as the agents' feedback: "Idea... A way to
 evaluate the retros and deal with them from a process tuning side if happy agents fits a fitness function.
@@ -31,7 +31,7 @@ factory itself, and Anthropic (the operator's CLAUDE.md: "Make it a valuable exp
 
 ## Part 1: the scorecard and the suggestion box (build first)
 
-- **FR-301**: After every run, the factory MUST compute a scorecard from the run's record alone and add it to
+- **P-301**: After every run, the factory MUST compute a scorecard from the run's record alone and add it to
   the record, one line per stakeholder:
   - factory: extra attempts per step, test mends, needs-me stops, planned work dropped or left for merge,
     minutes of steps and cost;
@@ -40,26 +40,26 @@ factory itself, and Anthropic (the operator's CLAUDE.md: "Make it a valuable exp
   - operator: minutes the run waited on him, the questions put to him, and his rating once given;
   - Anthropic: the retro's observations about the model's own behaviour (where it helped, where it cost time),
     quoted, for the operator to send or keep.
-- **FR-302**: The scorecard MUST also be appended as a row to a file in the target codebase, so it can be read
+- **P-302**: The scorecard MUST also be appended as a row to a file in the target codebase, so it can be read
   across runs beside the factory changes that landed between them. `docs/friction.csv` in the factory holds
   the history of bttr_erp's runs 18 to 71, computed by hand on 2026-11-23, as its starting point.
-- **FR-303**: The operator MUST be able to rate a run in one command at or after merge (`factory rate <run>
+- **P-303**: The operator MUST be able to rate a run in one command at or after merge (`factory rate <run>
   <1-5> [word]`), and the rating MUST be recorded with the run and in the scorecard file.
-- **FR-304**: No agent step MAY be shown a scorecard, a rating or a weight. The scores judge the work; they are
+- **P-304**: No agent step MAY be shown a scorecard, a rating or a weight. The scores judge the work; they are
   never a target an agent can write toward (the retro is written by a model, so a score it could see it could
   please).
-- **FR-305**: The retro step MUST be given the suggestion box and MUST, for each suggestion it makes, say
+- **P-305**: The retro step MUST be given the suggestion box and MUST, for each suggestion it makes, say
   whether it is new or which theme it continues; it MAY ask again for a declined theme only with a reason the
   decline did not weigh.
-- **FR-306**: The run record MUST end with the merge-time work the run leaves for the operator or the
+- **P-306**: The run record MUST end with the merge-time work the run leaves for the operator or the
   orchestrator (rows of the target's own documents to reword, rulings owed), as a checklist, so that work is
   tracked (suggestion #52).
 
 ## Part 2: modes and dials (after part 1 has been read for a few runs)
 
-- **FR-311**: A target's committed settings MAY name a mode (`mode = "ship"`, the default); a request MAY
+- **P-311**: A target's committed settings MAY name a mode (`mode = "ship"`, the default); a request MAY
   override it (`factory request --mode design`).
-- **FR-312**: Each mode MUST turn dials that change what the factory does, never what an agent is told about
+- **P-312**: Each mode MUST turn dials that change what the factory does, never what an agent is told about
   its score:
 
   | Dial | ship | design | art | research |
@@ -70,7 +70,7 @@ factory itself, and Anthropic (the operator's CLAUDE.md: "Make it a valuable exp
   | budget cap per run (placeholder, the operator sets it) | $10 | $20 | $15 | $30 |
   | what the orchestrator brings the operator | rulings only | design forks with background | rulings and the retro's best | the experiment's result |
 
-- **FR-313**: The scorecard MUST give a weighted total under the run's mode, so a trade made on purpose
+- **P-313**: The scorecard MUST give a weighted total under the run's mode, so a trade made on purpose
   (research mode costs more) reads as such.
 
 ## Part 3: an experiment
@@ -90,6 +90,6 @@ factory itself, and Anthropic (the operator's CLAUDE.md: "Make it a valuable exp
 
 ## Out of scope
 
-- Any score shown to the agents (FR-304).
+- Any score shown to the agents (P-304).
 - Sending anything to Anthropic automatically.
 - Choosing the weights' numbers before part 1 has been read.
