@@ -65,7 +65,7 @@ and the agents aligns the two before anything is built.
 - **The orchestrator made the same mistake in conversation**, turning "how do we make it part of the factory" into a
   four-layer build plan before the need was stated.
 
-## Open questions (to work through with the operator; none answered here)
+## The questions (answered below)
 
 1. **The shape of the dialogue.** One conversation or several rounds? Who speaks first: the agent with its reading of
    the ask and its questions, or the asker? How does the asker answer from the command line, and from Claude Code?
