@@ -48,7 +48,8 @@ its record shows it. What stays with an orchestrator is what genuinely needs one
    factory checks that the Python it tests on is the codebase's floor.
 5. **Why each file changed.** A one-line reason per changed file, traced to the plan; a file that does not trace is a
    reason to stop. Asked for by the operator (above).
-6. **Answering what the record already settles.** In run 95's dialogue most questions were answered from the operator's
+6. **Deleting a file.** Run 95's builder built everything else and stopped, three attempts in a row, because "I have no tool that can delete a file"; the plan said to delete `bttr_erp/repo/named_form.py`. The orchestrator ran `git rm` in the run's checkout, committed it, and resumed. An agent can create and edit a file but cannot remove one, so a plan that deletes always needs a hand.
+7. **Answering what the record already settles.** In run 95's dialogue most questions were answered from the operator's
    earlier answers and the prior art in `knowledge/`; that is the dialogue agents' own job (spec 005's tuning).
 
 **Belongs with the operator; the orchestrator only relays it**
@@ -65,7 +66,7 @@ its record shows it. What stays with an orchestrator is what genuinely needs one
 
 ## Open questions (to work through with the operator; none answered)
 
-1. Which of items 1 to 6 first, and is any of them the orchestrator's after all?
+1. Which of items 1 to 7 first, and is any of them the orchestrator's after all?
 2. Measuring: should the factory run measurements itself, contained like tests, from a measure an agent asks for? Who
    writes the measuring code, and who checks it measures what was asked?
 3. Verifying: what does "checked against the running system" mean per kind of run (a tidy: behaviour identical; a change:
