@@ -5,7 +5,7 @@ change what the factory does, change a table. Nothing here reads or writes anyth
 """
 from dataclasses import replace
 
-from factory.workflow import END_ACCEPTED, END_AS_FOUND, FOUND, GRADES, End, Rework, Step, WAIT
+from factory.workflow import END_ACCEPTED, END_AS_FOUND, FOUND, GRADES, End, Replan, Rework, Step, WAIT
 
 # ---- the plain table: a change, test first ----
 
@@ -139,23 +139,45 @@ _converge = next(entry for entry in SPEC_KIT_STEPS if entry.name == "converge")
 _retro = next(entry for entry in SPEC_KIT_STEPS if entry.name == "retro")
 
 
-# ---- the sprint: one plan from the codebase's standing documents, one approval, then to the end (FR-093) ----
+# ---- a planning dialogue: from an ask to an agreed plan, with the asker (FR-119 to FR-126) ----
+# Each round every speaker speaks, in this order, each with its own batch for the asker: questions, measurements,
+# and (the architect and the plan check) points for the planner, on its plan of this round. The round's end is the
+# one wait: for the asker's answers, or for agreement to the plan the planner proposed aligned; then approval.
+
+_SPEAKS = {"questions": "list", "measure": "list"}
+_HEARS = ("request", "run_kind", "round", "dialogue", "constitution", "ideals", "failure")
+
+
+def _speaker(name, persona, on_pass, inputs=(), envelope=None, **entry) -> Step:
+    return Step(name, "agent", persona=persona, on_pass=on_pass, dialogue=True, may_ask=False, on_fail=Rework(name),
+                inputs=(*_HEARS, *inputs), **entry,
+                envelope={**_SPEAKS, **({"points": "list"} if envelope is None else envelope)})
+
+
+DIALOGUE = [
+    _speaker("dialogue_analyst", "analyst", "dialogue_planner", envelope={}),
+    # It proposes aligned with the plan and an estimate, or asks something: its own check holds it to one (FR-122).
+    _speaker("dialogue_planner", "planner", "dialogue_architect", checks=("dialogue_moves",),
+             smells=("plan_lines_within_length",),
+             inputs=("draft", "similar_runs", "test_paths", "docs_paths"),
+             envelope={"aligned": ("yes", "no"), "how_much": "text", "plan": "text", "estimate": "text",
+                       "declined": "list", "ideals_addressed": "list", "conflicts": "list"}),
+    _speaker("dialogue_architect", "architect", "dialogue_check", inputs=("draft", "docs_paths")),
+    _speaker("dialogue_check", "reviewer", WAIT, inputs=("draft", "test_paths", "docs_paths"),
+             on_approve="baseline", on_moved="recheck_plan", revise_from="dialogue_analyst"),
+    # Approved after the codebase moved: the plan is read against it as it is now; stale, back to the dialogue.
+    Step("recheck_plan", "agent", persona="reviewer", on_pass="baseline", on_fail=Rework("recheck_plan"),
+         routes={"stale": Replan("dialogue_analyst")},
+         inputs=("request", "plan", "codebase_moved", "constitution", "ideals", "test_paths", "docs_paths",
+                 "failure"),
+         envelope={"verdict": "verdict", "findings": "list"}),
+]
+
+
+# ---- the sprint: a dialogue from the codebase's standing documents, one approval, then to the end (FR-093) ----
 
 SPRINT_STEPS: list[Step] = [
-    replace(_plain["plan"], on_pass="check_plan", on_approve=None),
-    # Read before the one approval: notes for the operator, never a gate (FR-095).
-    # What it finds goes to the planner, who amends the plan once before the operator sees it (FR-104).
-    Step("check_plan", "agent", persona="reviewer", on_pass=WAIT, on_approve="baseline", revise_from="plan",
-         routes={"amend": Rework("amend_plan")},
-         inputs=("request", "plan", "constitution", "ideals", "failure", "test_paths", "docs_paths",
-                 "planning_answers"),
-         envelope={"verdict": "verdict", "findings": "list"}),
-    Step("amend_plan", "agent", persona="planner", on_pass=WAIT, on_approve="baseline", revise_from="plan",
-         smells=("plan_lines_within_length",), on_fail=Rework("amend_plan"),
-         inputs=("request", "plan", "plan_findings", "constitution", "ideals", "failure", "test_paths",
-                 "docs_paths", "planning_answers"),
-         envelope={"plan": "text", "taken": "list", "declined": "list", "ideals_addressed": "list",
-                   "conflicts": "list"}),
+    *DIALOGUE,
     _plain["baseline"], _plain["write_tests"], _plain["red"], _plain["build"], _plain["mend_tests"],
     _plain["test"], _plain["architecture_review"],
     replace(_plain["document"], on_pass="converge"),
@@ -168,22 +190,24 @@ SPRINT_STEPS: list[Step] = [
 # The tests must pass before (baseline) and after (test). One side is held still: tidying the
 # tests may not touch the code, and tidying the code may not touch the tests.
 
-def _tidy(step: Step) -> list[Step]:
-    return [_plain["plan"], replace(_plain["baseline"], on_pass=step.name), step,
+def _tidy(step: Step, planning=(_plain["plan"],)) -> list[Step]:
+    return [*planning, replace(_plain["baseline"], on_pass=step.name), step,
             replace(_plain["test"], on_pass="review", on_fail=Rework(step.name)),
             replace(_plain["review"], routes={"reject": Rework(step.name)}),    # a rejection guides another try
             _plain["finish"]]
 
 
-TIDY_TESTS = _tidy(Step("tidy_tests", "agent", persona="test_writer", capabilities="read+edit",
-                        may_change="tests", on_pass="test", smells=("lines_within_length",),
-                        inputs=("request", "plan", "test_paths", "failure"),
-                        envelope={"summary": "text", "removed": "list", "kept": "list"}))
-
-TIDY_CODE = _tidy(Step("tidy_code", "agent", persona="code_writer", capabilities="read+edit",
-                       may_change="not_tests", on_pass="test", smells=("lines_within_length",),
-                       inputs=("request", "plan", "constitution", "ideals", "failure"),
-                       envelope={"summary": "text", "files_changed": "list"}))
+_tidy_tests = Step("tidy_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
+                   on_pass="test", smells=("lines_within_length",),
+                   inputs=("request", "plan", "test_paths", "failure"),
+                   envelope={"summary": "text", "removed": "list", "kept": "list"})
+_tidy_code = Step("tidy_code", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
+                  on_pass="test", smells=("lines_within_length",),
+                  inputs=("request", "plan", "constitution", "ideals", "failure"),
+                  envelope={"summary": "text", "files_changed": "list"})
+TIDY_TESTS, TIDY_CODE = _tidy(_tidy_tests), _tidy(_tidy_code)
+# On a sprint codebase a tidy is planned in the dialogue too; the agents say how little it needs (FR-126).
+SPRINT_TIDY_TESTS, SPRINT_TIDY_CODE = _tidy(_tidy_tests, DIALOGUE), _tidy(_tidy_code, DIALOGUE)
 
 
 # ---- a spike: a run whose product is an answer, not a change (FR-113 to FR-118) ----
@@ -235,7 +259,8 @@ RUN_KINDS = {
     "tidy-code": (TIDY_CODE, TIDY_CODE),
     SPIKE: (SPIKE_STEPS, SPIKE_STEPS),
 }
-TABLES = [STEPS, SPEC_KIT_STEPS, SPRINT_STEPS, TIDY_TESTS, TIDY_CODE, SPIKE_STEPS]
+SPRINT = {"change": SPRINT_STEPS, "tidy-tests": SPRINT_TIDY_TESTS, "tidy-code": SPRINT_TIDY_CODE}    # FR-119
+TABLES = [STEPS, SPEC_KIT_STEPS, SPRINT_STEPS, TIDY_TESTS, TIDY_CODE, SPIKE_STEPS, SPRINT_TIDY_TESTS, SPRINT_TIDY_CODE]
 CYCLES = ("auto", "sprint")
 
 
@@ -289,11 +314,11 @@ def overridden(table, overrides) -> list[Step]:
 
 def table_for(spec_kit, run_kind, cycle="auto") -> list[Step]:
     """The steps a run goes through: chosen by its kind, its codebase's cycle, and whether it uses spec kit.
-    A codebase's cycle chooses how a change is made; a tidy or a spike is the same whatever it says."""
+    A sprint codebase plans a change or a tidy in a dialogue (FR-119); a spike is the same whatever it says."""
     if run_kind not in RUN_KINDS:
         raise ValueError(f"a run is one of: {', '.join(RUN_KINDS)}; not {run_kind!r}")
     if cycle not in CYCLES:
         raise ValueError(f"a codebase's cycle is one of: {', '.join(CYCLES)}; not {cycle!r}")
-    if cycle == "sprint" and run_kind == "change":
-        return SPRINT_STEPS
+    if cycle == "sprint" and run_kind in SPRINT:
+        return SPRINT[run_kind]
     return RUN_KINDS[run_kind][bool(spec_kit)]

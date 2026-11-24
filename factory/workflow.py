@@ -132,6 +132,9 @@ class Step:
     timeout: int | None = None          # seconds; None means the target's step_timeout_seconds
     ideals_stop: bool = True            # a judging step: a broken ideal stops the run; False reports it only
     model: str = "standard"             # agent steps: one of GRADES; which model that is, only agent.py knows
+    dialogue: bool = False              # agent steps: it speaks in a planning dialogue, its reply a batch (FR-120)
+    on_moved: str | None = None         # a dialogue's waiting step: where approval leads when the codebase has
+                                        # moved since the dialogue read it (FR-125)
 
     def __post_init__(self):
         def wrong(problem):
@@ -148,6 +151,8 @@ class Step:
             wrong(f"model must be one of {GRADES}")
         if (self.on_pass == WAIT) != bool(self.on_approve):
             wrong("a waiting step, and only a waiting step, says where approval leads (on_approve)")
+        if self.on_moved and self.on_pass != WAIT:
+            wrong("only a waiting step says where approval leads when the codebase has moved (on_moved)")
         if bool(self.routes) != ("verdict" in self.envelope.values()):
             wrong("a judging step, or any step that gives a verdict, has routes, and its envelope has a verdict;"
                   " other steps have neither")
@@ -294,6 +299,38 @@ def over_budget(steps, step, spent, cap, done) -> End | None:
                                f" {step.name} step; it had done: {had}")
 
 
+# ---- a planning dialogue: rounds, from an ask to an agreed plan (FR-119 to FR-126) ----
+
+def round_outcome(said, points_in_a_row, limit) -> str:
+    """How a round of the dialogue ends, from every speaker's batch in it (FR-120, FR-122).
+
+    "questions": a speaker asked the asker something, or asked for a measurement; the run waits for the answers.
+    "points": only points for one another were raised, which the artifacts settle; the agents go round again at
+    once. "stuck": the same, `limit` rounds in a row; the asker is shown the points. "aligned": nobody raised
+    anything, so the planner proposed aligned (its own check makes it ask otherwise); the asker is asked to agree.
+    """
+    if any(batch.get("questions") or batch.get("measure") for batch in said):
+        return "questions"
+    if any(batch.get("points") for batch in said):
+        return "stuck" if points_in_a_row + 1 >= limit else "points"
+    return "aligned"
+
+
+def after_round(outcome, first) -> Run | Wait:
+    """Where a round leads: round again at once, from its first speaker; or wait for the asker."""
+    return Run(first) if outcome == "points" else Wait()
+
+
+def dialogue_over_budget(spent, cap) -> bool:
+    """Has the dialogue spent its budget since the asker last said to spend more (FR-124)? 0 is no budget."""
+    return bool(cap) and spent >= cap
+
+
+def spend_more(answer) -> bool | None:
+    """The asker's answer to the budget question: yes, no, or neither (refused, so it is asked again) (FR-124)."""
+    return {"yes": True, "y": True, "a": True, "no": False, "n": False, "b": False}.get(answer.strip().lower())
+
+
 def _rework(target, step, note, attempts, limit) -> Run | End:
     """Run `target` again, unless it has already had every attempt it is allowed."""
     if attempts.get(target, 0) >= limit:
@@ -302,11 +339,12 @@ def _rework(target, step, note, attempts, limit) -> Run | End:
     return Run(target)
 
 
-def after_wait(decision, step, steps=()) -> Run | End:
+def after_wait(decision, step, steps=(), moved=False) -> Run | End:
     """What the operator's decision on a waiting step, in this table, leads to. A spike abandoned is
-    inconclusive: it is never rejected (FR-116)."""
+    inconclusive: it is never rejected (FR-116). A plan agreed in a dialogue and approved after the codebase
+    has moved is re-checked against it first (FR-125)."""
     if decision == "approve":
-        return Run(step.on_approve)
+        return Run(step.on_moved if moved and step.on_moved else step.on_approve)
     if decision == "revise":
         return Run(step.revise_from or step.name)       # back to the start of the stage that is waiting
     if decision == "abandon":

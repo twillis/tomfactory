@@ -55,7 +55,8 @@ CREATE TABLE plans (
     ideals_addressed  JSON TEXT NOT NULL,
     conflicts         JSON TEXT NOT NULL,
     comment           TEXT,
-    decision          TEXT    NOT NULL CHECK (decision IN ('pending','approved','revised','abandoned')),
+    decision          TEXT    NOT NULL CHECK (decision IN ('pending','agreed','approved','revised','abandoned',
+                                                       'stale')),   -- version 6: a dialogue's plan (FR-122, FR-125)
     created_at        TEXT    NOT NULL,
     PRIMARY KEY (run_id, version)
 );
@@ -95,7 +96,9 @@ CREATE TABLE questions (
     answer       TEXT,
     answered_by  TEXT    CHECK (answered_by IN ('lead','operator')),
     asked_at     TEXT    NOT NULL,
-    answered_at  TEXT
+    answered_at  TEXT,
+    round        INTEGER,                    -- version 6: the dialogue's round it was asked in (FR-120)
+    measure      BOOLEAN NOT NULL DEFAULT 0  -- version 6: it asks for a measurement
 );
 CREATE INDEX events_by_run ON events (run_id, id);
 CREATE INDEX steps_by_run  ON steps  (run_id, id);

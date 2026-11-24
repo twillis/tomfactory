@@ -22,7 +22,8 @@ import signal
 import time
 from dataclasses import asdict, dataclass, replace
 
-from factory import agent, checks, config, notify, own_files, proc, records, run_record, sandbox, speckit, tables, workflow, workspace
+from factory import (agent, checks, config, dialogue, notify, own_files, proc, records, run_record, sandbox, speckit,
+                     tables, workflow, workspace)
 from factory.config import under
 from factory.workflow import Ask, CheckResult, End, Replan, StepResult, Wait
 from factory.workspace import Workspace
@@ -72,11 +73,21 @@ def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) ->
             if isinstance(then, End):
                 end_run(store, run_id, then.outcome, then.reason)
                 return
+            if isinstance(then, Wait) and step.dialogue:      # a round has ended (FR-120)
+                then = dialogue.close_round(store, run, steps, settings)
+                if isinstance(then, Wait):
+                    records.await_operator(store, run_id)
+                    now = dialogue.waiting(store, store.get("runs", run_id))
+                    tell(store, run_id, f"Run {run_id}: {now['says']}", " ".join(run.request.split()[:12]))
+                    return
             if isinstance(then, Wait):
                 wait_for_operator(store, run, step, envelope or {})
                 return
             if isinstance(then, Replan):        # the requirement changed: back to planning, build set aside
                 set_aside(store, run, checkout)
+                records.set_plan_aside(store, run_id, result.failed_check.note if result.failed_check else "")
+                records.set_state(store, run_id, "planning", current_step=then.step)
+                continue
             if isinstance(then, Ask) and then.measure:      # the lead reads documents; it cannot measure (FR-100)
                 records.await_operator(store, run_id)
                 tell(store, run_id, f"Run {run_id}: a measurement is asked for", then.question)
@@ -187,6 +198,8 @@ def prompt(doing, prompts_dir) -> str:
         kit = speckit.prepare(step.speckit, doing.checkout, run.request)
         parts.append(fill(_fragment(prompts_dir, "speckit"), {"speckit_instructions": kit["instructions"],
                                                              "speckit_context": json.dumps(kit["context"], indent=2)}))
+    if step.dialogue:           # how the dialogue works, for every speaker in it (FR-129)
+        parts.append(_fragment(prompts_dir, "dialogue"))
     if step.may_ask:            # every agent that may ask is told how, and what it was answered
         earlier = doing.store.query("questions", {"run_id": run.id, "step": step.name})
         answers = "\n\n".join(f"You asked: {q.question}\nThe {q.answered_by} answered: {q.answer}"
@@ -407,14 +420,10 @@ def _planning_answers(src):
                        for q in answered)
 
 
-def _checked(produced_by) -> dict:
-    """What the plan check found most recently, as it recorded it: the last reply that holds findings."""
-    checks = [s.produced for s in produced_by if isinstance(s.produced, dict) and "findings" in s.produced]
-    return checks[-1] if checks else {}
-
-
-def _plan_findings(src):
-    return "\n".join(f"- {item}" for item in _checked(src.finished).get("findings") or [])
+def _codebase_moved(src):
+    """What the codebase gained since the dialogue read it, for the re-check of a plan approved after (FR-125)."""
+    moved = src.store.query("events", {"run_id": src.run.id, "kind": "restarted_from"})
+    return src.checkout.moved(moved[-1].payload["from"], moved[-1].payload["to"]) if moved else ""
 
 
 def _probe_output(src):
@@ -454,7 +463,12 @@ INPUTS = {
     "operator_feedback": _operator_feedback,
     "findings": _findings,
     "planning_answers": _planning_answers,
-    "plan_findings": _plan_findings,
+    "round": lambda src: dialogue.round_now(src.store, src.run.id),
+    "dialogue": lambda src: dialogue.transcript(src.store, src.run) or "Nothing has been said yet.",
+    "draft": lambda src: dialogue.draft(src.store, src.run.id),
+    "similar_runs": lambda src: "\n".join(f"- {line}" for line in dialogue.similar_runs(src.store, src.run))
+                                or "No run of this kind on this codebase has been accepted yet.",
+    "codebase_moved": _codebase_moved,
     "run_name": lambda src: run_record.stem(src.run),
     "branch": lambda src: src.run.branch,
     "probe_command": lambda src: src.settings.probe_command,
@@ -485,7 +499,7 @@ def validate(table, personas_dir=None, prompts_dir=None) -> None:
     names = {step.name for step in table}
     problems = []
     for step in [*table, tables.LEAD]:
-        leads = [step.on_pass, step.on_approve, step.revise_from, step.on_fail, *step.routes.values()]
+        leads = [step.on_pass, step.on_approve, step.on_moved, step.revise_from, step.on_fail, *step.routes.values()]
         for target in leads:
             target = getattr(target, "step", target)
             if isinstance(target, str) and target and target not in (workflow.WAIT, workflow.END_ACCEPTED,
@@ -530,24 +544,18 @@ def wait_for_operator(store, run, step, envelope) -> None:
     if "findings" in envelope:
         found = envelope["findings"] or ["nothing found"]
         text += "\n\n## Findings from the plan check\n\n" + "\n".join(f"- {item}" for item in found)
-    if "taken" in envelope or "declined" in envelope:          # amended by the planner from the check (FR-104)
-        found = _checked(store.query("steps", {"run_id": run.id})).get("findings") or []
-        text += _listed("Findings from the plan check", found)
-        text += _listed("Taken into the plan", envelope.get("taken"))
-        text += _listed("Declined by the planner, with its reason", envelope.get("declined"))
     records.add_plan(store, run.id, text, planned.get("ideals_addressed") or [], planned.get("conflicts") or [])
     records.await_operator(store, run.id)
     tell(store, run.id, f"Run {run.id}: {step.name} ready — waiting for you", " ".join(run.request.split()[:12]))
 
 
-def _listed(heading, items) -> str:
-    return f"\n\n## {heading}\n\n" + "\n".join(f"- {item}" for item in (items or ["none"]))
-
-
 def set_aside(store, run, checkout) -> None:
-    """Keep what this run built on a side branch, and put its checkout back to what was last approved."""
+    """Keep what this run built on a side branch, and put its checkout back to what was last approved. A plan
+    re-checked and found stale has had nothing built on it, so there is nothing to keep (FR-125)."""
     approvals = store.query("events", {"run_id": run.id, "kind": "approved"})
     back_to = approvals[-1].payload["commit"] if approvals else run.base_commit
+    if checkout.head() == back_to and not checkout.dirty():
+        return
     aside = checkout.set_aside(back_to)
     records.event(store, run.id, "set_aside", f"the build so far is kept on {aside}",
                   {"branch": aside, "back_to": back_to})

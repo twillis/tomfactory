@@ -1,4 +1,4 @@
-"""The plain sprint: one plan, one approval, then build to the end with a sprint review and a retro (FR-093).
+"""The sprint: a dialogue, one approval, then build to the end with a sprint review and a retro (FR-093).
 
 Also the three factory fixes the first retro asked for that apply to every cycle (FR-094).
 """
@@ -6,7 +6,8 @@ import pytest
 
 from factory import config, operations, run_record, tables, workflow
 from factory.store import open_store
-from tests.conftest import ARCHITECT, BUILD, DOCUMENT, PLAN, WRITE_TESTS, commit_files, drive_with, git, to_the_end
+from tests.conftest import (ARCHITECT, BUILD, DOCUMENT, PLAN, WRITE_TESTS, aligned_round, commit_files, drive_with, git,
+                            planner_says, speaks, to_the_end)
 from tests.fake_agent import FakeAgent
 
 ACCEPT = {"envelope": {"verdict": "accept", "unbuilt": [], "details": ["named it hello.py"], "requirement_changes": [],
@@ -15,10 +16,11 @@ RETRO = {"envelope": {"summary": "fine", "worked": ["one approval"], "did_not": 
 
 
 def sprint(**changes):
-    entries = {"plan": {"envelope": PLAN}, "check_plan": {"envelope": {"verdict": "accept", "findings": []}}, "write_tests": WRITE_TESTS, "build": BUILD, "architecture_review": ARCHITECT,
-               "document": DOCUMENT, "converge": ACCEPT, "retro": RETRO}
+    """A whole sprint: one round of the dialogue that ends aligned (FR-119), then the build to the end."""
+    entries = {"write_tests": WRITE_TESTS, "build": BUILD, "architecture_review": ARCHITECT, "document": DOCUMENT,
+               "converge": ACCEPT, "retro": RETRO}
     entries.update(changes)
-    return [entries[n] for n in ("plan", "check_plan", "write_tests", "build", "architecture_review", "document", "converge", "retro")]
+    return [*aligned_round(), *(entries[n] for n in entries)]
 
 
 @pytest.fixture
@@ -34,13 +36,14 @@ def sprint_target(target):
 ])
 def test_a_codebase_chooses_its_cycle(spec_kit, cycle, expected):
     assert tables.table_for(spec_kit, "change", cycle) is expected
-    assert tables.table_for(spec_kit, "tidy-code", cycle) is tables.TIDY_CODE      # a tidy is a tidy whatever the cycle
+    tidy = tables.SPRINT_TIDY_CODE if cycle == "sprint" else tables.TIDY_CODE    # planned in a dialogue (FR-119)
+    assert tables.table_for(spec_kit, "tidy-code", cycle) is tidy
 
 
 @pytest.mark.fr("FR-093")
 def test_the_sprint_waits_once_and_ends_with_the_sprint_review_and_the_retro():
     steps = tables.SPRINT_STEPS
-    assert [s.name for s in steps if s.on_pass == workflow.WAIT] == ["check_plan", "amend_plan"]
+    assert [s.name for s in steps if s.on_pass == workflow.WAIT] == ["dialogue_check"]
     assert [s.name for s in steps][-3:] == ["converge", "retro", "finish"]
     review = workflow.get("converge", steps)
     assert review.speckit == () and not review.ideals_stop and set(review.routes) == {"rework"}
@@ -70,66 +73,66 @@ def test_the_judges_see_the_red_run_as_well_as_the_green(home, sprint_target, fa
 @pytest.mark.fr("FR-094")
 def test_a_resumed_step_is_told_why_it_stopped_and_the_record_is_written_again(home, sprint_target, fake_notify):
     happy = sprint()
-    fake = FakeAgent(happy[:3] + [{"error": "You've hit your 5-hour limit"}])
+    fake = FakeAgent(happy[:5] + [{"error": "You've hit your 5-hour limit"}])
     drive_with(fake)
     run = operations.request("Add a greeting", sprint_target)
-    run = operations.approve(run.id)
+    run = operations.approve(operations.agree(run.id).id)
     assert run.outcome == "needs-me"
-    fake.script = happy[3:]
+    fake.script = happy[5:]
     run = operations.resume(run.id)
-    assert "5-hour limit" in fake.calls[4]["prompt"]                     # the build, run again, knows why
+    assert "5-hour limit" in fake.calls[6]["prompt"]                     # the build, run again, knows why
     assert "Resumed at build" in git(sprint_target, "log", "--format=%s", run.branch)
 
 
 # ---- the plan check, and the record of the tests (FR-095) ----
 
-CHECKED = {"envelope": {"verdict": "amend",
-                        "findings": ["the plan says the CHECK refuses it, but NOT NULL is checked first"]}}
-AMENDED = {"envelope": {"plan": "Add hello.py that prints hello; NOT NULL is checked first.",
-                        "taken": ["NOT NULL is checked first: the plan now says so"], "declined": [],
-                        "ideals_addressed": ["keeps the layers apart"], "conflicts": []}}
+POINT = "the plan says the CHECK refuses it, but NOT NULL is checked first"
+AMENDED = "Add hello.py that prints hello; NOT NULL is checked first."
 
 
 @pytest.mark.fr("FR-095")
-def test_a_sprints_plan_is_checked_before_the_one_approval_and_the_check_is_not_a_gate():
+@pytest.mark.fr("FR-104")
+def test_a_sprints_plan_is_checked_in_the_dialogue_before_the_one_approval_and_the_check_is_not_a_gate():
+    """Since FR-119 the plan check speaks in the dialogue: it raises points on the planner's plan of its round, which
+    the planner takes or declines in the next, in place of the steps check_plan and amend_plan."""
     steps = tables.SPRINT_STEPS
-    check = workflow.get("check_plan", steps)
-    assert workflow.get("plan", steps).on_pass == "check_plan"
-    assert check.on_pass == workflow.WAIT and check.on_approve == "baseline" and check.revise_from == "plan"
-    assert (check.capabilities, check.may_change, check.model) == ("read", "nothing", "standard")
-    assert check.routes == {"amend": workflow.Rework("amend_plan")} and {"plan", "constitution", "ideals"} <= set(check.inputs)
-    amend = workflow.get("amend_plan", steps)                                    # FR-104
-    assert (amend.persona, amend.capabilities, amend.may_change) == ("planner", "read", "nothing")
-    assert amend.on_pass == workflow.WAIT and amend.on_approve == "baseline" and amend.revise_from == "plan"
+    check = workflow.get("dialogue_check", steps)
+    assert (check.persona, check.capabilities, check.may_change, check.model) == ("reviewer", "read", "nothing",
+                                                                                  "standard")
+    assert not check.routes and "points" in check.envelope and {"draft", "constitution", "ideals"} <= set(check.inputs)
+    assert check.on_pass == workflow.WAIT and check.on_approve == "baseline" and check.revise_from == "dialogue_analyst"
+    planner = workflow.get("dialogue_planner", steps)
+    assert (planner.persona, planner.capabilities, planner.may_change) == ("planner", "read", "nothing")
+    assert "declined" in planner.envelope and "plan_lines_within_length" in planner.smells
 
 
 @pytest.mark.fr("FR-095")
-def test_what_the_operator_approves_is_the_planners_plan_with_the_checks_findings(home, sprint_target, fake_notify):
+@pytest.mark.fr("FR-104")
+def test_the_checks_points_go_to_the_planner_who_amends_before_the_asker_is_asked(home, sprint_target, fake_notify):
     script = sprint()
-    fake = FakeAgent(script[:1] + [CHECKED, AMENDED] + script[2:])
+    fake = FakeAgent([speaks(), planner_says(), speaks(points=()), speaks(points=[POINT]),
+                      speaks(), planner_says(AMENDED), speaks(points=()), speaks(points=()), *script[4:]])
     drive_with(fake)
     run = operations.request("Add a greeting", sprint_target)
-    shown = operations.plan(run.id).text                                      # FR-104: amended, then shown once
-    assert shown.startswith(AMENDED["envelope"]["plan"]) and "but NOT NULL is checked first" in shown
-    assert "the plan now says so" in shown
-    amending = next(c["prompt"] for c in fake.calls if c["prompt"].startswith("# Task: amend the plan"))
-    assert PLAN["plan"] in amending and "but NOT NULL is checked first" in amending
-    run = operations.approve(run.id)
+    assert operations.plan(run.id).text.startswith(AMENDED)                    # amended, then shown once
+    amending = fake.calls[5]["prompt"]
+    assert PLAN["plan"] in amending and POINT in amending
+    run = operations.approve(operations.agree(run.id).id)
     assert run.outcome == "accepted"
 
 
 @pytest.mark.fr("FR-095")
 def test_the_record_holds_the_tests_before_and_after_the_build(home, sprint_target, fake_notify):
-    script = sprint()
-    run, _ = to_the_end(sprint_target, FakeAgent(script[:1] + [CHECKED, AMENDED] + script[2:]))
+    run, _ = to_the_end(sprint_target, FakeAgent(sprint()))
     record = git(sprint_target, "show", f"{run.branch}:{run_record.name(run)}")
     tests = record[record.index("## The tests before and after the build"):]
     assert "### Before the build" in tests and "### After the build" in tests and "passed" in tests
 
 
 @pytest.mark.fr("FR-095")
-def test_the_planner_is_asked_to_name_departures_and_a_test_for_every_refusal():
-    text = (config.PROMPTS_DIR / "plan.md").read_text()
+@pytest.mark.parametrize("prompt", ["plan.md", "dialogue_planner.md"])
+def test_the_planner_is_asked_to_name_departures_and_a_test_for_every_refusal(prompt):
+    text = (config.PROMPTS_DIR / prompt).read_text()
     assert "differs from" in text and "every refusal" in text
 
 
@@ -140,7 +143,7 @@ def test_the_plan_check_is_shown_the_plan_it_checks(home, sprint_target, fake_no
     fake = FakeAgent(script)
     drive_with(fake)
     operations.request("Add a greeting", sprint_target)
-    checked = next(c["prompt"] for c in fake.calls if c["prompt"].startswith("# Task: check the plan"))
+    checked = next(c["prompt"] for c in fake.calls if c["prompt"].startswith("# Task: check the plan in the dialogue"))
     assert PLAN["plan"] in checked
 
 
@@ -160,7 +163,7 @@ def test_a_long_test_run_keeps_its_beginning_as_well_as_its_end():
 @pytest.mark.parametrize("prompt, says", [
     ("plan.md", "Do not predict which tests"),
     ("plan.md", "in the form the code will use"),
-    ("check_plan.md", "name the one the plan should take"),
+    ("dialogue_check.md", "name the one the plan should take"),
 ])
 def test_the_prompts_carry_the_retros_lessons(prompt, says):
     assert says in (config.PROMPTS_DIR / prompt).read_text()
@@ -168,10 +171,10 @@ def test_the_prompts_carry_the_retros_lessons(prompt, says):
 
 @pytest.mark.fr("FR-098")
 @pytest.mark.parametrize("prompt, says", [
-    ("check_plan.md", "from that test's own setup"),               # bttr_erp run 56: a file number vouched for by another row
-    ("check_plan.md", "read as a regular expression"),             # run 56: '(3)' passed to match=
-    ("check_plan.md", "every kind of input the rule covers"),      # run 55: a cast measured for VARCHAR, wrong for CHAR
-    ("check_plan.md", "the remedy"),                               # run 54: a refusal whose remedy led to the loss it prevents
+    ("dialogue_check.md", "from that test's own setup"),  # bttr_erp run 56: a file number vouched for by another row
+    ("dialogue_check.md", "read as a regular expression"),  # run 56: '(3)' passed to match=
+    ("dialogue_check.md", "every kind of input the rule covers"),  # run 55: a cast measured for VARCHAR, wrong for CHAR
+    ("dialogue_check.md", "the remedy"),  # run 54: a refusal whose remedy led to the loss it prevents
     ("write_tests.md", "You cannot run the tests"),                # runs 53 to 56: the test writer has no shell
     ("build.md", "test_defect"),
     ("mend_tests.md", "Do not weaken"),
@@ -186,7 +189,8 @@ def test_the_judges_diff_leaves_out_the_runs_own_record(home, sprint_target, fak
     fake = FakeAgent(sprint())
     run, _ = to_the_end(sprint_target, fake)
     assert run.outcome == "accepted"
-    architect = next(call["prompt"] for call in fake.calls if call["persona"].startswith("# Architect"))
+    architect = [call["prompt"] for call in fake.calls if call["persona"].startswith("# Architect")][-1]   # not the
+    # architect of the dialogue, who speaks before anything is built
     final_review = [call["prompt"] for call in fake.calls if call["persona"].startswith("# Reviewer")][-1]
     for prompt in (architect, final_review):
         assert "diff --git a/hello.py" in prompt and "diff --git a/docs/runs/" not in prompt
@@ -194,8 +198,9 @@ def test_the_judges_diff_leaves_out_the_runs_own_record(home, sprint_target, fak
 
 
 @pytest.mark.fr("FR-099")
-@pytest.mark.parametrize("step, needs", [("retro", ("ideals", "constitution")), ("plan", ("test_paths", "docs_paths")),
-                                         ("check_plan", ("test_paths", "docs_paths"))])
+@pytest.mark.parametrize("step, needs", [("retro", ("ideals", "constitution")),
+                                         ("dialogue_planner", ("test_paths", "docs_paths")),
+                                         ("dialogue_check", ("test_paths", "docs_paths"))])
 def test_the_retro_is_given_the_rules_and_the_planners_where_each_step_may_write(step, needs):
     entry = workflow.get(step, tables.SPRINT_STEPS)
     assert set(needs) <= set(entry.inputs)
@@ -206,7 +211,7 @@ def test_the_retro_is_given_the_rules_and_the_planners_where_each_step_may_write
 @pytest.mark.fr("FR-099")
 @pytest.mark.parametrize("prompt, says", [
     ("plan.md", "Give no step a file it may not write"),       # bttr_erp runs 52 and 53: a requirements row, a CHANGELOG
-    ("check_plan.md", "a file that step may not write"),
+    ("dialogue_check.md", "a file that step may not write"),
     ("retro.md", "outranks"),                                  # run 53: a parity ideal against the constitution
     ("architecture_review.md", "backlog-done.md"),             # runs 53, 55, 56: a backlog too long to read or search
 ])
@@ -217,25 +222,25 @@ def test_the_prompts_carry_the_smaller_lessons_of_runs_52_to_56(prompt, says):
 @pytest.mark.fr("FR-102")
 def test_what_was_asked_and_answered_in_planning_reaches_the_plan_check_and_the_final_review(home, sprint_target, fake_notify):
     """bttr_erp run 60: the plan check contradicted a measurement it had never been shown."""
-    asks = {"envelope": {"measure": "What does a read of the period column return?"}}
-    fake = FakeAgent([asks, *sprint()])
-    run, _ = to_the_end(sprint_target, fake)
-    assert run.state == "awaiting_approval" and run.current_step == "plan"
+    asked = "What does a read of the period column return?"
+    script = sprint()
+    fake = FakeAgent([speaks(), planner_says(measure=[asked]), speaks(points=()), speaks(points=()), *script])
+    drive_with(fake)
+    run = operations.request("Add a greeting", sprint_target)
     run = operations.answer(run.id, "A psycopg Range, measured on 18.6.")
-    while run.state == "awaiting_approval":
-        run = operations.approve(run.id)
+    run = operations.approve(operations.agree(run.id).id)
     assert run.outcome == "accepted", run.reason
     reviewers = [call["prompt"] for call in fake.calls if call["persona"].startswith("# Reviewer")]
-    for prompt in (reviewers[0], reviewers[-1]):                    # the plan check, and the final review
-        assert "What does a read of the period column return?" in prompt
-        assert "A psycopg Range, measured on 18.6." in prompt and "operator" in prompt
+    for prompt in (reviewers[1], reviewers[-1]):                    # the plan check of round 2, and the final review
+        assert asked in prompt
+        assert "A psycopg Range, measured on 18.6." in prompt and "operator" in reviewers[-1]
     builder = next(call["prompt"] for call in fake.calls if call["persona"].startswith("# Code writer"))
     assert "A psycopg Range, measured on 18.6." not in builder       # the plan carries what the builder needs
 
 
 @pytest.mark.fr("FR-102")
 @pytest.mark.parametrize("prompt, says", [
-    ("check_plan.md", "the answer stands"),
+    ("dialogue_check.md", "the answer stands"),
     ("converge.md", "the answer stands"),
 ])
 def test_the_judges_are_told_a_measured_answer_outranks_the_request(prompt, says):
@@ -243,23 +248,11 @@ def test_the_judges_are_told_a_measured_answer_outranks_the_request(prompt, says
 
 
 @pytest.mark.fr("FR-104")
-def test_a_finding_the_planner_declines_is_shown_with_its_reason(home, sprint_target, fake_notify):
-    declined = {"envelope": dict(AMENDED["envelope"], plan=PLAN["plan"], taken=[],
-                                 declined=["NOT NULL is checked first: it is not; the column is optional (measured)"])}
-    script = sprint()
-    drive_with(FakeAgent(script[:1] + [CHECKED, declined] + script[2:]))
-    run = operations.request("Add a greeting", sprint_target)
-    shown = operations.plan(run.id).text
-    assert "but NOT NULL is checked first" in shown and "the column is optional (measured)" in shown
-    assert run.state == "awaiting_approval"                                   # the operator still decides
-
-
-@pytest.mark.fr("FR-104")
 @pytest.mark.parametrize("prompt, says", [
-    ("check_plan.md", "what makes it fail before the build"),     # bttr_erp run 62: tests that already passed
-    ("check_plan.md", "a table missing from it"),                  # run 62: a new list with no fallback
-    ("check_plan.md", "module docstring"),                         # run 58: a docstring the change made untrue
-    ("amend_plan.md", "Decline a finding"),
+    ("dialogue_check.md", "what makes it fail before the build"),  # bttr_erp run 62: tests that already passed
+    ("dialogue_check.md", "a table missing from it"),  # run 62: a new list with no fallback
+    ("dialogue_check.md", "module docstring"),  # run 58: a docstring the change made untrue
+    ("dialogue_planner.md", "Decline a point"),
     ("document.md", "docs/runs/"),                                 # runs 62 and 63: the account was overwritten
 ])
 def test_the_prompts_carry_what_runs_58_to_63_taught(prompt, says):
@@ -268,8 +261,8 @@ def test_the_prompts_carry_what_runs_58_to_63_taught(prompt, says):
 
 @pytest.mark.fr("FR-106")
 @pytest.mark.parametrize("prompt, says", [
-    ("check_plan.md", "would still pass if the rule it names were broken"),  # bttr_erp run 69: a key from the wrong table
-    ("check_plan.md", "the whole package"),                         # run 69: a reworded phrase left in another package
+    ("dialogue_check.md", "would still pass if the rule it names were broken"),  # run 69: a key from the wrong table
+    ("dialogue_check.md", "the whole package"),  # run 69: a reworded phrase left in another package
     ("write_tests.md", "Never drop a case the plan lists"),          # run 69: the only case of its kind was dropped
 ])
 def test_the_prompts_carry_what_run_69_taught(prompt, says):

@@ -17,16 +17,17 @@ says otherwise. The orchestrator's other proposals, not taken: The Unreasonable 
 Each is one file in `personas/`, named for the station. The first paragraph under Expertise is the person.
 Every Priorities and Must not is word for word what it was before the hiring.
 
-- **Maren Quist, Surveyor of Works** (planner: `plan`, `amend_plan`, `tasks`). Will not draw a road nobody
+- **Maren Quist, Surveyor of Works** (planner: `plan`, `dialogue_planner`, `tasks`). Will not draw a road nobody
   has walked. Chosen for: read the codebase first, then the smallest change.
-- **Hesper Nakagawa, Assayer** (reviewer: `check_plan`, `converge`, `review`, `analyze`). Tests the metal
+- **Hesper Nakagawa, Assayer** (reviewer: `dialogue_check`, `recheck_plan`, `converge`, `review`,
+  `analyze`). Tests the metal
   against its stamp; reads words exactly as written. Chosen for: "that, not something near it", and never
   rejecting for taste.
 - **Tobias Achterberg, Breaker in Residence** (test writer: `write_tests`, `mend_tests`, `tidy_tests`). Sees
   the one bolt that carries the bridge; has one day to inspect it. Chosen for: edge cases, in proportion.
 - **Wren Abiodun, Joiner** (code writer: `build`, `tidy_code`). Asked for a shelf, builds a shelf; never files
   down the gauge. Chosen for: the smallest change, and tests left alone.
-- **Solveig Marrow, Keeper of Lost Paradigms** (architect: `architecture_review`). Joined none of the
+- **Solveig Marrow, Keeper of Lost Paradigms** (architect: `architecture_review`, `dialogue_architect`). Joined none of the
   churches; hears an idea written twice as a motif coming back. Chosen for: repetition and boundaries.
 - **Lucian Bray, Keeper of the Log** (documenter: `document`). Writes for the reader on watch at three in the
   morning. Chosen for: short, plain, and where to look.
@@ -37,7 +38,8 @@ Every Priorities and Must not is word for word what it was before the hiring.
   ugliest thing that answers the question, and what surprised her.
 - **Dov Castellane, Reference Librarian** (lead: answers the other agents' questions). Knows a shelf that
   answers from a shelf that is silent. Chosen for: answer from what is written, or pass it up.
-- **Imre Salo, Interpreter** (analyst: `specify`, `clarify`, spec kit targets only). Hears what was left out.
+- **Imre Salo, Interpreter** (analyst: `specify`, `clarify` on spec kit targets;
+  `dialogue_analyst` on sprint ones, from 2026-11-24). Hears what was left out.
   Chosen for: finding the gaps and settling them.
 
 Off the line: **Second Chair**, assistant CEO, the orchestrator (`/factory`).

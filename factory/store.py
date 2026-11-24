@@ -142,7 +142,21 @@ def _v5_a_spike_ends_answered_or_inconclusive(db) -> None:
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_open_run ON runs ((state != 'ended')) WHERE state != 'ended'")
 
 
-MIGRATIONS = [_v3_kind_of_run, _v4_question_is_a_failure, _v5_a_spike_ends_answered_or_inconclusive]   # each one up
+def _v6_planning_is_a_dialogue(db) -> None:
+    """A plan may be agreed, before it is approved, or found stale after (FR-122, FR-125); a question may belong to a
+    round of a dialogue and be a request for a measurement (FR-120). plans is remade to widen its CHECK."""
+    made = db.execute("SELECT sql FROM sqlite_master WHERE name = 'plans'").fetchone()["sql"]
+    widened = made.replace("'pending','approved'", "'pending','agreed','approved','stale'")
+    db.execute(widened.replace("CREATE TABLE plans", "CREATE TABLE plans_widened", 1))
+    db.execute("INSERT INTO plans_widened SELECT * FROM plans")
+    db.execute("DROP TABLE plans")
+    db.execute("ALTER TABLE plans_widened RENAME TO plans")
+    db.execute("ALTER TABLE questions ADD COLUMN round INTEGER")
+    db.execute("ALTER TABLE questions ADD COLUMN measure BOOLEAN NOT NULL DEFAULT 0")
+
+
+MIGRATIONS = [_v3_kind_of_run, _v4_question_is_a_failure, _v5_a_spike_ends_answered_or_inconclusive,
+              _v6_planning_is_a_dialogue]   # each one up
 VERSION = OLDEST + len(MIGRATIONS)
 
 
@@ -362,6 +376,10 @@ class Files:
     def displaced_dir(self, run_id) -> pathlib.Path:
         """Where changed versions of the factory's own files are kept when they are put back."""
         return self._run_dir(run_id) / "displaced"
+
+    def answers_draft(self, run_id) -> pathlib.Path:
+        """Where the asker's answers to a dialogue's batch are written, and kept if they are refused (FR-121)."""
+        return self._run_dir(run_id) / "answers.md"
 
     def raw_sink(self, run_id, step_id):
         """A function that appends each line it is given to the step's raw event file."""

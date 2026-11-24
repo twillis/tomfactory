@@ -42,7 +42,7 @@ class TargetConfig:
     test_network: bool = _setting(False, "true lets its tests reach the network; they are contained either way")
     setup_command: str = _setting("", "run before its tests, contained, with the network: installs what it needs")
     tools: tuple = _setting((), "programs on your PATH its commands may use, by name")
-    cycle: str = _setting("auto", "auto: spec kit where it is set up, else plain; sprint: one plan, then build to the end")
+    cycle: str = _setting("auto", "auto: spec kit where set up, else plain; sprint: a dialogue, then build to the end")
     tests_readable_command: str = _setting("python -m compileall -q tests",
                                            "fails if new tests cannot even be read as code; \"\" for none")
     line_length: int = _setting(0, "the longest line a step may add to code or tests; 0 means no limit")
@@ -53,6 +53,8 @@ class TargetConfig:
     probe_cannot_run_exit_codes: tuple = _setting((), "a probe exiting with one of these never ran;"
                                                   " [] means no_tests_exit_code alone")
     spike_budget_dollars: float = _setting(5.0, "a spike ends inconclusive once it has cost this much; 0 for no cap")
+    dialogue_budget_dollars: float = _setting(10.0, "a dialogue asks whether to spend more each time it has cost"
+                                              " this much; 0 for never")
     climbs_to: str = _setting("standard", "the highest grade a retried step climbs to (FR-109)")
     # [steps.<name>] tables: per-step overrides (FR-112). Not written into a new codebase's file: none are needed.
     steps: dict = field(default_factory=dict, metadata={"says": "", "unlisted": True})

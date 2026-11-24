@@ -35,6 +35,14 @@ specification already exists in its own documents.
 
 ## Writing a request
 
+On a sprint codebase (`cycle = "sprint"`) a request is an ask, and the factory's dialogue does the refinement that
+used to be done here by hand (specification 005, FR-119 to FR-129). There, write the ask in his words: the outcome
+and the need, plus the label and where the specification governs it. Do not turn it into a design, and do not name
+a mechanism as the task: if he suggested one, write it as "one way might be ...". Leave the measuring to the
+dialogue, which asks for what it needs. The points below still hold for what the ask names (the label, the records
+by path, what is out of the run, his standing rulings, the knowledge the agents need copied in); the ones about
+measuring first and about how the plan check will read the request are for the plain and spec kit cycles.
+
 - One capability per run, from the run order. Name its label ("run 4d") and point at the
   specification sections that govern it.
 - Name the records a run should read **by path**. A record's file name comes from its request's
@@ -83,12 +91,37 @@ specification already exists in its own documents.
   what was asked and what you answered. If what it asks is really a decision, it is his: bring
   it to him as a question.
 
+## In a dialogue
+
+A dialogue run waits for one of three things, and `factory status` or the end of `factory watch` says which:
+
+- **Answers.** `factory questions` gives the batch: every agent's questions, each under its own heading, each with
+  `answer:` under it. Measurements are yours, as below; everything else is his. Walk him through the questions one
+  at a time, in short messages he can answer from his phone in a word or a letter: never the whole batch at once.
+  Do not answer for him, or soften a question into one you think he means. When he has answered every one, write
+  each answer under its question in that text, word for word, and send it all at once with
+  `factory answer --file <path>` (or `--file -`): one batch, so each agent pays one turn per round. A batch with an
+  answer missing is refused; nothing is recorded until all are there.
+- **Agreement.** Read the proposed plan (`factory plan`) and its estimate beside the similar runs. Summarise it for
+  him as at the approval (below): what it builds, what it will cost against the runs beside it, the points the
+  planner declined. He agrees (`factory agree`) or replies; a reply goes in with `factory revise "<his words>"`, and
+  begins another round. Agreement is his, like approval.
+- **Approval.** Agreement is not approval. An agreed plan may wait, for timing, as long as he likes; while it waits no
+  other run starts. Approve only on his word. If main moved meanwhile, the approval re-checks the plan against it
+  first, and a stale plan comes back to the dialogue.
+
+The factory's own questions sit in the batch too: whether to spend more when the dialogue reaches its budget (yes or
+no, his; no pauses it with everything kept, and `factory questions` then shows what it has: bring him that, and his
+later yes goes in with `factory answer yes`, or his agreement to the draft with `factory agree`), and the points the agents could not settle among themselves (his ruling, or "take the plan check's points
+as written").
+
 ## At the approval
 
 - Read the plan and the plan check's findings yourself. Summarise in plain terms: what it builds,
   what the check found, what needs his ruling.
 - The plan check's findings have already gone to the planner, who amended the plan and says what it took
-  and declined. Read the declined ones first: a finding declined wrongly is the operator's to send back.
+  and declined (in a dialogue, in the round after; the proposed plan lists what it declined). Read the declined ones
+  first: a finding declined wrongly is the operator's to send back.
 - Recommend approve unless a finding would cost a failed or stuck build: a test expectation the
   design cannot meet, an import that cannot load, a guard he asked for that is missing. Wording,
   stale notes and findings he has ruled out of scope are not reasons for another pass.

@@ -150,12 +150,46 @@ def to_the_end(target, fake, request="Add a greeting", **kw):
     run, waits = operations.request(request, target, **kw), 0
     while run.state == "awaiting_approval" and records.pending_question(open_store(config.home()), run.id) is None:
         waits += 1
+        if (operations.waiting(run.id) or {}).get("for") == "agreement":      # a dialogue's plan: agreed, then approved
+            operations.agree(run.id)
         run = operations.approve(run.id)
     return run, waits
 
 
 PLAN = {"plan": "Add hello.py that prints hello.", "ideals_addressed": ["keeps the layers apart"],
         "conflicts": []}
+
+
+# ---- a dialogue's speakers (FR-119 to FR-129): what each says in one round ----
+
+def speaks(questions=(), measure=(), points=None, cost=0.0):
+    """The analyst's batch, or with `points` the architect's or the plan check's."""
+    said = {"questions": list(questions), "measure": list(measure)}
+    if points is not None:
+        said["points"] = list(points)
+    return {"envelope": said, "cost": cost}
+
+
+def planner_says(plan=PLAN["plan"], questions=(), measure=(), estimate="small: one file, about $5", declined=(),
+                 how_much="little: the ask is plain", cost=0.0):
+    """The planner's batch: aligned, with the plan and an estimate, when it asks nothing."""
+    aligned = not questions and not measure
+    return {"envelope": {"questions": list(questions), "measure": list(measure), "aligned": "yes" if aligned else "no",
+                         "how_much": how_much, "plan": plan if aligned else "", "estimate": estimate if aligned else "",
+                         "declined": list(declined), "ideals_addressed": PLAN["ideals_addressed"], "conflicts": []},
+            "cost": cost}
+
+
+def aligned_round(plan=PLAN["plan"]):
+    """One round in which nobody asks anything and the planner proposes aligned."""
+    return [speaks(), planner_says(plan), speaks(points=()), speaks(points=())]
+
+
+SPRINT_TOML = 'cycle = "sprint"'
+
+
+def sprint_settings(extra=""):
+    return {".factory.toml": config.DEFAULT_FACTORY_TOML.replace('cycle = "auto"', SPRINT_TOML) + extra}
 
 
 # ---- a scripted run: what each persona "does", for the fake agent ----

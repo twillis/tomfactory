@@ -130,6 +130,24 @@ def verdict(ctx) -> CheckResult:
     return CheckResult(False, "; ".join(said) or f"the verdict was {envelope.get('verdict')}, with no reason given")
 
 
+# ---- a planning dialogue (FR-122) ----
+
+@register("dialogue_moves")
+def dialogue_moves(ctx) -> CheckResult:
+    """The planner proposes aligned, with a plan and an estimate and nothing more to ask; or it asks the asker
+    something, or for a measurement. A planner that did neither would leave a round with nothing to go on."""
+    said = ctx.envelope or {}
+    asks = bool(said.get("questions") or said.get("measure"))
+    if said.get("aligned") != "yes":
+        return CheckResult(asks, "" if asks else "not aligned, and asking nothing: ask the asker what only they can"
+                                                 " say, ask for a measurement, or propose aligned with the plan")
+    missing = [key for key in ("plan", "estimate") if not str(said.get(key) or "").strip()]
+    if missing:
+        return CheckResult(False, f"aligned, with no {' and no '.join(missing)}: give it, or ask what you need")
+    return CheckResult(not asks, "aligned, and still asking: it is aligned when there is nothing left to ask" if asks
+                       else "")
+
+
 # ---- what the test writer produced ----
 
 @register("tests_added")
