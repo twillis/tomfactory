@@ -124,7 +124,7 @@ A check is a named function in `factory/checks.py`, registered by name, with the
 | `tests_added` | the step changed at least one file under the target's `test_paths` |
 | `tests_within_budget` | the lines the step added under the test paths are no more than the target's `test_budget_lines`; 0 means no limit (FR-065) |
 | `edge_cases_stated` | the envelope's `edge_cases` list has at least one entry (FR-045) |
-| `tests_fail_first` | the test command exits non-zero **and** not with `no_tests_exit_code` (FR-007). "No tests found" is not a failing test. |
+| `tests_fail_first` | the test command exits non-zero **and** not with `no_tests_exit_code` (FR-007). "No tests found" is not a failing test. Where the target names a `red_command`, it is run first on the run's own test files, and settles the check when it exits so **and** its test report names a failing test; anything else but a timeout is settled by the whole suite (FR-152). |
 | `tests_pass` | the test command exits 0 (FR-008) |
 | `verdict` | given to every judging step (one with `routes`): the verdict is `accept`, and the reply does not name broken ideals while accepting (SC-009). A failed verdict leads where the step's route for it says; a reply that contradicts itself leads to `on_fail`. |
 
@@ -185,6 +185,7 @@ An agent step's prompt is `prompts/<step name>.md` with placeholders written `{{
 | `test_paths` | The target's test paths |
 | `docs_paths` | The target's documentation paths |
 | `test_files` | The test files this run's `write_tests` step changed |
+| `limits` | The target's `line_length` and `test_budget_lines`, or that it sets none, to write within; measured after as smells, never gates (FR-153) |
 | `failure` | On a rework: the failed check and its note |
 | `speckit_instructions` | Where the target uses spec kit and the step names commands: the instruction text of those commands, from the target's own copy |
 | `speckit_context` | What spec kit's scripts set up for this step: the feature directory and the paths of its documents |
@@ -194,9 +195,9 @@ An agent step's prompt is `prompts/<step name>.md` with placeholders written `{{
 | Step | `inputs` |
 |------|----------|
 | `plan` | `request`, `constitution`, `ideals`, `previous_plan`, `comment`, `failure`, `speckit_instructions`, `speckit_context` |
-| `write_tests` | `request`, `plan`, `test_paths`, `failure` |
-| `build` | `request`, `plan`, `constitution`, `ideals`, `test_files`, `failure` |
-| `mend_tests` | `request`, `plan`, `test_paths`, `failure`, `defective_tests`, `failing_tests` (FR-150) |
+| `write_tests` | `request`, `plan`, `test_paths`, `limits` (FR-153), `failure` |
+| `build` | `request`, `plan`, `constitution`, `ideals`, `test_files`, `limits`, `failure` |
+| `mend_tests` | `request`, `plan`, `test_paths`, `limits`, `failure`, `defective_tests`, `failing_tests` (FR-150) |
 | `architecture_review` | `request`, `plan`, `constitution`, `ideals`, `diff`, `docs_paths` |
 | `document` | `request`, `plan`, `diff`, `docs_paths` |
 | `review` | `request`, `plan`, `constitution`, `ideals`, `diff`, `test_output` |

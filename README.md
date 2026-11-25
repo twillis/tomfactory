@@ -110,7 +110,7 @@ by an agent, each with its own persona. Four are done by plain code.
 | — | *wait* | you | Approve, send back with a comment, or abandon | — |
 | 2 | `baseline` | code | Runs the existing tests before anything changes | nothing |
 | 3 | `write_tests` | agent: test writer | Writes tests that describe the change, edge cases first | test files only |
-| 4 | `red` | code | Runs the tests. They must **fail** | nothing |
+| 4 | `red` | code | Runs the tests: only the run's own test files, where the codebase says how. They must **fail** | nothing |
 | 5 | `build` | agent: code writer | Makes the tests pass | anything except tests |
 | 6 | `test` | code | Runs the tests. They must **pass** | nothing |
 | 7 | `architecture_review` | agent: architect | Reviews the change for maintainability; adds suggestions and warnings to a backlog. **Advisory**: it never fails the run | documentation only |
@@ -641,13 +641,34 @@ so without this check it would use up its attempts on tests that can never run. 
 command fails, the work goes back to the test writer with what it said. Set it to `""` to
 switch it off, or to your own language's equivalent.
 
+### Red runs the run's own tests, if the codebase says how
+
+Baseline, red and the test step after the build each ran the whole suite: on bttr_erp about five and a half minutes
+each. Red's job is only to show that the run's new tests fail before the build, so a codebase may say how to run some
+of its tests:
+
+```toml
+red_command = ".venv/bin/python -m pytest -q -p no:cacheprovider --junitxml=test-report.xml {paths}"
+test_report = "test-report.xml"     # needed: red is settled by a test the report names as failing
+```
+
+Red then first runs that command, contained as the tests are, with `{paths}` (a word of its own) replaced by the files
+under the test paths that the run added or changed and has not deleted: an edited file runs whole, its old cases beside
+the new. A test among them failing, as the test report names, settles red. Anything else is settled by the whole suite,
+as before: the files passing (a helper they changed may still break another test), the runner collecting nothing, or
+exiting failing with no failing test named (pytest given a fixture's JSON exits 4 having run nothing). So what red
+decides is what it decided before; it is quicker only when the new tests fail, which is the usual case. A
+`red_command` without `{paths}` or without a `test_report` is refused. Baseline and the test step after the build
+always run the whole suite. Without the setting, red runs the whole suite too.
+
 ### Keeping tests proportionate
 
 Left alone, a test writer told to cover edge cases will keep finding more. Two things hold
 it back. Its persona tells it to test each behaviour once, at the level where it lives. And
 each codebase sets a budget, `test_budget_lines` in `.factory.toml` (300 by default; 0 for
 no limit). The factory measures the lines a run's new tests add and, where they are over, reports it as a
-smell in the run's record (below). Nothing is sent back for it.
+smell in the run's record (below). Nothing is sent back for it. The test writer is told the budget up front, in its
+prompt's `limits`, as a limit to write within.
 
 ### A longest line, if the codebase wants one
 
@@ -658,7 +679,8 @@ line_length = 120       # the longest line a step may add to code or tests; 0, t
 Where it is set, the factory measures the lines each writing step added (the test writer, the
 builder, a mended test, either tidy) and the code a plan gives, counting indentation, and reports
 each line that is over, as `file:line (length)`. Lines already there are not measured, and
-documentation is not: prose and tables run long.
+documentation is not: prose and tables run long. Each of those writers is told the limit before it writes, in its
+prompt's `limits` (with the test budget, and that neither ever sends work back), so it writes within it from the start.
 
 ### Smells: measured and reported, never a reason to stop
 
@@ -899,7 +921,8 @@ The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `
 (what the factory measured of the tests, budget, smells and coverage, the only figures it may state; the retro is
 given it too), for the architect `readability` (the functions the readability smell flagged, to judge), for the
 test writer mending `defective_tests` (the tests the builder's reports named) and `failing_tests` (what the last
-test run's report named as failing, with messages),
+test run's report named as failing, with messages), for each step that writes code or tests `limits` (the
+codebase's line length and test budget, to write within),
 and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 

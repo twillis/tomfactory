@@ -15,6 +15,7 @@ PERSONAS_DIR = PACKAGE_DIR.parent / "personas"
 PROMPTS_DIR = PACKAGE_DIR.parent / "prompts"
 
 DEFAULT_GITIGNORE = "__pycache__/\n.pytest_cache/\n*.pyc\n.venv/\n"
+PATHS = "{paths}"          # in a red command, where the run's test files go (FR-152)
 
 
 def under(name, paths) -> bool:
@@ -48,6 +49,8 @@ class TargetConfig:
     cycle: str = _setting("auto", "auto: spec kit where set up, else plain; sprint: a dialogue, then build to the end")
     tests_readable_command: str = _setting("python -m compileall -q tests",
                                            "fails if new tests cannot even be read as code; \"\" for none")
+    red_command: str = _setting("", "how to run only the run's test files, {paths} where they go, writing test_report;"
+                                " \"\" runs the whole suite")
     line_length: int = _setting(0, "the longest line a step may add to code or tests; 0 means no limit")
     coverage_report: str = _setting("", "the coverage.py JSON report its test command writes; \"\" if not measured")
     test_report: str = _setting("", "the JUnit XML report its test command writes (pytest: --junitxml=<path>);"
@@ -105,7 +108,20 @@ def read_target_config(target, commit) -> TargetConfig:
             known[name] = tuple(known[name])
     if known.get("climbs_to", "standard") not in ("light", "middle", "standard", "strongest"):
         raise ConfigError(f"{target}/.factory.toml: climbs_to must be light, middle, standard or strongest")
+    if known.get("red_command"):
+        _check_red_command(target, known["red_command"], known.get("test_report"))
     return TargetConfig(**known)
+
+
+def _check_red_command(target, command, test_report) -> None:
+    """A red command is given the run's test files as the word {paths}, and settles red only on a test its report
+    names as failing (FR-152): without either it could not do its job."""
+    if PATHS not in shlex.split(command):
+        raise ConfigError(f"{target}/.factory.toml: red_command must have {PATHS}, as a word of its own,"
+                          " where the run's test files go")
+    if not test_report:
+        raise ConfigError(f"{target}/.factory.toml: red_command needs test_report, the JUnit XML report it writes:"
+                          " red is settled by a test the report names as failing")
 
 
 def _argv(command) -> list[str]:
@@ -133,6 +149,11 @@ def tests_readable_argv(settings: TargetConfig) -> list[str]:
 
 def readability_argv(settings: TargetConfig) -> list[str]:
     return _argv(settings.readability_command)
+
+
+def red_argv(settings: TargetConfig, paths) -> list[str]:
+    """The red command, with the word {paths} replaced by the run's test files, one word each (FR-152)."""
+    return [word for given in _argv(settings.red_command) for word in (paths if given == PATHS else [given])]
 
 
 def cannot_run_codes(settings: TargetConfig) -> tuple:

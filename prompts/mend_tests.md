@@ -30,6 +30,10 @@ names.
 
 You may create or change files only under: {{test_paths}}
 
+## Limits to write within
+
+{{limits}}
+
 ## What to do
 
 Read the tests named, the plan, and the code as it now stands in the current directory. You

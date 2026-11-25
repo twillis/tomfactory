@@ -28,10 +28,13 @@ import passes, with nothing to take out. Never guard such an import with `try: .
 stand-in "until it is built": that scaffolding outlives the build. A module that exists already is imported at the
 top, as usual.
 
-## Keep them proportionate
+## Keep them proportionate, and within the limits
 
-As your priorities say. The codebase sets a budget for the lines of tests one run may add. The
-factory measures it and reports a set over it to the operator; a good set fits well inside it.
+As your priorities say. The codebase's limits, to write within:
+
+{{limits}}
+
+A good set of tests fits well inside the budget.
 
 ## If your last tests were not accepted
 

@@ -12,6 +12,12 @@ when you finish; the factory runs them.
 
 {{plan}}
 
+## Limits to write within
+
+{{limits}}
+
+The budget is the test writer's; the longest line is yours too.
+
 ## If the tests failed after your last attempt
 
 {{failure}}

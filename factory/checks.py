@@ -5,6 +5,7 @@ whether it passed and why not. Checks are how code, not an agent, decides whethe
 acceptable. A new check is a function with `@register("name")` above it; the registry
 stamps the name on what it returns. Which checks a step gets is a rule: workflow.checks_for.
 """
+import functools
 import json
 import re
 import xml.etree.ElementTree as ElementTree
@@ -346,14 +347,14 @@ def _failing(ctx) -> dict | None:
     return {"count": len(found), "tests": found[:FAILING_KEPT]}
 
 
-def _tests_judged(ctx, judge) -> CheckResult:
-    """Run the tests, then let `judge(exit code)` say (passed, note). Output and containment are kept, and so is
-    the coverage the run measured, if the codebase measures it (FR-110)."""
+def _tests_judged(ctx, judge, argv=None) -> CheckResult:
+    """Run the tests (or `argv`, run as they are), then let `judge(exit code)` say (passed, note). Output and
+    containment are kept, and so is the coverage the run measured, if the codebase measures it (FR-110)."""
     for report in (ctx.target_config.coverage_report, ctx.target_config.test_report):
         if report:      # a report left by an earlier run must not pass for this one's
             (ctx.checkout.path / report).unlink(missing_ok=True)
     try:
-        code, output, contained = run_tests(ctx)
+        code, output, contained = _set_up_then(ctx, argv or config.test_argv(ctx.target_config))
     except SetupFailed as failed:
         note = (f"the setup command did not finish within {ctx.timeout:g} seconds" if failed.timed_out
                 else "the setup command failed, so the tests were not run")
@@ -414,6 +415,10 @@ def tests_fail_first(ctx) -> CheckResult:
 
     Nor is a test file that cannot be read as code (FR-089): it fails whatever is built, and
     the builder, who may not touch tests, could never make it pass.
+
+    Where the codebase names a `red_command`, the run's own test files are run alone first, and settle it when a
+    test among them fails, as the test report names (FR-152). Whatever else they do (pass, find nothing to run,
+    exit with no test failing) is settled by the whole suite, so what red decides is what it decided before.
     """
     settings = ctx.target_config
     if settings.tests_readable_command:
@@ -421,11 +426,38 @@ def tests_fail_first(ctx) -> CheckResult:
         if done.timed_out or done.exit_code != 0:
             return CheckResult(False, _said("the new tests cannot be read as code, so they describe nothing", output),
                                output=output, timed_out=done.timed_out, contained={"network": False})
-    none = settings.no_tests_exit_code
-    return _tests_judged(ctx, lambda code: (
-        (False, "the new tests pass before anything was built, so they do not describe the change") if code == 0
-        else (False, "the test command found no tests to run; the new tests were not collected") if code == none
-        else (True, "")))
+    judge = functools.partial(_judged_red, settings.no_tests_exit_code)
+    alone = _run_alone(ctx, judge) if settings.red_command else None
+    return alone or _tests_judged(ctx, judge)       # anything else is settled by the whole suite, as before
+
+
+def _judged_red(none, code) -> tuple[bool, str]:
+    """How red judges a test command's exit code: failing, and not with the code for "no tests found"."""
+    if code == 0:
+        return False, "the new tests pass before anything was built, so they do not describe the change"
+    if code == none:
+        return False, "the test command found no tests to run; the new tests were not collected"
+    return True, ""
+
+
+def _run_alone(ctx, judge) -> CheckResult | None:
+    """The run's own test files, run alone with the codebase's red command (FR-152): what they did, where it settles
+    red (a test among them failing, as the test report names, or a timeout); else None, for the whole suite."""
+    paths = run_test_files(ctx.checkout, ctx.target_config)
+    if not paths:
+        return None
+    alone = _tests_judged(ctx, judge, config.red_argv(ctx.target_config, paths))
+    if alone.timed_out:
+        return alone
+    if alone.passed and (alone.failing or {}).get("count"):
+        return replace(alone, note="the run's test files, run alone, fail: " + ", ".join(paths))
+    return None
+
+
+def run_test_files(checkout, settings) -> list[str]:
+    """The files under the test paths the run has added or changed, and not deleted, since it started."""
+    touched = set(checkout.files_changed_since_base()) | set(checkout.dirty())
+    return sorted(name for name in touched if under(name, settings.test_paths) and (checkout.path / name).is_file())
 
 
 @register("tests_pass")

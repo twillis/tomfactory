@@ -24,7 +24,6 @@ from dataclasses import asdict, dataclass, replace
 
 from factory import (agent, checks, config, dialogue, notify, own_files, proc, records, run_record, sandbox, speckit,
                      tables, workflow, workspace)
-from factory.config import under
 from factory.workflow import Ask, CheckResult, End, Replan, StepResult, Wait
 from factory.workspace import Workspace
 
@@ -396,8 +395,19 @@ def _sent_back(src):
 
 
 def _test_files(src):
-    touched = set(src.checkout.files_changed_since_base()) | set(src.checkout.dirty())
-    return "\n".join(sorted(name for name in touched if under(name, src.settings.test_paths)))
+    return "\n".join(checks.run_test_files(src.checkout, src.settings))
+
+
+def _limits(src):
+    """The limits the codebase sets on what a writer adds, to write within from the start (FR-153). They are measured
+    after the step, as smells (FR-107), and never send work back."""
+    length, budget = src.settings.line_length, src.settings.test_budget_lines
+    longest = (f"{length} characters, counting indentation, for each line you add to code or tests (documentation is"
+               " not measured)" if length else "this codebase sets no longest line")
+    tests = f"{budget} lines at most" if budget else "this codebase sets no budget"
+    return (f"- The longest line: {longest}.\n- The tests one run adds: {tests}.\n\n"
+            "The factory measures these after you finish and reports what is over them to the operator. They never"
+            " send work back, so they are no reason to leave a thing out: write within them from the start.")
 
 
 def _failure(src):
@@ -537,6 +547,7 @@ INPUTS = {
     "backlog_file": lambda src: src.settings.backlog_file,
     "backlog_done_file": lambda src: src.settings.backlog_done_file,
     "test_files": _test_files,
+    "limits": _limits,
     "failure": _failure,
     "defective_tests": _defective_tests,
     "failing_tests": _failing_tests,
