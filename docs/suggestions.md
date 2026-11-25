@@ -191,6 +191,10 @@ the relevant factory teams." Specification: `specs/003-fitness-and-feedback/spec
   run 101); the planner's search reaching `.factory-main/` (run 99). Declined as a misreading: run 101's "the operator
   answered one rule twice" (its batch held no duplicate after FR-151). Taken already: FR-150 and FR-151 (runs 99, 100).
 
+- **Open, found by the orchestrator in run 102 (2026-11-25):** `factory answer 102 --by orchestrator "text"` is refused
+  ("unrecognized arguments"), though `factory answer --help` shows `[--by BY] [[run] answer ...]`; `--file` works. The
+  positional run and answer after an option are not parsed together (argparse's intermixed parsing).
+
 # Retro suggestions for the factory and the orchestrator, and what became of them
 
 Source: the Opportunities and Threats of all 29 retros in `bttr_erp/docs/retros/` (runs 27, 28, 30, 33, 43–63, 66–69; the tidy runs 31–42, 64, 65 and the runs before 27 have no retro). I left out suggestions that change bttr_erp itself (the "Next request:" items and the architect's code warnings). I checked each theme against `tomfactory/specs/001-near-loop-factory/changes/*.md`, the FR notes in `spec.md`, `prompts/*.md` and `prompts/fragments/*.md`, `personas/*.md`, `orchestrator/playbook.md`, the factory code where a prompt did not settle it (`factory/checks.py`, `driver.py`, `tables.py`), and the orchestrator's memory file `scope-idiom-iteration.md`. No retro suggestion for the factory was routed to `bttr_erp/docs/backlog.md`.
