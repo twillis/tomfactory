@@ -8,3 +8,6 @@ Things the operator wants to look at, with why, for a quiet hour.
 - **2026-11-24.** Austin Marchese, "How To Build Self-Improving AI Agents with Claude (Stanford's Method)",
   https://www.youtube.com/watch?v=UUg5oij7ptw — the operator: "the self improving agents one is very intriguing".
   Relevant to spec 003 (a fitness function) and the retros that change the factory today by hand.
+- **2026-11-24 (a book, not a video).** Colin Wilson, *The Outsider* (1956): the restless, alienated people who see
+  through a society's assumptions; came up from "the X-Men" as a way to find his tribe. The operator: "i might want to
+  read that book".
