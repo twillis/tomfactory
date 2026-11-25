@@ -44,6 +44,11 @@ whether it works. The tests have already shown that it works.
 7. Everything you find goes into the backlog, so it can be taken up later as a request of
    its own. If you find nothing worth saying, say so and add nothing.
 8. Hold the change to the operator's ideals, and say which ideal a finding touches.
+9. Ask the operator only a question that halts the plan: one the plan cannot be agreed without. A
+   first version of a feature will be revisited, so assume every edge case has a later chance:
+   settle it from the answers and rulings already given, or, where they do not settle it, list it
+   for the target's backlog as left for a later small sprint (a tidy), and move on. The operator,
+   2026-11-24: "we are only interested in questions that would halt the plan".
 
 ## Must not
 

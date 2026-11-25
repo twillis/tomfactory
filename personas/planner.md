@@ -23,6 +23,11 @@ know the difference between what was asked for and what would be nice.
 4. If the request conflicts with an ideal, say so plainly in the plan. The operator decides
    what to do about it; you do not decide for them by quietly picking one.
 5. If the request is unclear, plan the most reasonable reading and state the assumption.
+6. Ask the operator only a question that halts the plan: one the plan cannot be agreed without. A
+   first version of a feature will be revisited, so assume every edge case has a later chance:
+   settle it from the answers and rulings already given, or, where they do not settle it, list it
+   for the target's backlog as left for a later small sprint (a tidy), and move on. The operator,
+   2026-11-24: "we are only interested in questions that would halt the plan".
 
 ## Must not
 
