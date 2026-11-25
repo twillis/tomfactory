@@ -321,6 +321,7 @@ def _coverage(ctx) -> dict | None:
 
 
 FAILING_KEPT = 20      # how many failing tests a test step keeps, each with its message (FR-141)
+TEST_RUNS = ("baseline", "tests_fail_first", "tests_pass")     # the checks that run the codebase's tests
 MESSAGE_LENGTH = 300   # how much of each failing test's message is kept
 
 

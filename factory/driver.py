@@ -71,7 +71,8 @@ def advance(store, run_id, adapter=None, personas_dir=None, prompts_dir=None) ->
             if result.failure == "question":    # on record the moment it is asked, whatever happens next
                 asked = records.ask(store, run_id, step.name, step.persona, result.failed_check.note)
             attempts = {entry.name: records.attempts_counted(store, run_id, entry.name) for entry in steps}
-            then = workflow.next_step(step, result, attempts, run.attempt_limit, records.found(store, run_id))
+            earlier = records.defect_reports(store, run_id)[:-1]     # the last is this reply's own, if it is one
+            then = workflow.next_step(step, result, attempts, run.attempt_limit, records.found(store, run_id), earlier)
             if isinstance(then, End):
                 end_run(store, run_id, then.outcome, then.reason)
                 return
@@ -187,7 +188,7 @@ def delete_asked(doing, reply, paths) -> list[str]:
 
 def merge_questions(store, run, checkout, settings, adapter, personas_dir, prompts_dir) -> None:
     """Before the asker sees a round's questions, those from different agents that ask the same thing are merged,
-    by the light model, so each is answered once (FR-132). If it fails, or its merge does not hold, the batches go
+    by the facilitator, so each is answered once (FR-132, FR-151). If it fails, or its merge does not hold, the batches go
     to the asker as they were asked."""
     waiting = dialogue.to_merge(store, run.id)
     if waiting:
@@ -315,6 +316,7 @@ def verify(doing, reply, before, dirty_before, paths, refused=()):
             doing.emit("smell", f"{name}: {'none' if outcome.passed else 'found'}", asdict(outcome))
     if doing.step.routes and isinstance(envelope, dict):
         result.verdict = envelope.get("verdict")
+        result.named = tuple(map(str, envelope.get(workflow.DEFECTIVE_TESTS) or ()))
     return result, done, context.changed
 
 
@@ -410,6 +412,27 @@ def _failure(src):
     named = run_record.failing_tests(failed.get("failing"), shown=checks.FAILING_KEPT, messages=True)
     return (f"{failed['name']}: {failed['note']}" + (f"\nThe test report names as failing: {named}" if named else "")
             + (f"\n{failed['output']}" if failed.get("output") else ""))
+
+
+def _defective_tests(src):
+    """The tests the builder's latest report names as defective, and those its earlier reports in the run named,
+    already sent to the test writer (FR-150)."""
+    reports = records.defect_reports(src.store, src.run.id)
+    if not reports:
+        return "The builder named no test."
+    *earlier, latest = [", ".join(report) or "none named" for report in reports]
+    return f"This report names: {latest}" + "".join(f"\nAn earlier report in this run named: {e}" for e in earlier)
+
+
+def _failing_tests(src):
+    """What the latest run of the tests named as failing, from the codebase's test report, each with its message
+    (FR-141, FR-150); or that there was no report to read."""
+    ran = [(s, c) for s in src.finished for c in s.checks or [] if c["name"] in checks.TEST_RUNS]
+    if not ran or ran[-1][1].get("failing") is None:
+        return "There is no test report to read: this codebase names none, or the tests wrote none."
+    step, check = ran[-1]
+    named = run_record.failing_tests(check["failing"], shown=checks.FAILING_KEPT, messages=True)
+    return f"At the {step.name} step (attempt {step.attempt}) the report named as failing: {named or 'no test'}"
 
 
 def _red_output(src):
@@ -515,6 +538,8 @@ INPUTS = {
     "backlog_done_file": lambda src: src.settings.backlog_done_file,
     "test_files": _test_files,
     "failure": _failure,
+    "defective_tests": _defective_tests,
+    "failing_tests": _failing_tests,
     "question": lambda src: (records.pending_question(src.store, src.run.id) or {}).get("question", ""),
     # Without the run's own record: it holds the request and the plan, which a step given the diff already has.
     "diff": lambda src: src.checkout.diff_since_base(leaving_out=run_record.name(src.run)),

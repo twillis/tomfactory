@@ -15,7 +15,7 @@ Everything here is done through the gateway's five plain operations.
 import datetime
 
 from factory.store import gt, is_null, ne, not_null, now
-from factory.workflow import ANSWERERS
+from factory.workflow import ANSWERERS, DEFECTIVE_TESTS
 from factory.workspace import slug
 
 MOVING = ("current_step", "driver_pid", "driver_started", "child_pgid")    # what changes as a run is carried on
@@ -194,6 +194,16 @@ def attempts_counted(gw, run_id, name) -> int:
         if not asked_and_answered:
             counted += 1
     return counted
+
+
+def defect_reports(gw, run_id) -> list[tuple]:
+    """The tests each report of a defective test in this run named, oldest first, since the operator last sent the
+    work back (FR-150): a reply that names them under `defective_tests` and whose verdict sent the run on its route.
+    A reply that failed for its shape or a guard was not acted on, so it is not a report."""
+    since = sent_back_at(gw, run_id)
+    return [tuple(map(str, s.produced[DEFECTIVE_TESTS] or ())) for s in gw.query("steps", {"run_id": run_id})
+            if s.started_at >= since and s.failure == "check" and isinstance(s.produced, dict)
+            and DEFECTIVE_TESTS in s.produced]
 
 
 def so_far(gw, run_id) -> tuple[float, list[str]]:

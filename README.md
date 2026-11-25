@@ -146,11 +146,22 @@ Eight rules, applied in this order:
 
 One more route, off the usual path. The builder may not change a test, so a test that can
 never pass (a wrong expected value, a setup that leaves something out) used to cost it every
-attempt. Now the builder says so, with the verdict `test_defect`, and the `mend_tests` step asks
-the test writer, once, to correct that test and nothing else; the tests are then run again. It
-goes on to `test`, not back to `red`, because the build is already there. The test writer may
-find the builder wrong and change nothing. A second report in the same run is not chased: the
-tests are run and their failure takes its usual course.
+attempt. Now the builder says so, with the verdict `test_defect`, naming each such test in
+`defective_tests`, and the `mend_tests` step asks the test writer to correct those tests and
+nothing else; the tests are then run again. It goes on to `test`, not back to `red`, because the
+build is already there. The test writer is given the builder's reasons, the tests it names (and
+those earlier reports named), and what the last test run's report named as failing, each with
+its message, where the codebase names a `test_report`. It may find the builder wrong and change
+nothing.
+
+Each defect gets its own mend: a later report that names a test no earlier report named is
+mended too, so a builder that finds a second, different mistake in the tests is not left to spend
+its attempts repeating it. A report that names only tests reported before is not chased (the
+test writer has had its say on them, and asking again would only go back and forth): the tests
+are run and their failure takes its usual course. A runner's `tests/test_x.py::test_z` and a test
+report's `tests.test_x::test_z` count as the same test. There are at most two mends in a run: a
+third different defect in one run's tests is for you to look at. A codebase can raise that with
+`rework_at_most` on `[steps.build]` (below).
 
 No step runs more than three times in one run (you can change the number per request). What counts is the
 step's own work: a run that asked a question you answered does not count, and sending a plan back gives
@@ -284,8 +295,7 @@ factory resume                      # carry on a run that stopped as needs-me, f
 Resuming puts back whatever a stopped agent left half-done. Where the step that stopped is the factory's
 own (the tests failing after the build used its attempts), the build's work is kept: mend what was
 wrong, commit it in the run's checkout, and the resumed step checks the work again.
-That is the way through when the test writer's one chance to mend a test (`mend_tests`, above) did
-not settle it.
+That is the way through when the test writer's mends (`mend_tests`, above) did not settle it.
 
 Every command that takes a run works on the most recent run unless you give its number:
 `factory show 3`. `factory plan`, `factory status` and `factory show` take `--json`.
@@ -442,9 +452,11 @@ it plans. Every speaker is given every note, with who added it and when, from it
 transcript, and so the run's record. Refused on a run that has ended, or one not planning in a dialogue.
 
 - Anyone asked something: the run waits for your answers, every agent's questions in one batch, each kept as its
-  own. Where more than one agent asked, `merge_questions` (the facilitator, on the light model) first merges
-  questions from different agents that ask the same thing, so you answer each once and the answer is recorded for
-  each agent that asked; the transcript says what was merged into what. If the merge fails, or proposes one that
+  own. Where more than one agent asked, `merge_questions` (the facilitator, on the middle model) first merges
+  questions from different agents that ask for the same decision, so you answer each once and the answer is
+  recorded for each agent that asked; the transcript says what was merged into what. It judges what is decided,
+  not how it is put: the same choice with its options in another order, under other letters or with one option more
+  is one question; two on one subject where answering one leaves the other open stay apart. If the merge fails, or proposes one that
   does not hold, the batches come to you as they were asked. `factory questions` shows them; `factory answer` opens
   them in `$EDITOR`, each with `answer:` under it, and saving sends them all; `factory answer --file` takes the same text from a file or standard input.
   **Who answered** is recorded: `answer:` is the operator's (or whoever `--by` names), and `answer (orchestrator):` in
@@ -885,7 +897,9 @@ The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `
 `test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, for a dialogue `round`,
 `dialogue`, `draft`, `similar_runs`, `standing`, `to_merge` and `codebase_moved`, for the documenter `measured`
 (what the factory measured of the tests, budget, smells and coverage, the only figures it may state; the retro is
-given it too), for the architect `readability` (the functions the readability smell flagged, to judge),
+given it too), for the architect `readability` (the functions the readability smell flagged, to judge), for the
+test writer mending `defective_tests` (the tests the builder's reports named) and `failing_tests` (what the last
+test run's report named as failing, with messages),
 and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 

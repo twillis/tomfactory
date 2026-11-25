@@ -15,13 +15,24 @@ tests can never pass. Decide whether that is so, and if it is, mend that test an
 
 {{failure}}
 
+## The tests it names
+
+{{defective_tests}}
+
+A test an earlier report named was sent to the test writer then; mend the tests this report
+names.
+
+## What the tests last reported
+
+{{failing_tests}}
+
 ## Where tests go
 
 You may create or change files only under: {{test_paths}}
 
 ## What to do
 
-Read the test named, the plan, and the code as it now stands in the current directory. You
+Read the tests named, the plan, and the code as it now stands in the current directory. You
 cannot run the tests; the factory runs them when you finish.
 
 - If the builder is right, make the smallest change that corrects the test's own mistake: an
