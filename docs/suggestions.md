@@ -175,6 +175,12 @@ the relevant factory teams." Specification: `specs/003-fitness-and-feedback/spec
   (continues #36). Declined as misreadings (section 3): "Finding 3 was put to the operator three times"; "the plan put
   the documenter after the architect" (the need continues #48).
 
+- **Open, from run 99 (found by the orchestrator; the operator: "exactly"):** a second `test_defect` report that names
+  different tests from the one already mended gets a mend of its own; today `Rework("mend_tests", at_most=1)` mends once
+  and ignores later reports, so the builder, having diagnosed the second defect exactly ("psycopg cannot parse a
+  timestamptz in that format"), could only repeat it until its attempts ran out and the run ended needs-me. A repeat
+  report on the same tests stays unchased. To build with the next factory batch.
+
 # Retro suggestions for the factory and the orchestrator, and what became of them
 
 Source: the Opportunities and Threats of all 29 retros in `bttr_erp/docs/retros/` (runs 27, 28, 30, 33, 43–63, 66–69; the tidy runs 31–42, 64, 65 and the runs before 27 have no retro). I left out suggestions that change bttr_erp itself (the "Next request:" items and the architect's code warnings). I checked each theme against `tomfactory/specs/001-near-loop-factory/changes/*.md`, the FR notes in `spec.md`, `prompts/*.md` and `prompts/fragments/*.md`, `personas/*.md`, `orchestrator/playbook.md`, the factory code where a prompt did not settle it (`factory/checks.py`, `driver.py`, `tables.py`), and the orchestrator's memory file `scope-idiom-iteration.md`. No retro suggestion for the factory was routed to `bttr_erp/docs/backlog.md`.
