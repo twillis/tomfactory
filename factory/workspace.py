@@ -92,14 +92,20 @@ class Workspace:
             if not file.is_file():
                 continue
             lines = file.read_text(errors="replace").splitlines()
-            if _git(self.path, "ls-files", "--error-unmatch", name, ok=(0, 1))[0] != 0:
-                added = range(1, len(lines) + 1)                    # git does not know it: all of it is new
-            else:
-                added = _added_line_numbers(_git(self.path, "diff", "-U0", "HEAD", "--", name)[1])
-            for number in added:
+            for number in self.added_lines(name):
                 if number <= len(lines) and len(lines[number - 1]) > limit:
                     found.append(f"{name}:{number} ({len(lines[number - 1])})")
         return found
+
+    def added_lines(self, name) -> list[int]:
+        """The numbers of the lines a file has gained since the last commit. A new file counts in full; a file that
+        is not there has gained none."""
+        file = self.path / name
+        if not file.is_file():
+            return []
+        if _git(self.path, "ls-files", "--error-unmatch", name, ok=(0, 1))[0] != 0:
+            return list(range(1, len(file.read_text(errors="replace").splitlines()) + 1))   # all of it is new
+        return _added_line_numbers(_git(self.path, "diff", "-U0", "HEAD", "--", name)[1])
 
     def head(self) -> str:
         return _git(self.path, "rev-parse", "HEAD")[1].strip()

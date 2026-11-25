@@ -431,6 +431,15 @@ def _friction(src):
     return "\n".join(said) or "No agent said anything made its step harder."
 
 
+def _readability(src):
+    """The functions the run changed that the readability smell flagged (FR-149): the latest finding of each step that
+    measured it, so a step sent back and done again is told once."""
+    latest = {s.name: c for s in src.finished for c in s.checks or [] if c["name"] == "readable"}
+    flagged = [f"- {name}: {check['note']}" for name, check in latest.items() if not check["passed"]]
+    return "\n".join(flagged) or ("No function this run changed scored over the codebase's limit, or this codebase"
+                                  " does not measure readability.")
+
+
 def _operator_feedback(src):
     """Everything the operator wrote during the run, verbatim: comments sent back with a plan, and answers."""
     said = [f"- Sent back with: {p.comment}" for p in src.plans if p.decision == "revised" and p.comment]
@@ -514,6 +523,7 @@ INPUTS = {
     "run_facts": lambda src: "\n".join(run_record.facts(src.store, src.run)),
     "friction": _friction,
     "operator_feedback": _operator_feedback,
+    "readability": _readability,
     "findings": _findings,
     "planning_answers": _planning_answers,
     "round": lambda src: dialogue.round_now(src.store, src.run.id),

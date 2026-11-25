@@ -52,6 +52,11 @@ class TargetConfig:
     coverage_report: str = _setting("", "the coverage.py JSON report its test command writes; \"\" if not measured")
     test_report: str = _setting("", "the JUnit XML report its test command writes (pytest: --junitxml=<path>);"
                                 " \"\" if none")
+    readability_command: str = _setting("", "run, contained, after each step that writes code; writes readability_report;"
+                                        " \"\" if not measured")
+    readability_report: str = _setting("", "the complexipy JSON report readability_command writes:"
+                                       " each function's cognitive complexity")
+    readability_limit: int = _setting(15, "a smell when a function a step changed scores over this")
     coverage_floor: float = _setting(0.0, "a smell when coverage after a run is below this percent; 0 for none")
     coverage_drop: float = _setting(0.0, "a smell when a run lowers coverage by more than this many points; 0 for none")
     probe_command: str = _setting("", "how a spike's probe is run, contained, {path} its file; \"\" means no spikes")
@@ -76,10 +81,11 @@ DEFAULT_FACTORY_TOML = (
               if not s.metadata.get("unlisted")))
 
 
-def home() -> pathlib.Path:
-    """The factory's home directory, created on first use."""
+def home(create=True) -> pathlib.Path:
+    """The factory's home directory, created on first use unless `create` is false."""
     path = pathlib.Path(os.environ.get("TOMFACTORY_HOME") or pathlib.Path.home() / ".tomfactory")
-    path.mkdir(parents=True, exist_ok=True)
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -123,6 +129,10 @@ def setup_argv(settings: TargetConfig) -> list[str]:
 
 def tests_readable_argv(settings: TargetConfig) -> list[str]:
     return _argv(settings.tests_readable_command)
+
+
+def readability_argv(settings: TargetConfig) -> list[str]:
+    return _argv(settings.readability_command)
 
 
 def cannot_run_codes(settings: TargetConfig) -> tuple:

@@ -6,7 +6,10 @@ requires-python = ">=3.13"
 dependencies = []
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "complexipy>=9.0.0",
+    "pytest>=8",
+]
 
 [build-system]
 requires = ["hatchling"]

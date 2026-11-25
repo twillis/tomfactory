@@ -80,10 +80,17 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("words", nargs="+", metavar="[run] note")
     sub.add_argument("--by", default="the operator", help="who it is from (default: the operator)")
 
-    command("status", status, "What each recent run is doing, one line per run.").add_argument("--json", action="store_true")
+    read_only = {"action": "store_true", "help": "read the home as it is and change nothing: no run is reconciled"
+                                                  " and the database is not brought up to date (FR-146)"}
+    sub = command("status", status, "What each recent run is doing, one line per run.")
+    sub.add_argument("--json", action="store_true")
+    sub.add_argument("--brief", action="store_true", help="JSON, each run with only what a board needs (FR-147)")
+    sub.add_argument("--limit", type=int, default=10, help="how many of the most recent runs (default 10)")
+    sub.add_argument("--read-only", **read_only)
     sub = with_run(command("show", show, "A whole run: every step, what it was asked and what it produced."))
     sub.add_argument("--step", type=int, metavar="id", help="show one step record in full")
     sub.add_argument("--json", action="store_true")
+    sub.add_argument("--read-only", **read_only)
     with_run(command("watch", watch, "Follow a run as it happens, until it waits for you or ends."))
     command("ideals", ideals, "Show the ideals every run is held to.").add_argument("--edit", action="store_true")
     command("doctor", doctor, "Check that everything the factory needs is installed and working.")
@@ -215,7 +222,9 @@ def stop(args):
     print(ended(run))
 
 def status(args):
-    views = operations.status()
+    if args.brief:
+        return print_json(operations.brief(args.limit, args.read_only))
+    views = operations.status(args.limit, args.read_only)
     if args.json:
         return print_json(views)
     for view in views:
@@ -236,7 +245,7 @@ def status(args):
 
 
 def show(args):
-    view = operations.show(args.run_id, step=args.step)
+    view = operations.show(args.run_id, step=args.step, read_only=args.read_only)
     if args.json:
         return print_json(view)
     if args.step is not None:

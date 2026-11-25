@@ -10,6 +10,7 @@ import pathlib
 import shlex
 import shutil
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 
 from factory import (agent, config, dialogue, driver, own_files, proc, records, run_record, sandbox, speckit, tables,
@@ -31,6 +32,17 @@ class RunView:
     events: list
     questions: list = field(default_factory=list)      # every question asked in the run, and its answer
     waiting: dict | None = None                        # what a dialogue waiting for the asker waits for (FR-128)
+    stages: list = field(default_factory=list)         # the run's stages, left to right (FR-145)
+
+
+@dataclass
+class Stage:
+    """One stage of a run, for a reader to draw what is done and what is left (FR-145)."""
+    name: str           # a step's name, or one of the operator's waits (workflow.WAITS, workflow.DIALOGUE_WAITS)
+    by: str             # the step's persona, "code", or "operator" for a wait
+    group: str          # one of workflow.GROUPS
+    state: str          # one of workflow.STAGE_STATES
+    tries: int          # how many times the step has run; 0 for a wait
 
 
 @dataclass
@@ -49,12 +61,14 @@ class Health:
     detail: str
 
 
-def _open():
+def _open(read_only=False):
+    """The home's store, its runs reconciled first; or, read-only, as it is, changing nothing (FR-146)."""
     try:
-        store = open_store(config.home())
-    except RuntimeError as problem:     # a home this version cannot read
+        store = open_store(config.home(create=not read_only), read_only)
+    except RuntimeError as problem:     # a home this version cannot read, or read-only, cannot read as it is
         raise Refused(str(problem)) from None
-    reconcile(store)
+    if not read_only:
+        reconcile(store)
     return store
 
 
@@ -496,26 +510,123 @@ def is_dialogue(run) -> bool:
     return driver.table_of(run)[0].dialogue
 
 
-def status(limit=10) -> list[RunView]:
-    """The most recent runs, newest first, each with its steps so far."""
-    store = _open()
-    return [RunView(run, [], store.query("steps", {"run_id": run.id}), [],
-                    store.query("questions", {"run_id": run.id}), dialogue.waiting(store, run))
+@dataclass
+class Brief:
+    """A run as a board reads it (FR-147): no step's prompt or what it produced, so it stays small."""
+    id: int
+    state: str
+    outcome: str | None
+    request_words: str          # the first BRIEF_WORDS words of the request, with … where there were more
+    current_step: str | None
+    stages: list
+
+
+BRIEF_WORDS = 20
+
+
+def brief(limit=10, read_only=False) -> list[Brief]:
+    """The most recent runs, newest first, each with what a board needs (`factory status --brief`)."""
+    store = _open(read_only)
+    return [Brief(run.id, run.state, run.outcome, _first_words(run.request), run.current_step, stages(store, run))
             for run in store.query("runs", order="-id", limit=limit)]
 
 
-def show(run_id=None, step=None) -> RunView:
-    """A whole run; or, given a step record's id, that one step with everything that happened in it."""
-    store = _open()
+def _first_words(text) -> str:
+    words = text.split()
+    return " ".join(words[:BRIEF_WORDS]) + (" …" if len(words) > BRIEF_WORDS else "")
+
+
+def status(limit=10, read_only=False) -> list[RunView]:
+    """The most recent runs, newest first, each with its steps so far and its stages."""
+    store = _open(read_only)
+    return [RunView(run, [], store.query("steps", {"run_id": run.id}), [],
+                    store.query("questions", {"run_id": run.id}), dialogue.waiting(store, run), stages(store, run))
+            for run in store.query("runs", order="-id", limit=limit)]
+
+
+def show(run_id=None, step=None, read_only=False) -> RunView:
+    """A whole run, with its stages; or, given a step record's id, that one step with everything that happened in it."""
+    store = _open(read_only)
     run = _find(store, run_id)
     steps = store.query("steps", {"run_id": run.id})
     questions = store.query("questions", {"run_id": run.id})
     if step is None:
-        return RunView(run, store.query("plans", {"run_id": run.id}), steps, [], questions)
+        return RunView(run, store.query("plans", {"run_id": run.id}), steps, [], questions,
+                       stages=stages(store, run))
     chosen = [record for record in steps if record.id == step]
     if not chosen:
         raise Refused(f"run {run.id} has no step {step}")
     return RunView(run, [], chosen, store.query("events", {"step_id": step}), questions)
+
+
+# ---- a run's stages: what is done and what is left, from its own table (FR-145) ----
+
+def stages(store, run) -> list[Stage]:
+    """The run's stages, left to right, each with its state from the steps the run took. A run whose table can no
+    longer be read at its starting commit (its codebase gone), or that took a step its table does not have (it ran
+    before the table changed), has none."""
+    try:
+        table = driver.table_of(run)
+    except (config.ConfigError, workspace.WorkspaceError, ValueError, OSError):
+        return []
+    taken = store.query("steps", {"run_id": run.id})
+    if {s.name for s in taken} - {entry.name for entry in (*table, tables.LEAD, tables.MERGE)}:
+        return []
+    tries = Counter(s.name for s in taken)
+    latest = {s.name: s.passed for s in taken}          # how each step's latest attempt went
+    shown = _pipeline(table, {*tries, run.current_step})
+    at = [stage.name for stage in shown].index(_at(store, run))
+    ended = run.state == "ended"
+    if ended and latest.get(run.current_step):          # it ended after this step, before the next one began
+        at += 1
+    asked = any(q.round is not None and q.answer for q in store.query("questions", {"run_id": run.id}))
+    for i, stage in enumerate(shown):
+        if i == at:
+            stage.state = "failed" if ended else "current"
+        elif i > at:
+            stage.state = "skipped" if ended else "to-come"
+        elif stage.by == "operator":            # a wait the run got past; a dialogue's answers, if it asked
+            stage.state = "done" if stage.name != "answers" or asked else "skipped"
+        elif stage.name not in latest:
+            stage.state = "skipped"
+        elif latest[stage.name] is False and workflow.get(stage.name, table).advisory:
+            stage.state = "failed"              # advice that failed, and was carried past
+        else:
+            stage.state = "done"                # the run went on past it
+        stage.tries = 0 if stage.by == "operator" else tries[stage.name]
+    return shown
+
+
+def _pipeline(table, taken) -> list[Stage]:
+    """The table's main path, with the operator's waits after the step that waits, and each step off the path the
+    run took before the step it leads to. States are filled in by `stages`."""
+    path = workflow.main_path(table)
+    on_path = {entry.name for entry in path}
+    off = [entry for entry in table if entry.name in taken and entry.name not in on_path]
+    shown = []
+    for entry in path:
+        shown += [_stage(other) for other in off if other.on_pass == entry.name]
+        shown.append(_stage(entry))
+        if entry.on_pass == workflow.WAIT:
+            waits = workflow.DIALOGUE_WAITS if entry.dialogue else workflow.WAITS
+            shown += [Stage(name, "operator", "waiting", "", 0) for name in waits]
+    return shown
+
+
+def _stage(entry) -> Stage:
+    return Stage(entry.name, entry.persona or "code", tables.group_of(entry.name), "", 0)
+
+
+def _at(store, run) -> str:
+    """The stage a run is at: the wait it waits at for the operator, or else the step it is on."""
+    if run.state != "awaiting_approval":
+        return run.current_step
+    now = dialogue.waiting(store, run)
+    if now:                                     # a dialogue paused at its budget waits for an answer, yes or no
+        return "answers" if now["for"] == "paused" else now["for"]
+    if records.pending_question(store, run.id):
+        return run.current_step
+    return "approval"
 
 
 def follow(run_id=None, after=0) -> list:

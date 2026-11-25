@@ -33,7 +33,7 @@ STEPS: list[Step] = [
     # reported again, the tests are run and the failure takes its usual course.
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
          on_pass="test", routes={"test_defect": Rework("mend_tests", at_most=1, then="test")},
-         smells=("lines_within_length",), on_fail=Rework("build"),
+         smells=("lines_within_length", "readable"), on_fail=Rework("build"),
          inputs=("request", "plan", "constitution", "ideals", "test_files", "failure"),
          envelope={"summary": "text", "files_changed": "list", "verdict": "verdict", "reasons": "list"}),
 
@@ -48,11 +48,12 @@ STEPS: list[Step] = [
          on_fail=Rework("build"),
          commit_after=True),
 
-    # Advice, not a gate: what the architect finds goes to a backlog, and the run carries on.
+    # Advice, not a gate: what the architect finds goes to a backlog, and the run carries on. It judges the functions
+    # the readability smell flagged (FR-149).
     Step("architecture_review", "agent", persona="architect", capabilities="read+edit", may_change="docs",
          on_pass="document", commit_after=True, advisory=True, model="standard",
          inputs=("request", "plan", "constitution", "ideals", "diff", "docs_paths", "red_output", "backlog_file",
-                 "backlog_done_file", "run_name"),
+                 "backlog_done_file", "run_name", "readability"),
          envelope={"summary": "text", "suggestions": "list", "warnings": "list"}),
 
     # Documented before it is reviewed, so the reviewer judges the whole change.
@@ -212,7 +213,7 @@ _tidy_tests = Step("tidy_tests", "agent", persona="test_writer", capabilities="r
                    inputs=("request", "plan", "test_paths", "failure"),
                    envelope={"summary": "text", "removed": "list", "kept": "list"})
 _tidy_code = Step("tidy_code", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
-                  on_pass="test", smells=("lines_within_length",),
+                  on_pass="test", smells=("lines_within_length", "readable"),
                   inputs=("request", "plan", "constitution", "ideals", "failure"),
                   envelope={"summary": "text", "files_changed": "list"})
 TIDY_TESTS, TIDY_CODE = _tidy(_tidy_tests), _tidy(_tidy_code)
@@ -272,6 +273,24 @@ RUN_KINDS = {
 SPRINT = {"change": SPRINT_STEPS, "tidy-tests": SPRINT_TIDY_TESTS, "tidy-code": SPRINT_TIDY_CODE}    # FR-119
 TABLES = [STEPS, SPEC_KIT_STEPS, SPRINT_STEPS, TIDY_TESTS, TIDY_CODE, SPIKE_STEPS, SPRINT_TIDY_TESTS, SPRINT_TIDY_CODE]
 CYCLES = ("auto", "sprint")
+
+
+# ---- for showing a run's progress: which part of the cycle each step is in (FR-145) ----
+# The operator's waits are the fourth group, "waiting"; they are stages, not steps, so they are not listed here.
+
+STAGE_GROUPS = {
+    "planning": ("plan", "specify", "clarify", "tasks", "analyze", "dialogue_analyst", "dialogue_planner",
+                 "dialogue_architect", "dialogue_check", "recheck_plan", "spike_plan"),
+    "building": ("baseline", "write_tests", "red", "build", "mend_tests", "test", "tidy_tests", "tidy_code", "probe",
+                 "run_probe"),
+    "reviewing": ("architecture_review", "document", "review", "converge", "retro", "write_findings", "spike_retro",
+                  "finish"),
+}
+
+
+def group_of(name) -> str:
+    """The group a step's stage is shown in (FR-145)."""
+    return next(group for group, names in STAGE_GROUPS.items() if name in names)
 
 
 # What a project's [steps.<name>] may set (FR-112). Nothing here changes what passing means: not the checks, the

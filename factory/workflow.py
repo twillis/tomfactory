@@ -24,6 +24,12 @@ ACCEPT = "accept"               # the verdict that passes a judging step; every 
 WAIT = "WAIT"                   # as an on_pass: stop and wait for the operator
 END_ACCEPTED = "END_ACCEPTED"   # as an on_pass: the run is finished and accepted
 END_AS_FOUND = "END_AS_FOUND"   # as an on_pass: the run ends as its findings say, answered or inconclusive (FR-116)
+# For showing a run's progress (FR-145): the state of each stage, the groups stages fall in, and the operator's waits
+# as stages, after the step that waits: a planning dialogue's three, or a plain approval.
+STAGE_STATES = ("done", "current", "to-come", "failed", "skipped")
+GROUPS = ("planning", "waiting", "building", "reviewing")
+WAITS = ("approval",)
+DIALOGUE_WAITS = ("answers", "agreement", "approval")
 
 
 # ---- what a step's execution produced, and where the run goes next ----
@@ -362,6 +368,18 @@ def get(name, steps) -> Step:
         if entry.name == name:
             return entry
     raise LookupError(f"there is no step named {name}")
+
+
+def main_path(steps) -> list[Step]:
+    """The steps a run goes through when nothing is sent back: from the first, each one's on_pass, and past a wait
+    to where approval leads, to the end (FR-145). A step reached only by a route, like mend_tests, is not on it."""
+    path = [steps[0]]
+    while True:
+        last = path[-1]
+        following = last.on_approve if last.on_pass == WAIT else last.on_pass
+        if following in (END_ACCEPTED, END_AS_FOUND):
+            return path
+        path.append(get(following, steps))
 
 
 def is_planning(name, steps) -> bool:
