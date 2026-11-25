@@ -141,3 +141,16 @@ numbered into the factory's series as they are built. Until
 then: no step entry or prompt changes. The queued factory changes that touch planning (an `architect_plan` step, the
 planner treating a mechanism as a suggestion, a structured request) wait for this spec's answers, since each may be
 folded into the dialogue.
+
+## A need found in use (the operator, 2026-11-24, run 97)
+
+Run 97's analyst held rounds 2, 3 and 4 with one edge case each, each following from an earlier answer. The operator:
+"It seems like not a showstopper for this. As in whatever edge cases they come up with could probably be covered in a
+tiny Sprint maybe that should be the option is that an issue either stops the planning stage or you're willing to put
+it in the tidy Sprint to address later".
+
+**The need:** every question in the dialogue is either one that stops planning (the plan cannot be agreed without its
+answer) or one that can wait for a later small sprint. One that can wait does not hold a round: it is recorded for later
+(the target's backlog) and the plan says the case is left for that sprint. The asker says which it is, and whoever
+answers may move a question from "stops planning" to "later". Nothing designed yet; it goes through the factory once
+spec 007's bootstrap exists.
