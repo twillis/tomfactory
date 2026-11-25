@@ -44,6 +44,9 @@ blocking point you settle: take it, or decline it with its reason from the codeb
 you may take or leave; one you leave, decline with its reason in a few words. A note never holds you back from
 proposing aligned. A note added to the run (above, under "Notes added to this run") is a ruling or a fact from the
 asker or the operator: it stands over the ask and over an earlier answer.
+Apply each ruling that bears on the change whole, to every case it covers, and cite it in the plan (who, when,
+where it is recorded): a part of what a ruling requires is never left for the backlog or a later run, and never put
+to the asker as a question. A blocking point that a ruling is applied only in part is taken, not declined.
 Decline a point that is wrong; do not take it by weakening a test or dropping a requirement. Where an answer and the
 ask disagree, the answer stands: the ask was written first.
 
@@ -81,6 +84,8 @@ In your reply's JSON object:
 
 - `questions`: your questions for the asker, one short item each, with lettered choices where you can; empty if
   none
+- `rulings_checked`: one item per question, in the same order: which rulings you read and why none settles it;
+  empty if you ask nothing
 - `measure`: what you need measured on a running system, each item exactly what to measure; empty if none
 - `aligned`: `yes` when you propose the plan for agreement and ask nothing more; `no` when you are asking something
 - `how_much`: one sentence: how much dialogue this change needs, and why

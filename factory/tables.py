@@ -158,14 +158,15 @@ _retro = next(entry for entry in SPEC_KIT_STEPS if entry.name == "retro")
 # alignment open, and notes, which never do (FR-130). The round's end is the one wait: for the asker's answers, or
 # for agreement to the plan the planner proposed aligned; then approval.
 
-_SPEAKS = {"questions": "list", "measure": "list"}
+# Each question goes with why no ruling in the standing documents settles it, which the asker sees (FR-156).
+_SPEAKS = {"questions": "list", "measure": "list", "rulings_checked": "list"}
 _POINTS = {"blocking": "list", "notes": "list"}
 _HEARS = ("request", "run_kind", "round", "dialogue", "standing", "constitution", "ideals", "failure")
 
 
-def _speaker(name, persona, on_pass, inputs=(), envelope=None, **entry) -> Step:
+def _speaker(name, persona, on_pass, inputs=(), envelope=None, checks=(), **entry) -> Step:
     return Step(name, "agent", persona=persona, on_pass=on_pass, dialogue=True, may_ask=False, on_fail=Rework(name),
-                inputs=(*_HEARS, *inputs), **entry,
+                inputs=(*_HEARS, *inputs), checks=(*checks, "rulings_checked"), **entry,
                 envelope={**_SPEAKS, **(_POINTS if envelope is None else envelope)})
 
 

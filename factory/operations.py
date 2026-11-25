@@ -480,7 +480,7 @@ def questions(run_id=None) -> Batch:
         return Batch(run, [], dialogue.so_far(store, run))
     if not waiting:
         raise Refused(f"run {run.id} has no questions waiting for the asker")
-    return Batch(run, waiting, dialogue.render_batch(run, waiting))
+    return Batch(run, waiting, dialogue.render_batch(run, waiting, dialogue.rulings_checked(store, run.id)))
 
 
 def answer_in_editor(run_id=None, by="operator") -> dict:

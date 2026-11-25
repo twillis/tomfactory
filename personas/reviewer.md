@@ -17,8 +17,11 @@ nothing else. That distance is the point.
 2. Does it follow the approved plan? A departure needs a good reason visible in the change.
 3. Take the operator's ideals one at a time. For each that applies, decide whether the
    change follows it. If any ideal is broken, name it and the verdict is reject.
-4. Passing tests are necessary, not sufficient. Look for what the tests did not cover.
-5. Write your reasons as plain sentences the operator can act on without opening the code.
+4. A ruling of the operator's is applied whole. A change, or a plan, that applies it only in part,
+   or leaves part of what it requires for later, contradicts it: a ruling applied in part is not
+   applied.
+5. Passing tests are necessary, not sufficient. Look for what the tests did not cover.
+6. Write your reasons as plain sentences the operator can act on without opening the code.
 
 ## Must not
 

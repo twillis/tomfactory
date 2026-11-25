@@ -206,7 +206,9 @@ def _fate(plan) -> str:
 
 # ---- the batch the asker answers: each question with a place for its answer under it (FR-121) ----
 
-def render_batch(run, questions) -> str:
+def render_batch(run, questions, why=None) -> str:
+    """The batch as the asker answers it: each question with a place for its answer under it, and on the line before
+    it, which `#` keeps from being read back, why no ruling settles it, as its speaker said (FR-156)."""
     number = questions[0].round if questions else 0
     lines = [f"# Run {run.id}, round {number}: {len(questions)} question{'s' if len(questions) > 1 else ''}."
              " Write each answer under its question, after \"answer:\".",
@@ -218,8 +220,24 @@ def render_batch(run, questions) -> str:
         if who != heard:
             heard = who
             lines += ["", f"# ---- {role(q.asked_by)} asks{' for a measurement' if q.measure else ''} ----"]
-        lines += ["", f"[Q{q.id}] {q.question}", "answer:"]
+        checked = [f"# Checked against the rulings: {(why or {})[q.id]}"] if (why or {}).get(q.id) else []
+        lines += ["", *checked, f"[Q{q.id}] {q.question}", "answer:"]
     return "\n".join(lines) + "\n"
+
+
+def rulings_checked(store, run_id) -> dict[int, str]:
+    """Why no ruling settled each question, by its id, as the speaker that asked it said in its reply (FR-156). A
+    question from a reply that gave no reason (one made before speakers gave them) has none."""
+    asked = store.query("questions", {"run_id": run_id})
+    why = {}
+    for closed in rounds(store, run_id):
+        for name, record_id in closed.payload["said"].items():
+            said = store.get("steps", record_id).produced
+            said = said if isinstance(said, dict) else {}
+            reasons = dict(zip(said.get("questions") or [], said.get("rulings_checked") or []))
+            why.update({q.id: str(reasons[q.question]) for q in asked if q.round == closed.payload["round"]
+                        and q.step == name and not q.measure and q.question in reasons})
+    return why
 
 
 class Answer(NamedTuple):
@@ -284,7 +302,7 @@ def transcript(store, run) -> str:
     what the asker did with it; and each re-check of an approved plan against a codebase that had moved."""
     asked = store.query("questions", {"run_id": run.id})
     plans = {p.version: p for p in store.query("plans", {"run_id": run.id})}
-    into = merged_into(store, run.id)
+    into, why = merged_into(store, run.id), rulings_checked(store, run.id)
     lines = []
     added = notes(store, run.id)
     if added:                                   # rulings and facts added while it plans, for every speaker (FR-133)
@@ -301,7 +319,7 @@ def transcript(store, run) -> str:
             heading = role(record.persona).capitalize()
             if "aligned" in said:
                 heading += f" (aligned: {said['aligned']}; how much dialogue this needs: {said['how_much']})"
-            items = [_asked(q, into) for q in asked if q.round == number and q.step == name]
+            items = [_asked(q, into, why) for q in asked if q.round == number and q.step == name]
             items += [f"- Blocking: {point}" for point in said.get("blocking") or []]
             items += [f"- A note for the planner: {note}" for note in said.get("notes") or []]
             items += [f"- Declined, with its reason: {item}" for item in said.get("declined") or []]
@@ -321,8 +339,10 @@ def transcript(store, run) -> str:
     return "\n".join(lines).strip()
 
 
-def _asked(q, into=None) -> str:
+def _asked(q, into=None, why=None) -> str:
     said = f"- {'Asked for a measurement' if q.measure else 'Asked'} (Q{q.id}): {q.question}"
+    if (why or {}).get(q.id):           # why no ruling settled it, as its speaker said (FR-156)
+        return _asked(q, into) + f"\n  Checked against the rulings: {why[q.id]}"
     if (into or {}).get(q.id):          # answered once, under the question it was merged into: not again here
         return said + (f"\n  The same as another agent's question: merged into Q{into[q.id]} and answered there,"
                        " once.")

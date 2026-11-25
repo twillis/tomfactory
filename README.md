@@ -447,6 +447,16 @@ standing documents (`requirements/`, its constitution and `IDEALS.md`) as they a
 commit and the files in the prompt (`standing`). What decides how the run is judged (`.factory.toml`, the table,
 the checks) is still read from the starting commit.
 
+**Rulings are applied, not asked** (FR-154 to FR-157). A point the operator's rulings in the standing documents
+already settle is never put to you as a question, not even "apply it here too?" or "this run or the backlog?": the
+speaker applies the ruling whole, to every case it covers, and cites it (who made it, when, where it is recorded). A
+plan that applies a ruling only in part, or leaves part of what it requires for later, is a blocking point for the
+plan check and the architect, not a note and not a question. A question asked anyway comes with why no ruling
+settles it: every speaker's reply gives `rulings_checked`, one item per question, a reply without one for each is
+sent back, and the batch shows each item on the line before its question, as `# Checked against the rulings: …`.
+Where the standing documents hold a file named `rulings.md`, an index of the operator's rulings, the speakers are
+told to read it first; it is named first in their `standing` input.
+
 **A note** (`factory note [run] "<text>"`, with `--by` to say who it is from) adds a ruling or a fact to a run while
 it plans. Every speaker is given every note, with who added it and when, from its next round on; notes head the
 transcript, and so the run's record. Refused on a run that has ended, or one not planning in a dialogue.
