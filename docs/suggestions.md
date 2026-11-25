@@ -196,6 +196,15 @@ the relevant factory teams." Specification: `specs/003-fitness-and-feedback/spec
   ("unrecognized arguments"), though `factory answer --help` shows `[--by BY] [[run] answer ...]`; `--file` works. The
   positional run and answer after an option are not parsed together (argparse's intermixed parsing).
 
+- **Taken, 2026-11-25, FR-154 to FR-157 (from run 103; the operator: "Shouldn't the team have been aware of the
+  rulings?"), `changes/2026-11-26-rulings-are-applied-not-asked.md`:** a point the rulings settle is applied whole and
+  cited, never asked; a plan that applies a ruling in part is blocking for the plan check and the architect; every
+  question comes with `rulings_checked` (why no ruling settles it), shown to the asker on the line before it, and a
+  reply without one per question is sent back; a standing `rulings.md` is named to be read first. Run 103 quoted the
+  2026-11-21 withdrawn-parent ruling in its ask, and still the blank create form under a withdrawn parent was left
+  for the backlog and put to the operator as a question. Bears on run 99's "quote the one ruling row in the ask":
+  the index read first helps there, and quoting the row stays the orchestrator's practice.
+
 # Retro suggestions for the factory and the orchestrator, and what became of them
 
 Source: the Opportunities and Threats of all 29 retros in `bttr_erp/docs/retros/` (runs 27, 28, 30, 33, 43–63, 66–69; the tidy runs 31–42, 64, 65 and the runs before 27 have no retro). I left out suggestions that change bttr_erp itself (the "Next request:" items and the architect's code warnings). I checked each theme against `tomfactory/specs/001-near-loop-factory/changes/*.md`, the FR notes in `spec.md`, `prompts/*.md` and `prompts/fragments/*.md`, `personas/*.md`, `orchestrator/playbook.md`, the factory code where a prompt did not settle it (`factory/checks.py`, `driver.py`, `tables.py`), and the orchestrator's memory file `scope-idiom-iteration.md`. No retro suggestion for the factory was routed to `bttr_erp/docs/backlog.md`.

@@ -162,10 +162,15 @@ PLAN = {"plan": "Add hello.py that prints hello.", "ideals_addressed": ["keeps t
 
 # ---- a dialogue's speakers (FR-119 to FR-129): what each says in one round ----
 
+def checked(questions):
+    """Why no ruling settles each question, one item each, as every speaker says (FR-156)."""
+    return [f"no ruling in the standing documents settles: {q}" for q in questions]
+
+
 def speaks(questions=(), measure=(), blocking=None, notes=(), cost=0.0):
     """The analyst's batch, or with `blocking` the architect's or the plan check's: what would break the build or
     contradict a ruling, and the notes the planner may take or leave (FR-130)."""
-    said = {"questions": list(questions), "measure": list(measure)}
+    said = {"questions": list(questions), "measure": list(measure), "rulings_checked": checked(questions)}
     if blocking is not None:
         said.update(blocking=list(blocking), notes=list(notes))
     return {"envelope": said, "cost": cost}
@@ -181,7 +186,8 @@ def planner_says(plan=PLAN["plan"], questions=(), measure=(), estimate="small: o
                  how_much="little: the ask is plain", cost=0.0):
     """The planner's batch: aligned, with the plan and an estimate, when it asks nothing."""
     aligned = not questions and not measure
-    return {"envelope": {"questions": list(questions), "measure": list(measure), "aligned": "yes" if aligned else "no",
+    return {"envelope": {"questions": list(questions), "measure": list(measure), "rulings_checked": checked(questions),
+                         "aligned": "yes" if aligned else "no",
                          "how_much": how_much, "plan": plan if aligned else "", "estimate": estimate if aligned else "",
                          "declined": list(declined), "ideals_addressed": PLAN["ideals_addressed"], "conflicts": []},
             "cost": cost}

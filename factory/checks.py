@@ -175,6 +175,19 @@ def dialogue_moves(ctx) -> CheckResult:
                        else "")
 
 
+@register("rulings_checked")
+def rulings_checked(ctx) -> CheckResult:
+    """Every question a dialogue speaker asks goes with one item in `rulings_checked`, in the same order, saying why
+    no ruling in the standing documents settles it (FR-156). A measurement asks a running system, not the rulings."""
+    said = ctx.envelope or {}
+    asked, why = said.get("questions") or [], said.get("rulings_checked") or []
+    if len(asked) == len(why) and all(str(reason).strip() for reason in why):
+        return CheckResult(True)
+    return CheckResult(False, f"{len(asked)} question(s) and {len(why)} item(s) in `rulings_checked`, or a blank one:"
+                              " give one item per question, in order, saying which rulings you read and why none"
+                              " settles it; a point a ruling settles is not asked, it is applied and cited")
+
+
 # ---- what the test writer produced ----
 
 @register("tests_added")

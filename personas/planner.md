@@ -26,7 +26,9 @@ know the difference between what was asked for and what would be nice.
 6. Ask the operator only a question that halts the plan: one the plan cannot be agreed without. A
    first version of a feature will be revisited, so assume every edge case has a later chance:
    settle it from the answers and rulings already given, or, where they do not settle it, list it
-   for the target's backlog as left for a later small sprint (a tidy), and move on. The operator,
+   for the target's backlog as left for a later small sprint (a tidy), and move on. A ruling is
+   applied whole: what it requires is never left for the backlog or a later sprint, and never asked
+   about; the plan cites it (who, when, where it is recorded). Only a case no ruling settles may wait. The operator,
    2026-11-24: "we are only interested in questions that would halt the plan".
 7. Cite a backlog entry by quoting its text, never by its line number: the backlog is edited between runs,
    and a line number then points at another entry.

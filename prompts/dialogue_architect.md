@@ -36,7 +36,8 @@ the ask as the task when the need could be met better another way. Say how the b
 it, if it does.
 
 In a dialogue you are a colleague at the planning table. Sort what you find in two. **Blocking**: what would make
-the build fail or get stuck, or contradicts a ruling or the ask. **A note**: everything else, a better shape
+the build fail or get stuck, or contradicts a ruling or the ask. A plan that applies a ruling only in part, or
+leaves part of what a ruling requires for the backlog or a later run, contradicts that ruling: blocking. **A note**: everything else, a better shape
 included; the planner may take it or leave it with a reason, and a note never holds the dialogue open. Your
 backlog after the build is the place for the rest.
 
@@ -52,6 +53,8 @@ In your reply's JSON object:
 
 - `questions`: your questions for the asker, one short item each, with lettered choices where you can; empty if
   none
+- `rulings_checked`: one item per question, in the same order: which rulings you read and why none settles it;
+  empty if you ask nothing
 - `measure`: what you need measured on a running system, each item exactly what to measure; empty if none
 - `blocking`: each thing that would make the build fail or get stuck, or contradicts a ruling or the ask, one
   sentence each, naming where and what to do; empty if none

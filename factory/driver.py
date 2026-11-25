@@ -30,6 +30,7 @@ from factory.workspace import Workspace
 NO_IDEALS = "No ideals have been stated."
 # What a dialogue's speakers read from the codebase's main line as it is now, not as at the run's start (FR-134).
 STANDING = ("requirements", config.IDEALS_FILE, speckit.CONSTITUTION_FILE)
+RULINGS_INDEX = "rulings.md"    # a standing document by this name indexes the operator's rulings: read first (FR-157)
 
 
 class Stopped(BaseException):
@@ -512,11 +513,16 @@ def _standing(src):
     if not src.standing:
         return ""
     head, copied = src.standing
+    index = [name for name in copied if name.rsplit("/", 1)[-1].lower() == RULINGS_INDEX]
+    first = "".join(f"Read first the codebase's index of rulings, `{workspace.MAIN_NOW}/{name}`, then the entries"
+                    " it points to: a point a ruling settles is applied and cited, never asked (FR-157).\n\n"
+                    for name in index)
     return (f"The codebase's main line has moved on since this run's checkout was made, or may have. Its standing"
             f" documents as they are there now, at {head[:10]}, are copied read-only into `{workspace.MAIN_NOW}/` in"
             " the current directory. Read the rulings and requirements there: where they differ from the checkout's"
-            " own copies, they are the newer, and they stand.\n\n"
-            + "\n".join(f"- `{workspace.MAIN_NOW}/{name}`" for name in copied))
+            " own copies, they are the newer, and they stand.\n\n" + first
+            + "\n".join(f"- `{workspace.MAIN_NOW}/{name}`" for name in [*index, *(n for n in copied
+                                                                                if n not in index)]))
 
 
 def _probe_output(src):

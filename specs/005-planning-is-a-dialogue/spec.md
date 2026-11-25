@@ -168,3 +168,17 @@ spec 007's bootstrap exists.
   weigh in on the issue at that point and you will walk me through it like you have been". So a dialogue still
   unaligned after round 3 stops for the operator: what is still open, walked through one question at a time, and his
   answers go into round 4. Until built, the orchestrator does this by hand.
+
+## A need found in use (the operator, 2026-11-25, run 103)
+
+The operator's ruling of 2026-11-21 ("Withdrawn parent means its children are unreachable even if they reside in the
+table so 404 not found") was quoted in run 103's ask and was in the standing documents. The planner applied it in
+part, leaving "the blank create form under a withdrawn parent" for the backlog, and the plan check asked the operator
+"should this also be NOT_FOUND in this run? a) yes b) leave it in the backlog". The operator: "I would have thought
+this goes without saying ... why would you be able to add a child record to a parent row that no longer exists",
+then "Shouldn't the team have been aware of the rulings?"
+
+**The need:** a point a ruling settles is the ruling's, not the asker's. The speakers apply it whole and cite it; a
+plan that applies it in part contradicts it (blocking); a question asked anyway says why no ruling settles it. Built
+as FR-154 to FR-157 (change record `../001-near-loop-factory/changes/2026-11-26-rulings-are-applied-not-asked.md`).
+This narrows "A need found in use (run 97)" above: only a case no ruling settles may wait for a later small sprint.

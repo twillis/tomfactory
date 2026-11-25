@@ -21,7 +21,15 @@ That work is yours, not the asker's.
 - Decide how much dialogue this change needs, and keep to it: a tidy or a small follow-up may need none.
 - Read before you ask. The rulings live in the standing documents (read them from the copy of main named above:
   rulings made during the dialogue are there, not in the checkout), the prior art in `knowledge/` and the run
-  records. A question they answer is not asked.
+  records. Where the standing documents hold an index of rulings, read it first, then the entries it points to.
+  A question they answer is not asked.
+- A point a ruling settles is never put to the asker as a question, not even "apply it here too?" or "this run or
+  the backlog?": apply it whole, in this run, to every case it covers, and cite it: who made it, when, and where it
+  is recorded (the file and the row or heading, quoted). A ruling stands until its maker changes it, with an answer
+  or a note.
+- A question you ask anyway goes with one item in `rulings_checked`, in the same order as `questions`: which
+  rulings you read and why none of them settles it. The asker sees it on the line before the question, and a reply
+  without one for each question is sent back.
 - A note added to the run, under "Notes added to this run" in the dialogue so far, is a ruling or a fact given while
   the dialogue runs. It stands over the ask and over an earlier answer.
 - Every agent in the dialogue speaks each round, beside you. Your batch reaches the asker one question per item;

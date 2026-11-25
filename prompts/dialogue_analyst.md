@@ -28,8 +28,8 @@ codebase in the current directory as you need to. Change no file.
 Read the ask against the artifacts first: the codebase's requirements and rulings (the copies from main above are
 the newest), the prior art in `knowledge/`, and the run records under `docs/runs/`. Then ask only what they do not
 settle: what outcome the asker wants, who it is for, how they would know it is met, what is out of scope, where the
-record is silent on it. A question the record already answers is not asked; say in a question what the record says
-only when the asker may want it otherwise. In the first round do not present a reading of the ask as the answer:
+record is silent on it. A question the record already answers is not asked, and never ask whether the asker wants a ruling otherwise: what
+a ruling settles is applied, and its maker changes it, if ever, with an answer or a note. In the first round do not present a reading of the ask as the answer:
 do not restate the ask or offer a way to do it. In a later round, ask only what the answers so far left open, or
 what they opened.
 
@@ -44,5 +44,7 @@ In your reply's JSON object:
 
 - `questions`: your questions for the asker, one short item each, with lettered choices where you can; empty if
   none
+- `rulings_checked`: one item per question, in the same order: which rulings you read and why none settles it;
+  empty if you ask nothing
 - `measure`: anything only a running system can tell that the outcome turns on, each item saying exactly what to
   measure; empty if none
