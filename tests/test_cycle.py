@@ -59,7 +59,8 @@ def test_a_second_request_goes_through_the_same_cycle_and_runs_the_first_ones_te
     second, _, store, _ = cycle(script(
         write_tests={"envelope": {"summary": "farewell", "test_files": ["tests/test_bye.py"], "edge_cases": ["none given"]},
                      "files": {"tests/test_bye.py": bye_test}},
-        build={"envelope": {"summary": "bye", "files_changed": ["bye.py"], "verdict": "accept", "reasons": []},
+        build={"envelope": {"summary": "bye", "files_changed": ["bye.py"], "verdict": "accept", "reasons": [],
+                            "defective_tests": []},
                "files": {"bye.py": "def farewell():\n    return 'bye'\n"}}), target=target, request="Add a farewell")
     assert second.outcome == "accepted" and names(store, second) == ORDER
     baseline = record(store, second, "baseline")
@@ -87,7 +88,8 @@ def test_a_failed_build_is_sent_back_with_the_failure(cycle):
 # A test that expects what the plan does not: no build can pass it, and the builder may not touch it.
 WRONG_TEST = dict(WRITE_TESTS, files={"tests/test_hello.py": TEST.replace("== 'hello'\n\n\ndef", "== 'hullo'\n\n\ndef")})
 DEFECT = dict(BUILD, envelope=dict(BUILD["envelope"], verdict="test_defect",
-                                   reasons=["test_greets expects 'hullo'; the plan says hello"]))
+                                   reasons=["test_greets expects 'hullo'; the plan says hello"],
+                                   defective_tests=["tests/test_hello.py::test_greets"]))
 MENDED = {"envelope": {"summary": "the expected greeting was misspelled", "mended": ["tests/test_hello.py"]},
           "files": {"tests/test_hello.py": TEST}}
 NOT_MENDED = {"envelope": {"summary": "the test is as the plan gives it", "mended": []}}
@@ -107,7 +109,8 @@ def test_a_builder_that_reports_a_test_no_build_can_pass_sends_it_to_the_test_wr
 
 
 @pytest.mark.fr("FR-097")
-def test_a_second_report_of_a_defective_test_is_not_chased(cycle):
+@pytest.mark.fr("FR-150")
+def test_a_second_report_of_the_same_defective_test_is_not_chased(cycle):
     again = dict(DEFECT, files={})
     run, _, store, _ = cycle(script(write_tests=WRONG_TEST, build=[DEFECT, NOT_MENDED, again, again]))
     assert run.outcome == "needs-me" and "build step has run 3 times" in run.reason

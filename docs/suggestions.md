@@ -175,11 +175,12 @@ the relevant factory teams." Specification: `specs/003-fitness-and-feedback/spec
   (continues #36). Declined as misreadings (section 3): "Finding 3 was put to the operator three times"; "the plan put
   the documenter after the architect" (the need continues #48).
 
-- **Open, from run 99 (found by the orchestrator; the operator: "exactly"):** a second `test_defect` report that names
-  different tests from the one already mended gets a mend of its own; today `Rework("mend_tests", at_most=1)` mends once
-  and ignores later reports, so the builder, having diagnosed the second defect exactly ("psycopg cannot parse a
+- **Taken, 2026-11-25, FR-150 (from run 99; found by the orchestrator; the operator: "exactly"),
+  `changes/2026-11-25-a-mend-per-defect.md`:** a second `test_defect` report that names
+  different tests from the one already mended gets a mend of its own; before, `Rework("mend_tests", at_most=1)` mended once
+  and ignored later reports, so the builder, having diagnosed the second defect exactly ("psycopg cannot parse a
   timestamptz in that format"), could only repeat it until its attempts ran out and the run ended needs-me. A repeat
-  report on the same tests stays unchased. To build with the next factory batch.
+  report on the same tests stays unchased. The builder now names the tests in `defective_tests`; two mends at most.
 
 # Retro suggestions for the factory and the orchestrator, and what became of them
 
@@ -582,6 +583,11 @@ made the budget a smell; run 96 measured 635 against 300 and calls the overrun "
 `prompts/merge_questions.md`. **OPEN.** The prompt says "When in doubt, do not merge"; run 97 left eight overlapping
 measurements of one two-row UPDATE apart (13 answers "See Q48's answer"); run 98's Q76 to Q79 lean on "the same
 setup". Not the misread parts (section 3).
+*2026-11-25, runs 99 and 100:* **#72 (plain duplicates):** run 99 asked one reason-for-a-change choice three times
+(Q89, Q92, Q94) and run 100 one end-date choice twice (Q98, Q101), none merged: run 100's merge was given as a flat
+list and read as none, run 99's was not proposed. Change to: **TAKEN for questions asking one decision (FR-151,
+`changes/2026-11-25-one-decision-one-question.md`); OPEN for measurements of one shape and questions that stand
+alone.**
 
 **73. What is measured, ruled or researched once is kept in the target's standing documents, for the next plan.**
 Runs 91, 94, 96, 97. Aimed at: the orchestrator and the documenter. **OPEN.** Run 91: "the next plan would not need

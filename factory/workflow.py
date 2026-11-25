@@ -21,6 +21,7 @@ OUTCOMES = ("accepted", "rejected", "needs-me", *FOUND)
 FAILURES = ("timeout", "error", "guard", "malformed", "check", "question")     # how a step can fail
 ANSWERERS = ("operator", "orchestrator")   # who may answer through `factory answer`; the lead answers inside (FR-139)
 ACCEPT = "accept"               # the verdict that passes a judging step; every other verdict is a route
+DEFECTIVE_TESTS = "defective_tests"     # where a builder's reply names the tests no build can pass (FR-150)
 WAIT = "WAIT"                   # as an on_pass: stop and wait for the operator
 END_ACCEPTED = "END_ACCEPTED"   # as an on_pass: the run is finished and accepted
 END_AS_FOUND = "END_AS_FOUND"   # as an on_pass: the run ends as its findings say, answered or inconclusive (FR-116)
@@ -57,6 +58,7 @@ class StepResult:
     failed_check: CheckResult | None = None
     message: str = ""                       # the agent program's message, for "error"
     verdict: str | None = None              # what a judging step decided
+    named: tuple = ()                       # the tests its verdict names, the builder's `defective_tests` (FR-150)
 
     def __post_init__(self):
         if self.failure is not None and self.failure not in FAILURES:
@@ -69,10 +71,12 @@ class Rework:
 
     With `at_most`, once `step` has run that many times this route goes on to `then` instead: the
     step it names, the finding recorded and not chased; or an End, the run boxed (FR-114).
+    With `once_per_test`, it is taken only for a report that names a test no earlier report named (FR-150).
     """
     step: str
     at_most: int | None = None
     then: "str | End | None" = None
+    once_per_test: bool = False
 
 
 @dataclass(frozen=True)
@@ -235,12 +239,13 @@ def grade_for(step, tries, climbs_to=CLIMBS_TO) -> str:
 
 # ---- what happens next ----
 
-def next_step(step, result, attempts, limit, found=None) -> Run | Wait | Ask | Replan | End:
+def next_step(step, result, attempts, limit, found=None, reports=()) -> Run | Wait | Ask | Replan | End:
     """Given how a step went, what the run does now. The whole decision logic, in order.
 
     `attempts` maps a step's name to how many times it has run in this run. An attempt is
     one execution of a step, whatever caused it; no step runs more than `limit` times.
     `found` is what a spike's findings said, its outcome and reason, for a step that ends the run as found.
+    `reports` is the tests each earlier report of a defective test in the run named, oldest first (FR-150).
     """
     note = result.failed_check.note if result.failed_check else ""
     if result.failure == "guard":
@@ -260,7 +265,7 @@ def next_step(step, result, attempts, limit, found=None) -> Run | Wait | Ask | R
     if result.failure == "check":
         route = step.routes.get(result.verdict) or step.on_fail     # a judging step's verdict says where
         if isinstance(route, Rework):
-            if route.at_most and attempts.get(route.step, 0) >= route.at_most:
+            if not _taken(route, result.named, attempts, reports):
                 if isinstance(route.then, End):         # boxed: had its tries, the run ends saying why
                     return End(route.then.outcome, f"{route.then.reason}: {note}")
                 return Run(route.then)
@@ -281,6 +286,28 @@ def next_step(step, result, attempts, limit, found=None) -> Run | Wait | Ask | R
     if step.on_pass == END_AS_FOUND:
         return as_found(found)
     return Run(step.on_pass)
+
+
+def _taken(route, named, attempts, reports) -> bool:
+    """Is this rework route taken? Not once its step has run `at_most` times (FR-114). A route taken once per test
+    is taken for a report naming a test no earlier report named; one naming none, only if it is the first (FR-150)."""
+    if route.at_most and attempts.get(route.step, 0) >= route.at_most:
+        return False
+    if not route.once_per_test:
+        return True
+    if not named:
+        return not reports
+    reported = {comparable_name(test) for report in reports for test in report}
+    return any(comparable_name(test) not in reported for test in named)
+
+
+def comparable_name(name) -> tuple:
+    """A test's name in a form two reports can compare (FR-150). A runner's `tests/test_x.py::TestY::test_z` and
+    a JUnit report's `tests.test_x.TestY::test_z` are the same test; a parametrised case's id, in brackets, is kept
+    whole."""
+    where, bracket, case = str(name).strip().partition("[")
+    where = where.replace(".py::", "::").removesuffix(".py").replace("::", ".").replace("/", ".")
+    return (*where.split("."), bracket + case)
 
 
 # ---- a spike: a run whose product is an answer (FR-113 to FR-117) ----

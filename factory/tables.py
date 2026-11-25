@@ -5,7 +5,8 @@ change what the factory does, change a table. Nothing here reads or writes anyth
 """
 from dataclasses import replace
 
-from factory.workflow import END_ACCEPTED, END_AS_FOUND, FOUND, GRADES, End, Replan, Rework, Step, WAIT
+from factory.workflow import (DEFECTIVE_TESTS, END_ACCEPTED, END_AS_FOUND, FOUND, GRADES, End, Replan, Rework, Step,
+                              WAIT)
 
 # ---- the plain table: a change, test first ----
 
@@ -29,19 +30,21 @@ STEPS: list[Step] = [
     Step("red", "code", on_pass="build", checks=("tests_fail_first",), on_fail=Rework("write_tests"),
          commit_after=True),
 
-    # The builder may not touch a test. One it finds no build can pass goes to the test writer, once (FR-097);
-    # reported again, the tests are run and the failure takes its usual course.
+    # The builder may not touch a test. One it finds no build can pass goes to the test writer (FR-097): once for
+    # each test no earlier report named, and twice in a run at most (FR-150). A report naming only tests reported
+    # before is not chased: the tests are run and the failure takes its usual course.
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
-         on_pass="test", routes={"test_defect": Rework("mend_tests", at_most=1, then="test")},
+         on_pass="test", routes={"test_defect": Rework("mend_tests", at_most=2, then="test", once_per_test=True)},
          smells=("lines_within_length", "readable"), on_fail=Rework("build"),
          inputs=("request", "plan", "constitution", "ideals", "test_files", "failure"),
-         envelope={"summary": "text", "files_changed": "list", "verdict": "verdict", "reasons": "list"}),
+         envelope={"summary": "text", "files_changed": "list", "verdict": "verdict", "reasons": "list",
+                   DEFECTIVE_TESTS: "list"}),
 
     # Not on the usual path: reached only from the build. It goes on to `test`, not `red`: the build is there,
     # so a mended test is expected to pass.
     Step("mend_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
          on_pass="test", smells=("tests_within_budget", "lines_within_length"), on_fail=Rework("mend_tests"),
-         inputs=("request", "plan", "test_paths", "failure"),
+         inputs=("request", "plan", "test_paths", "failure", "defective_tests", "failing_tests"),
          envelope={"summary": "text", "mended": "list"}),
 
     Step("test", "code", on_pass="architecture_review", checks=("tests_pass",), smells=("coverage_holds",),
@@ -83,7 +86,8 @@ LEAD = Step("answer_question", "agent", persona="lead", on_pass="", may_ask=Fals
 
 # Not part of any table either: after a round, questions from different agents that ask the same thing are merged,
 # so the asker answers each once (FR-132). Advice: if it fails, the batches go to the asker as they were asked.
-MERGE = Step("merge_questions", "agent", persona="facilitator", on_pass="", may_ask=False, model="light",
+# The middle grade: telling one decision asked three ways from two that only look alike is judgment (FR-151).
+MERGE = Step("merge_questions", "agent", persona="facilitator", on_pass="", may_ask=False, model="middle",
              advisory=True, inputs=("to_merge",), envelope={"merged": "list"})
 
 

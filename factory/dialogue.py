@@ -354,10 +354,12 @@ def merge_input(store, run_id) -> str:
 def merge(store, run_id, said, waiting) -> dict[int, int]:
     """Record the merge the light model proposed, if it holds: each group two or more waiting questions, from more
     than one agent, all questions or all measurements, none in two groups; the first is the one the asker answers.
-    Anything else, or no reply, merges nothing: the batches go to the asker as they were asked. Returns what was
-    merged into what."""
+    One group given as a flat list of numbers is read as that group (FR-151). Anything else, or no reply, merges
+    nothing: the batches go to the asker as they were asked. Returns what was merged into what."""
     by_id, into, seen = {q.id: q for q in waiting}, {}, set()
     groups = (said or {}).get("merged") if isinstance(said, dict) else None
+    if isinstance(groups, list) and groups and all(isinstance(number, str) for number in groups):
+        groups = [groups]
     for group in groups if isinstance(groups, list) else []:
         ids = [int(str(i).lstrip("Q")) if str(i).lstrip("Q").isdigit() else None for i in
                (group if isinstance(group, list) else [])]

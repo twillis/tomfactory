@@ -109,7 +109,7 @@ def same_from_two(then=()):
 def test_questions_from_two_agents_that_ask_the_same_thing_are_merged_and_answered_once(home, sprint, fake_notify):
     run, fake = start(sprint, same_from_two(aligned_round()))
     merge = fake.calls[4]
-    assert merge["persona"].startswith("# Facilitator") and merge["model"] == "light"
+    assert merge["persona"].startswith("# Facilitator") and merge["model"] == "middle"
     assert WHO in merge["prompt"] and SAME in merge["prompt"]
     waiting = operations.questions(run.id).questions
     assert [q.question for q in waiting] == [WHO]                       # the asker answers it once

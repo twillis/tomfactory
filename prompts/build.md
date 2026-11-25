@@ -28,9 +28,11 @@ What failed, if anything:
 You may not change a test. If one of them can never pass, because what it expects contradicts
 the approved plan or the codebase itself (a wrong expected value, a setup that leaves out
 something the test relies on, a name the plan does not give), do not spend another attempt
-building against it. Build everything else, and give the verdict `test_defect`: the test
-writer is then asked, once, to mend that test, and the tests are run again. A test that is
-merely hard to satisfy is not defective.
+building against it. Build everything else, and give the verdict `test_defect`, naming each
+such test in `defective_tests`: the test writer is then asked to mend it, and the tests are run
+again. Each test is mended once in a run: a report that names only tests you have reported
+before is not sent to the test writer again, so report a test you have not named before as soon
+as you find it. A test that is merely hard to satisfy is not defective.
 
 ## If the database does not behave as the plan says
 
@@ -62,3 +64,7 @@ In your reply's JSON object:
   whatever is built
 - `reasons`: for `test_defect`, each such test: its name, what it expects, and what the plan
   or the codebase says instead; otherwise an empty list
+- `defective_tests`: for `test_defect`, the id of each such test, one per item, as the test
+  report above names it when it does (`tests.test_x.TestY::test_z`), otherwise as the test
+  runner would (`tests/test_x.py::TestY::test_z`, with a parametrised case's id in brackets);
+  otherwise an empty list
