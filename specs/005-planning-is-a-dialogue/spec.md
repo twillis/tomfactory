@@ -154,3 +154,15 @@ answer) or one that can wait for a later small sprint. One that can wait does no
 (the target's backlog) and the plan says the case is left for that sprint. The asker says which it is, and whoever
 answers may move a question from "stops planning" to "later". Nothing designed yet; it goes through the factory once
 spec 007's bootstrap exists.
+
+## Two more needs (the operator, 2026-11-24, run 97)
+
+- **A memo for the round.** "the ability for me to broadcast a memo to fine-tune behavior for the round". `factory note`
+  already adds a ruling to one run that every agent reads from its next round on; what is not there is a memo that
+  tunes behaviour beyond one run (today that means editing a persona, which the own-files guard refuses while any run
+  is active). Whether the need is one run's note or a standing memo across runs is the first question when designed.
+- **The operator weighs in by the third round.** "by third round of planning I really need to get involved and put
+  more information back into the fourth round and so on to make sure this doesn't go on forever ... I am required to
+  weigh in on the issue at that point and you will walk me through it like you have been". So a dialogue still
+  unaligned after round 3 stops for the operator: what is still open, walked through one question at a time, and his
+  answers go into round 4. Until built, the orchestrator does this by hand.
