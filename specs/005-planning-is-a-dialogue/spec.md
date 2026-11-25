@@ -3,8 +3,10 @@
 **Created**: 2026-11-24
 
 **Status**: The need is agreed (the operator, 2026-11-24: "Yes the statement of need for planning is correct"). The
-eight open questions were answered by the operator the same day, one at a time, from his phone (below). Nothing is
-designed yet. Not run through spec kit. No requirement here carries an FR number until it is built (constitution S8).
+eight open questions were answered by the operator the same day, one at a time, from his phone (below). Designed the same day (the ten
+decisions below) and built that afternoon; tuned after its first real run (change records
+`2026-11-24-planning-is-a-dialogue.md` and `2026-11-24-tuning-the-dialogue.md`). Further needs found in use are at the
+end, not designed. Not run through spec kit. No requirement here carries an FR number until it is built (constitution S8).
 
 ## The need
 

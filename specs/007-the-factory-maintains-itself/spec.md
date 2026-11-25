@@ -2,7 +2,8 @@
 
 **Created**: 2026-11-24
 
-**Status**: A need, agreed; the five questions answered by the operator the same day, one at a time. Nothing designed.
+**Status**: A need, agreed; the five questions answered by the operator the same day, one at a time; two design
+decisions taken (D1, D2, below). Nothing built.
 
 ## The need
 

@@ -48,9 +48,25 @@ its record shows it. What stays with an orchestrator is what genuinely needs one
    factory checks that the Python it tests on is the codebase's floor.
 5. **Why each file changed.** A one-line reason per changed file, traced to the plan; a file that does not trace is a
    reason to stop. Asked for by the operator (above).
-6. **Deleting a file.** Run 95's builder built everything else and stopped, three attempts in a row, because "I have no tool that can delete a file"; the plan said to delete `bttr_erp/repo/named_form.py`. The orchestrator ran `git rm` in the run's checkout, committed it, and resumed. An agent can create and edit a file but cannot remove one, so a plan that deletes always needs a hand.
+6. **Deleting a file.** Run 95's builder built everything else and stopped, three attempts in a row, because "I have no tool that can delete a file"; the plan said to delete `bttr_erp/repo/named_form.py`. The orchestrator ran `git rm` in the run's checkout, committed it, and resumed. An agent can create and edit a file but cannot remove one, so a plan that deletes always needs a hand. **Built the same day** in the tuning (change record `2026-11-24-tuning-the-dialogue.md`): an agent lists the files to delete and the factory deletes them, checked against what the step may change.
 7. **Answering what the record already settles.** In run 95's dialogue most questions were answered from the operator's
    earlier answers and the prior art in `knowledge/`; that is the dialogue agents' own job (spec 005's tuning). Run 97 (2026-11-24): round 2 was spent on one question (the gaps key's default) that the record settled (docs/backlog.md, run 67's architect warning: a new key's default is what earlier tables already do). The operator: a whole round for an easily answered question. A question the record answers should be answered by the agent that finds the answer, and one that only the orchestrator answers from the record should not hold a round alone.
+
+8. **Saying who answered.** The factory's store records an answer as the lead's or the operator's, nothing else. In
+   run 97 the orchestrator answered 25 of the 26 questions that reached the asker (the measurements, and the rest from
+   the record and the prior art); the run record and the retro print every one as "operator answered". Raised by the
+   orchestrator on 2026-11-24 during run 91 (its own send-back was filed as the operator's comment) and not built. A
+   record that puts the orchestrator's words under the operator's name is the one thing a record must not do.
+
+**Evidence added 2026-11-25, from run 97**
+
+- Item 2 (verifying): the factory accepted run 97 with tests, build and review each passing on the first attempt. The
+  orchestrator's check afterwards (five checkers and ten sceptics on a real PostgreSQL) found two ways through the
+  guard and five lesser faults the review had not, among them the very move the decision was written to stop, on a
+  hand-written table. bttr_erp `docs/verification/2026-11-25-run-97-d10.md`.
+- Item 3 (merging): run 96 ended accepted at 18:56 and was merged at 21:24. The orchestrator had said it would merge
+  "in the background", and it cannot act between the operator's messages. An accepted run waited two and a half hours
+  for a turn.
 
 **Belongs with the operator; the orchestrator only relays it**
 
