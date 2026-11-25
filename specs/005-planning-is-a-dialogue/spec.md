@@ -160,7 +160,7 @@ spec 007's bootstrap exists.
 - **A memo for the round.** "the ability for me to broadcast a memo to fine-tune behavior for the round". `factory note`
   already adds a ruling to one run that every agent reads from its next round on; what is not there is a memo that
   tunes behaviour beyond one run (today that means editing a persona, which the own-files guard refuses while any run
-  is active). Whether the need is one run's note or a standing memo across runs is the first question when designed.
+  is active). Whether the need is one run's note or a standing memo across runs is the first question when designed. The operator, the same day: "I could send emails to individual team members which is effectively wanting either a response or effect to happen out of band. We could figure out a way to process that for tuning". So a memo may be addressed to one team member (a persona), and asks either for a reply or for a change in how it works; how a memo that asks for a change becomes tuning (and goes through spec 007's process) is part of the design.
 - **The operator weighs in by the third round.** "by third round of planning I really need to get involved and put
   more information back into the fourth round and so on to make sure this doesn't go on forever ... I am required to
   weigh in on the issue at that point and you will walk me through it like you have been". So a dialogue still
