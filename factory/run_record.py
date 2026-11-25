@@ -206,12 +206,30 @@ def _spike(run, steps) -> list:
     return lines
 
 
+FAILED_SHOWN = 5        # how many failing tests a row of the record names
+WHY_LENGTH = 160        # how much of a failing check's message a row of the record keeps, where no test is named
+
+
+def failing_tests(failing, shown=FAILED_SHOWN, messages=False) -> str:
+    """The tests a test report named as failing (FR-141), the first `shown`, each with its message if asked;
+    "" where there was no report or it named none."""
+    tests = (failing or {}).get("tests") or []
+    named = [f"{t['test']} ({t['message']})" if messages and t["message"] else t["test"] for t in tests[:shown]]
+    more = (failing or {}).get("count", 0) - len(named)
+    return ", ".join(named) + (f" and {more} more" if named and more > 0 else "")
+
+
 def _result(step) -> str:
-    """How a step went: passed, or how it failed and, for a check, which one."""
+    """How a step went: passed, or how it failed and, for a check, which one and why: the failing tests by name,
+    or the check's message, shortened (FR-141). One cell of a table, so on one line, with no bare `|`."""
     if step.passed:
         return "passed"
-    failed = next((c["name"] for c in step.checks or [] if not c.get("passed")), None)
-    return f"{step.failure}: {failed}" if step.failure == "check" and failed else str(step.failure)
+    failed = next((c for c in step.checks or [] if not c.get("passed")), None)
+    if step.failure != "check" or not failed:
+        return str(step.failure)
+    named = failing_tests(failed.get("failing"))
+    why = f"failed: {named}" if named else _shorten(failed.get("note") or "", WHY_LENGTH)
+    return f"check: {failed['name']}" + (f" ({why})".replace("|", "\\|") if why else "")
 
 
 def _sprint_review(judged, architect) -> list:
@@ -238,11 +256,27 @@ def measured(store, run, checkout, settings) -> list[str]:
     budget = settings.test_budget_lines
     within = f"{budget}, so {'within' if added <= budget else 'over'} it" if budget else "none"
     smells = _smells_found(steps)
-    return [f"- Lines of tests this run added: {added}; the codebase's budget for one run: {within}.",
+    return [_tests_after(steps),
+            f"- Lines of tests this run added: {added}; the codebase's budget for one run: {within}.",
             f"- Lines of tests this run removed or rewrote: {removed}; test files deleted: "
             + (", ".join(deleted) or "none") + ". A test cut removes lines: none were cut only if this is 0.",
             "- Smells found: " + ("; ".join(smells) if smells else "none."),
             "- " + (coverage_line(steps) or "Coverage: not measured on this codebase.")]
+
+
+def _tests_after(steps) -> str:
+    """What the last run of the tests after the build said, as the factory ran them (FR-142): passed or failed, with
+    the failing tests its report names, and the test command's own last line, which carries its counts."""
+    ran = [s for s in steps if any(c["name"] == "tests_pass" for c in s.checks or [])]
+    if not ran:
+        return "- The tests after the build: not run in this run."
+    last = ran[-1]
+    said = [line.strip() for line in ((last.produced or {}).get("output") or "").splitlines() if line.strip()]
+    report = next(c.get("failing") for c in last.checks if c["name"] == "tests_pass")
+    named = failing_tests(report, shown=10, messages=True)
+    result = "passed" if last.passed else f"failed: {named}" if named else "failed"
+    return (f"- The tests after the build, as the factory ran them ({last.name}, attempt {last.attempt}): {result}."
+            + (f" The test command's last line: `{said[-1]}`" if said else ""))
 
 
 def _smells(steps) -> list:

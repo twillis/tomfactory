@@ -155,8 +155,19 @@ def _v6_planning_is_a_dialogue(db) -> None:
     db.execute("ALTER TABLE questions ADD COLUMN measure BOOLEAN NOT NULL DEFAULT 0")
 
 
+def _v7_who_answered(db) -> None:
+    """An answer may be the orchestrator's, not only the lead's or the operator's (FR-139). questions is remade to
+    widen its CHECK; every answer already kept stays as it was recorded."""
+    made = db.execute("SELECT sql FROM sqlite_master WHERE name = 'questions'").fetchone()["sql"]
+    widened = made.replace("IN ('lead','operator')", "IN ('lead','operator','orchestrator')")
+    db.execute(widened.replace("CREATE TABLE questions", "CREATE TABLE questions_widened", 1))
+    db.execute("INSERT INTO questions_widened SELECT * FROM questions")
+    db.execute("DROP TABLE questions")
+    db.execute("ALTER TABLE questions_widened RENAME TO questions")
+
+
 MIGRATIONS = [_v3_kind_of_run, _v4_question_is_a_failure, _v5_a_spike_ends_answered_or_inconclusive,
-              _v6_planning_is_a_dialogue]   # each one up
+              _v6_planning_is_a_dialogue, _v7_who_answered]   # each one up
 VERSION = OLDEST + len(MIGRATIONS)
 
 

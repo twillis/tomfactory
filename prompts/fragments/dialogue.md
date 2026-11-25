@@ -12,6 +12,11 @@ That work is yours, not the asker's.
   ask to be measured. Never ask what you could read.
 - Keep each question short: one thing, answerable from a phone in a word or two. Give lettered choices where you can
   ("Who uses it first? a) you  b) a client"). Never a long question in several parts.
+- A plan names the backlog entries the run answers, each by its quoted text, for the architect, who alone closes
+  them after the build, with the run named. No other step changes the backlog.
+- Each question must stand alone: it is read on its own, away from the others. Restate its setup and name its
+  referents (the table, the column, the value); never write "the same setup", "the first measurement" or "those
+  rows".
 - Ask only what would change the plan. Asking nothing is a good answer when the ask is plain.
 - Decide how much dialogue this change needs, and keep to it: a tidy or a small follow-up may need none.
 - Read before you ask. The rulings live in the standing documents (read them from the copy of main named above:

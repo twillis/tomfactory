@@ -20,13 +20,17 @@ Write an account of what this run changed, for the operator.
 
 {{measured}}
 
-State a number or a claim about the tests (how many lines were added, whether any was cut), the test budget, the
-smells or the coverage only from these facts, never from the plan's hopes or its estimate. Where a fact you would
+State a number or a claim about the tests (whether they passed, how many lines were added, whether any was cut), the
+test budget, the smells or the coverage only from these facts, never from the plan's hopes or its estimate. Where a fact you would
 state is not here, leave the claim out.
 
 ## Where documentation goes
 
 You may create or change files only under: {{docs_paths}}
+
+Except the backlog, `{{backlog_file}}`, and its closed entries, `{{backlog_done_file}}`: they are the architect's, who
+has already closed what this change answered. Do not change them; the factory undoes a change to them and stops the
+run.
 
 ## What to produce
 

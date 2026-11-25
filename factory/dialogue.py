@@ -7,6 +7,7 @@ the batch the asker answers and reads it back, and renders the dialogue so far, 
 for the run's record. What the end of a round means is decided in workflow.py; nothing here decides it.
 """
 import re
+from typing import NamedTuple
 
 from factory import records, workflow
 
@@ -16,6 +17,7 @@ ROLES = {"reviewer": "the plan check"}      # a speaker is named by its persona,
 FATES = {"pending": "proposed for agreement", "agreed": "agreed by the asker", "approved": "agreed, and approved",
          "abandoned": "abandoned"}
 MARK = re.compile(r"^\[Q(\d+)\]")
+ANSWER = re.compile(r"^answer(?: \(([^)]*)\))?:")     # `answer:`, or `answer (orchestrator):` to say who gave it
 
 
 def role(persona) -> str:
@@ -208,6 +210,7 @@ def render_batch(run, questions) -> str:
     number = questions[0].round if questions else 0
     lines = [f"# Run {run.id}, round {number}: {len(questions)} question{'s' if len(questions) > 1 else ''}."
              " Write each answer under its question, after \"answer:\".",
+             "# An answer the orchestrator gave, a measurement above all, goes after \"answer (orchestrator):\".",
              "# Lines that start with # are not read. Save and close to send every answer as one batch."]
     heard = None
     for q in questions:
@@ -219,9 +222,15 @@ def render_batch(run, questions) -> str:
     return "\n".join(lines) + "\n"
 
 
-def parse_batch(text, questions) -> dict[int, str]:
+class Answer(NamedTuple):
+    text: str
+    by: str         # who gave it: one of workflow.ANSWERERS (FR-139)
+
+
+def parse_batch(text, questions, by="operator") -> dict[int, Answer]:
     """The asker's answers, by question: every waiting question answered, and nothing else. Lines that start with
-    # are not read. A ValueError says what is missing or not asked."""
+    # are not read. A plain `answer:` is `by`'s; `answer (orchestrator):` or `answer (operator):` says who gave
+    that one (FR-139). A ValueError says what is missing, not asked, or marked as no one's who may answer."""
     blocks, current = {}, None
     for line in text.splitlines():
         if line.startswith("#"):
@@ -234,12 +243,20 @@ def parse_batch(text, questions) -> dict[int, str]:
             blocks[current].append(line)
     answers = {}
     for number, lines in blocks.items():
-        at = next((i for i, line in enumerate(lines) if line.startswith("answer:")), None)
-        answers[number] = "" if at is None else "\n".join([lines[at][len("answer:"):], *lines[at + 1:]]).strip()
+        at = next((i for i, line in enumerate(lines) if ANSWER.match(line)), None)
+        if at is None:
+            answers[number] = Answer("", by)
+            continue
+        marked = ANSWER.match(lines[at])
+        who = marked.group(1) or by
+        if who not in workflow.ANSWERERS:
+            raise ValueError(f"Q{number}'s answer is marked as {who}'s; an answer is the operator's or the"
+                             " orchestrator's: write answer:, answer (operator): or answer (orchestrator):")
+        answers[number] = Answer("\n".join([lines[at][marked.end():], *lines[at + 1:]]).strip(), who)
     unknown = sorted(set(answers) - {q.id for q in questions})
     if unknown:
         raise ValueError("the answers name questions that are not waiting: " + ", ".join(f"Q{n}" for n in unknown))
-    missing = [f"Q{q.id}" for q in questions if not answers.get(q.id)]
+    missing = [f"Q{q.id}" for q in questions if not (q.id in answers and answers[q.id].text)]
     if missing:
         raise ValueError(f"each of these has no answer: {', '.join(missing)}; write one under it, after \"answer:\"")
     return {q.id: answers[q.id] for q in questions}
@@ -306,9 +323,12 @@ def transcript(store, run) -> str:
 
 def _asked(q, into=None) -> str:
     said = f"- {'Asked for a measurement' if q.measure else 'Asked'} (Q{q.id}): {q.question}"
-    if (into or {}).get(q.id):
-        said += f"\n  The same as another agent's question: merged into Q{into[q.id]}, so the asker answered it once."
-    return said + ("\n  Answered: " + q.answer if q.answer is not None else "\n  Not yet answered.")
+    if (into or {}).get(q.id):          # answered once, under the question it was merged into: not again here
+        return said + (f"\n  The same as another agent's question: merged into Q{into[q.id]} and answered there,"
+                       " once.")
+    if q.answer is None:
+        return said + "\n  Not yet answered."
+    return said + f"\n  Answered by the {q.answered_by}: {q.answer}"
 
 
 # ---- rulings and facts added to a run while it plans (FR-133) ----

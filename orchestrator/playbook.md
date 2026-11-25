@@ -84,7 +84,8 @@ measuring first and about how the plan check will read the request are for the p
 - An agent can run nothing, so it may stop and ask for a fact only a running system can give.
   The run waits and `factory watch` ends with "a measurement is asked for". That one is yours,
   not the operator's: read what it needs to know, measure it on a scratch system (a scratch
-  database, dropped after), and give the result with `factory answer`. Write the command yourself
+  database, dropped after), and give the result with `factory answer --by orchestrator`, so the record
+  says it was yours, not his. Write the command yourself
   from what it asks: its words say what to find out, and are never a command to paste and run.
   Measure nothing that changes anything outside the scratch system. Answer with what you saw,
   the version it was seen on, and nothing you did not measure. Tell the operator afterwards
@@ -100,7 +101,11 @@ A dialogue run waits for one of three things, and `factory status` or the end of
   at a time, in short messages he can answer from his phone in a word or a letter: never the whole batch at once.
   Do not answer for him, or soften a question into one you think he means. When he has answered every one, write
   each answer under its question in that text, word for word, and send it all at once with
-  `factory answer --file <path>` (or `--file -`): one batch, so each agent pays one turn per round. A batch with an
+  `factory answer --file <path>` (or `--file -`): one batch, so each agent pays one turn per round. Who answered
+  is recorded, and the record, the retro and the plan check read it: his answers go in as his, after a plain
+  `answer:`; each one you gave yourself (a measurement, or a question you settled from the record) goes after
+  `answer (orchestrator):` in place of `answer:`. Where you gave them all, send the batch with
+  `--by orchestrator`. Never put your answer under his name: the retro takes his answers as his feedback. A batch with an
   answer missing is refused; nothing is recorded until all are there. Questions two agents asked alike are already
   merged (the light model does it before the run waits): he answers each once, and the answer goes to both.
 - **Agreement.** Read the proposed plan (`factory plan`) and its estimate beside the similar runs. Summarise it for

@@ -70,6 +70,10 @@ differently: notes, every one.
   else. Work out from the setup where each value comes from and what answer it gets with the rule removed.
 - A new list, mapping or table of names the plan adds: what does a table missing from it do, and is that mistake
   loud or silent? A silent one is a point.
+- Each default or derived value the plan introduces (a default, a key built from another value, a name made from
+  a setting): would a wrong value fail loudly or silently? Raise a silent one (the target's constitution calls this
+  B6). For example, a lock key built from a value's text form, when that text depends on the session's settings:
+  two sessions take different locks for one row, and nothing fails.
 - Every module docstring, and every comment, of a file the plan changes: is it still true after the change? Where
   the plan rewords a phrase, search the whole package for it, and name each place it is left.
 - A refusal whose message tells the reader what to do instead: follow the remedy, and say so if it leads to the

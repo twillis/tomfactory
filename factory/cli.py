@@ -70,6 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("words", nargs="*", metavar="[run] answer")
     sub.add_argument("--file", metavar="path", help="the answers, written into the batch factory questions shows;"
                                                     " - for standard input")
+    sub.add_argument("--by", default="operator", help="who answered: operator (the default) or orchestrator;"
+                                                      " in a batch, answer (orchestrator): marks one answer")
     with_run(command("questions", questions, "The questions a dialogue is waiting on, each with a place for its"
                                              " answer.")).add_argument("--json", action="store_true")
     with_run(command("agree", agree, "Agree to the plan a dialogue proposed. Agreement is not approval."))
@@ -186,9 +188,9 @@ def answer(args):
         except OSError as problem:
             raise operations.Refused(f"the answers could not be read: {problem}") from None
     if text.strip():
-        run = operations.answer(run_id, text)
+        run = operations.answer(run_id, text, args.by)
     else:
-        run = operations.answer_in_editor(run_id)
+        run = operations.answer_in_editor(run_id, args.by)
     if run.state == "ended":
         return print(ended(run))
     print(f"Run {run.id}: answered. It carries on; you will be notified when it next needs you or has finished.")

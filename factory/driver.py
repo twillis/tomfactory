@@ -407,7 +407,9 @@ def _failure(src):
     if not failed:      # the agent program failed: say what it said, not only that it failed (FR-094)
         said = (finished[-1].produced or {}).get("error") if isinstance(finished[-1].produced, dict) else None
         return f"{finished[-1].failure}: {said}" if said else str(finished[-1].failure)
-    return f"{failed['name']}: {failed['note']}" + (f"\n{failed['output']}" if failed.get("output") else "")
+    named = run_record.failing_tests(failed.get("failing"), shown=checks.FAILING_KEPT, messages=True)
+    return (f"{failed['name']}: {failed['note']}" + (f"\nThe test report names as failing: {named}" if named else "")
+            + (f"\n{failed['output']}" if failed.get("output") else ""))
 
 
 def _red_output(src):
@@ -500,6 +502,8 @@ INPUTS = {
     "comment": lambda src: (_sent_back(src).comment or "") if _sent_back(src) else "",
     "test_paths": lambda src: ", ".join(src.settings.test_paths),
     "docs_paths": lambda src: ", ".join(src.settings.docs_paths),
+    "backlog_file": lambda src: src.settings.backlog_file,
+    "backlog_done_file": lambda src: src.settings.backlog_done_file,
     "test_files": _test_files,
     "failure": _failure,
     "question": lambda src: (records.pending_question(src.store, src.run.id) or {}).get("question", ""),
