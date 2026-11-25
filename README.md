@@ -59,7 +59,7 @@ drove most of what followed: a plan check before the approval, the tests before 
 build in every record, and a `sprint` cycle for a codebase whose specification already exists,
 since spec kit re-derived one every run. Each is in `specs/001-near-loop-factory/changes/`.
 
-About 4,000 lines of Python, 593 tests, standard library plus pytest. What is next is in
+About 4,350 lines of Python, 654 tests, standard library plus pytest. What is next is in
 `docs/next.md`.
 
 ## Driving it from Claude Code: `/factory`
@@ -185,7 +185,8 @@ finds a run's commits. The record is one file under `docs/runs/`, with the branc
 run's number, which is counted on your machine alone, so two people working on one codebase do
 not collide. It is written when you approve the
 plan (the request, anything you sent it back with, the plan) and completed when the run ends,
-whatever the outcome (every step, the outcome and why, the review, the commits), so the reason
+whatever the outcome (every step, the outcome and why, the review, the commits; a step a check failed says why, naming
+the failing tests where the test command's output names them), so the reason
 for a change, and how it was made, travel with it. On a spec kit codebase spec kit's own
 documents under `specs/` hold the plan, and the record is written at the end only.
 **You merge the branch yourself.** The factory never merges.
@@ -248,6 +249,7 @@ the plan they propose, and then approve it, as "Planning is a dialogue" below de
 factory questions                   # the agents' questions, each agent's on its own
 factory answer                      # opens them in your editor; write each answer under its question, save
 factory answer --file answers.md    # or the same text from a file (or - for standard input)
+factory answer --by orchestrator    # recorded as the orchestrator's, not yours (operator is the default)
 factory note "Ruling: ..."          # a ruling or fact every agent reads from its next round on
 factory plan                        # the plan they propose, with its estimate
 factory agree                       # agree to it: this is not yet approval
@@ -335,8 +337,9 @@ waiting for you. Every agent may add `friction` to its reply: what made its step
 a facilitator writes `docs/retros/<run>.md`, an atomic note with front matter for an
 Obsidian vault: what worked, what did not, the opportunities and the threats, for the factory
 and not the product, quoting your comments in your own words. It is advice, like the
-architect's, and never stops a run. Its inputs are `run_facts`, `friction`,
-`operator_feedback`, `findings` and `run_name`.
+architect's, and never stops a run. Its inputs are `run_facts`, `measured` (among them what the tests
+after the build said), `friction`, `operator_feedback` (the operator's own words only, never the
+orchestrator's answers), `findings` and `run_name`.
 
 **Whose rules win.** Where they disagree, the order is: the codebase's own constitution
 (`.specify/memory/constitution.md` in it) first, then your ideals, then spec kit's generic
@@ -404,7 +407,11 @@ transcript, and so the run's record. Refused on a run that has ended, or one not
   questions from different agents that ask the same thing, so you answer each once and the answer is recorded for
   each agent that asked; the transcript says what was merged into what. If the merge fails, or proposes one that
   does not hold, the batches come to you as they were asked. `factory questions` shows them; `factory answer` opens
-  them in `$EDITOR`, each with `answer:` under it, and saving sends them all; `factory answer --file` takes the same text from a file or standard input. A batch with an
+  them in `$EDITOR`, each with `answer:` under it, and saving sends them all; `factory answer --file` takes the same text from a file or standard input.
+  **Who answered** is recorded: `answer:` is the operator's (or whoever `--by` names), and `answer (orchestrator):` in
+  its place marks one the orchestrator gave, a measurement above all; a merged question takes the answerer of the one
+  it was merged into. The record, the plan check and the final review name who answered each; the retro's
+  `operator_feedback` takes only the operator's. A batch with an
   answer missing is refused, naming it, and what you wrote is kept for next time. The next round is given every
   question and answer so far.
 - Only blocking points for the planner: the agents go round again at once, without you. After as many rounds in a
@@ -633,6 +640,21 @@ commit say what it was before the run and after it, and the test step reports a 
 ends below `coverage_floor` or fell by more than `coverage_drop` points, naming the files that
 fell most. No model is involved: the test command measures, the factory compares.
 
+### Which tests failed: read from the test report
+
+A codebase whose test command writes a JUnit XML report (pytest: `--junitxml=<path>`; nearly every
+test runner can) names it as `test_report` in its `.factory.toml`. Each time the tests run, the
+factory removes the old report, then reads the new one with the standard library: the tests it names
+as failing or in error, each with its message. A step a check failed says in the record's step list
+which tests failed (the first five), the builder's next attempt is told every one with its message, and
+the documenter and the retro are told what the tests after the build said. Without a report, the record
+gives the check's message, shortened, as before.
+
+```toml
+test_command = ".venv/bin/python -m pytest -q -p no:cacheprovider --junitxml=test-report.xml"
+test_report = "test-report.xml"     # and add it to .gitignore
+```
+
 ### When an agent has a question
 
 An agent that cannot go on without an answer may ask one question instead of finishing. It
@@ -670,7 +692,8 @@ every answered question, with who asked and who answered, and are told that wher
 and an answer disagree, the answer stands: the request was written first.
 
 A run cannot be approved past a question that is still waiting. Every question, who asked
-it, the answer and who answered are kept with the run and shown by `factory show`. An agent
+it, the answer and who answered (the lead, the operator, or the orchestrator, with
+`factory answer --by orchestrator`) are kept with the run and shown by `factory show`. An agent
 that keeps asking uses up its attempts like any other step.
 
 ### The architect and the backlog
@@ -684,7 +707,10 @@ line each, to `docs/backlog.md` in the target codebase, and recorded on the run
 
 The backlog holds what is still to do. An entry a change has answered is moved by the architect
 to `docs/backlog-done.md`, with the run that answered it, so the backlog stays short enough to
-read.
+read. The architect is the backlog's one owner: a plan names the entries its run answers, by their
+quoted text, and the architect closes them; the documenter may not change either file, and a change
+to one is undone. A codebase that keeps them elsewhere says so with `backlog_file` and
+`backlog_done_file` in its `.factory.toml`.
 
 The backlog is yours to work through. Any entry can be handed back to the factory as a
 request of its own.
@@ -786,10 +812,11 @@ outside the checkout, in git's own folder or among the factory's own files is re
 step fails as a guard (`deletions_inside`). A deletion is committed with the step's work.
 
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
-`ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`,
+`ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`, `backlog_file`, `backlog_done_file`,
 `test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, for a dialogue `round`,
 `dialogue`, `draft`, `similar_runs`, `standing`, `to_merge` and `codebase_moved`, for the documenter `measured`
-(what the factory measured of the tests, budget, smells and coverage, the only figures it may state), and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
+(what the factory measured of the tests, budget, smells and coverage, the only figures it may state; the retro is
+given it too), and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 
 ## Adding a persona

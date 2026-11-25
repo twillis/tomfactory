@@ -51,14 +51,16 @@ STEPS: list[Step] = [
     # Advice, not a gate: what the architect finds goes to a backlog, and the run carries on.
     Step("architecture_review", "agent", persona="architect", capabilities="read+edit", may_change="docs",
          on_pass="document", commit_after=True, advisory=True, model="standard",
-         inputs=("request", "plan", "constitution", "ideals", "diff", "docs_paths", "red_output"),
+         inputs=("request", "plan", "constitution", "ideals", "diff", "docs_paths", "red_output", "backlog_file",
+                 "backlog_done_file", "run_name"),
          envelope={"summary": "text", "suggestions": "list", "warnings": "list"}),
 
     # Documented before it is reviewed, so the reviewer judges the whole change.
     # Given what the factory measured, so it claims nothing about tests, budget or coverage it was not (FR-136).
-    Step("document", "agent", persona="documenter", capabilities="read+edit", may_change="docs",
+    # The backlog is the architect's alone: it sees what the change answered and closes it (FR-144).
+    Step("document", "agent", persona="documenter", capabilities="read+edit", may_change="docs_but_backlog",
          on_pass="review", commit_after=True, model="light",
-         inputs=("request", "plan", "diff", "docs_paths", "measured"),
+         inputs=("request", "plan", "diff", "docs_paths", "measured", "backlog_file", "backlog_done_file"),
          envelope={"summary": "text", "files_changed": "list"}),
 
     # A reply that contradicts itself (accept, with broken ideals) is asked for again.
@@ -132,8 +134,8 @@ SPEC_KIT_STEPS: list[Step] = [
     # Advice, like the architect's: the team's retro, about the factory, never a gate (FR-091).
     Step("retro", "agent", persona="facilitator", capabilities="read+edit", may_change="docs",
          on_pass="finish", commit_after=True, advisory=True, model="light",
-         inputs=("request", "run_facts", "friction", "operator_feedback", "findings", "docs_paths", "run_name",
-                 "constitution", "ideals"),
+         inputs=("request", "run_facts", "measured", "friction", "operator_feedback", "findings", "docs_paths",
+                 "run_name", "constitution", "ideals"),
          envelope={"summary": "text", "worked": "list", "did_not": "list", "opportunities": "list",
                    "threats": "list"}),
 

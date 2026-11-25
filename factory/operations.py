@@ -368,50 +368,53 @@ def resume(run_id=None) -> dict:
     return _launch_at(store, reopened, run.current_step)
 
 
-def answer(run_id=None, text="") -> dict:
+def answer(run_id=None, text="", by="operator") -> dict:
     """Answer what a run is waiting on. A dialogue's batch is answered as one (FR-121): `text` is the batch with each
     answer under its question, or plain words where one question waits; the next round then begins. Any other
-    question: the step that asked runs again with the answer."""
+    question: the step that asked runs again with the answer. `by` is who answered: the operator, or the
+    orchestrator driving the factory for him; in a batch, one answer may say otherwise (FR-139)."""
+    if by not in workflow.ANSWERERS:
+        raise Refused(f"{by} cannot answer here: an answer given here is the operator's or the orchestrator's")
     store = _open()
     run = _find(store, run_id)
     waiting = dialogue.batch(store, run.id)
     if waiting:
-        return _answer_batch(store, run, waiting, text)
+        return _answer_batch(store, run, waiting, text, by)
     asked = records.pending_question(store, run.id)
     if asked is None and dialogue.paused(store, run.id):
-        return _resume_paused(store, run, text)
+        return _resume_paused(store, run, text, by)
     if asked is None:
         now = dialogue.waiting(store, run)
         raise Refused(f"run {run.id} has no questions waiting for an answer"
                       + (f"; it is waiting for {now['says']}: {now['next']}" if now else ""))
     if not text.strip():
         raise Refused(f"give an answer to: {asked.question}")
-    records.answer(store, asked.id, text.strip(), "operator")
+    records.answer(store, asked.id, text.strip(), by)
     return _launch_at(store, run, run.current_step)
 
 
-def _answer_batch(store, run, waiting, text) -> dict:
+def _answer_batch(store, run, waiting, text, by) -> dict:
     if any(dialogue.MARK.match(line) for line in text.splitlines()):
         try:
-            answers = dialogue.parse_batch(text, waiting)
+            answers = dialogue.parse_batch(text, waiting, by)
         except ValueError as problem:
             raise Refused(str(problem)) from None
     elif len(waiting) == 1 and text.strip():
-        answers = {waiting[0].id: text.strip()}
+        answers = {waiting[0].id: dialogue.Answer(text.strip(), by)}
     else:
         raise Refused(f"{len(waiting)} questions are waiting: answer them with factory answer, which opens them in"
                       " your editor, or with factory answer --file, from the batch factory questions shows")
     budget = [q for q in waiting if q.step == dialogue.BUDGET]
-    more = [workflow.spend_more(answers[q.id]) for q in budget]
+    more = [workflow.spend_more(answers[q.id].text) for q in budget]
     if None in more:
         raise Refused("the budget question takes yes or no: whether to spend more on the dialogue")
     merged = dialogue.merged_into(store, run.id)
     with store.transaction():
         for q in waiting:
-            records.answer(store, q.id, answers[q.id], "operator")
-        for duplicate, kept in merged.items():       # the same answer, to every agent that asked it (FR-132)
-            if kept in answers and store.get("questions", duplicate).answer is None:
-                records.answer(store, duplicate, answers[kept], "operator")
+            records.answer(store, q.id, answers[q.id].text, answers[q.id].by)
+        for duplicate, kept in merged.items():       # the same answer, by the same answerer, to each that asked it
+            if kept in answers and store.get("questions", duplicate).answer is None:      # (FR-132, FR-139)
+                records.answer(store, duplicate, answers[kept].text, answers[kept].by)
         records.event(store, run.id, "answered", f"round {waiting[0].round}: {len(waiting)} answered",
                       {"round": waiting[0].round})
         if False in more:      # paused at its budget: the run waits, everything kept, to go on later (FR-124)
@@ -440,7 +443,7 @@ def note(run_id=None, text="", by="the operator") -> dict:
     return store.get("runs", run.id)
 
 
-def _resume_paused(store, run, text) -> dict:
+def _resume_paused(store, run, text, by) -> dict:
     """A dialogue paused at its budget goes on when the asker says yes: the next round, with a fresh allowance."""
     if workflow.spend_more(text) is not True:
         raise Refused(f"run {run.id}'s dialogue is paused at its budget: answer yes to spend more, agree to its"
@@ -449,7 +452,7 @@ def _resume_paused(store, run, text) -> dict:
     with store.transaction():
         asked = records.ask(store, run.id, dialogue.BUDGET, "factory", "Spend more, after the pause at the budget?"
                             " yes / no", number)
-        records.answer(store, asked.id, "yes", "operator")
+        records.answer(store, asked.id, "yes", by)
         records.event(store, run.id, "answered", f"round {number}: spend more, after the pause", {"round": number})
     return _carry_on(store, run, "revise")
 
@@ -466,12 +469,12 @@ def questions(run_id=None) -> Batch:
     return Batch(run, waiting, dialogue.render_batch(run, waiting))
 
 
-def answer_in_editor(run_id=None) -> dict:
+def answer_in_editor(run_id=None, by="operator") -> dict:
     """Open the waiting batch in the asker's editor, each question with a place for its answer; saving sends them
     all at once (FR-121). Answers refused are kept in the draft, which opens again next time."""
     store = _open()
     if not dialogue.batch(store, _find(store, run_id).id):
-        return answer(run_id, "")                   # refused, saying what is waiting instead
+        return answer(run_id, "", by)               # refused, saying what is waiting instead
     batch = questions(run_id)
     draft = store.files.answers_draft(batch.run.id)
     asked = {f"[Q{q.id}]" for q in batch.questions}
@@ -481,7 +484,7 @@ def answer_in_editor(run_id=None) -> dict:
     if proc.interactive([*shlex.split(os.environ.get("EDITOR") or "nano"), str(draft)]) != 0:
         raise Refused(f"the editor did not finish; your answers are kept in {draft}")
     try:
-        run = answer(batch.run.id, draft.read_text())
+        run = answer(batch.run.id, draft.read_text(), by)
     except Refused as problem:
         raise Refused(f"{problem}; your answers are kept in {draft}, and open again with factory answer") from None
     draft.unlink()

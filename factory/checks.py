@@ -7,6 +7,7 @@ stamps the name on what it returns. Which checks a step gets is a rule: workflow
 """
 import json
 import re
+import xml.etree.ElementTree as ElementTree
 import textwrap
 from dataclasses import dataclass, field, replace
 
@@ -109,6 +110,8 @@ def _allowed(scope, name, settings, checkout) -> bool:
         return not under(name, settings.test_paths) and name not in PROTECTED
     if scope == "docs":
         return under(name, settings.docs_paths)
+    if scope == "docs_but_backlog":     # the backlog has one owner, the architect (FR-144)
+        return under(name, settings.docs_paths) and name not in (settings.backlog_file, settings.backlog_done_file)
     return False    # "nothing"
 
 
@@ -317,12 +320,37 @@ def _coverage(ctx) -> dict | None:
     return {"coverage": round(data["totals"]["percent_covered"], 1), "files": files}
 
 
+FAILING_KEPT = 20      # how many failing tests a test step keeps, each with its message (FR-141)
+MESSAGE_LENGTH = 300   # how much of each failing test's message is kept
+
+
+def _failing(ctx) -> dict | None:
+    """The tests the codebase's JUnit XML test report names as failing or in error (FR-141), or None where it names
+    no report, or the report is not there or cannot be read. JUnit XML is what nearly every test runner writes."""
+    report = ctx.target_config.test_report
+    path = ctx.checkout.path / report if report else None
+    if not path or not path.is_file():
+        return None
+    try:
+        cases = list(ElementTree.parse(path).getroot().iter("testcase"))
+    except ElementTree.ParseError:
+        return None
+    found = []
+    for case in cases:
+        wrong = next((child for child in case if child.tag in ("failure", "error")), None)
+        if wrong is not None:
+            said = wrong.get("message") or (wrong.text or "").strip()
+            test = "::".join(part for part in (case.get("classname"), case.get("name")) if part)
+            found.append({"test": test, "message": " ".join(said.split())[:MESSAGE_LENGTH]})
+    return {"count": len(found), "tests": found[:FAILING_KEPT]}
+
+
 def _tests_judged(ctx, judge) -> CheckResult:
     """Run the tests, then let `judge(exit code)` say (passed, note). Output and containment are kept, and so is
     the coverage the run measured, if the codebase measures it (FR-110)."""
-    report = ctx.target_config.coverage_report
-    if report:      # a report left by an earlier run must not pass for this one's
-        (ctx.checkout.path / report).unlink(missing_ok=True)
+    for report in (ctx.target_config.coverage_report, ctx.target_config.test_report):
+        if report:      # a report left by an earlier run must not pass for this one's
+            (ctx.checkout.path / report).unlink(missing_ok=True)
     try:
         code, output, contained = run_tests(ctx)
     except SetupFailed as failed:
@@ -335,7 +363,7 @@ def _tests_judged(ctx, judge) -> CheckResult:
                            output=output, timed_out=True, contained=contained)
     passed, note = judge(code)
     return CheckResult(passed, note if passed else _said(note, output), output=output, contained=contained,
-                       measured=_coverage(ctx))
+                       measured=_coverage(ctx), failing=_failing(ctx))
 
 
 def measured_before(store, run_id) -> dict | None:

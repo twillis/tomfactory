@@ -22,14 +22,15 @@ it does not decide whether the change is accepted.
 
 You may create or change files only under: {{docs_paths}}
 
-Keep the backlog in `docs/backlog.md`. If the file exists, read it and add to it; do not
-repeat what is already there. Give each entry one line: what to do, in which file, and
+Keep the backlog in `{{backlog_file}}`. You are the only one who changes it. If the file
+exists, read it and add to it; do not repeat what is already there. Give each entry one line: what to do, in which file, and
 whether it is a suggestion or a warning. Keep an entry short enough to read at a glance: the
 reasoning belongs in your reply, not in the backlog. If you have nothing to add, change nothing.
 
-The backlog holds what is still to do. An entry this change has answered, or that an earlier
-change answered and nobody closed, is moved whole to `backlog-done.md` beside it, with the
-run that answered it; an entry answered in part stays, saying what is left.
+The backlog holds what is still to do. An entry this change has answered, every entry the plan
+names as answered among them, or one an earlier change answered and nobody closed, is moved
+whole to `{{backlog_done_file}}`, with the run that answered it (this run is `{{run_name}}`); an
+entry answered in part stays, saying what is left. No later step will close one you leave.
 
 ## What to produce
 

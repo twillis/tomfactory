@@ -182,7 +182,7 @@ def test_a_build_sent_back_is_named_by_what_it_built_and_the_record_says_why(cyc
     subjects = git(target, "log", "--format=%s", f"{run.base_commit}..{run.branch}").splitlines()
     assert "Build: added greet" in subjects                                   # the build, not its last fix
     record = git(target, "show", f"{run.branch}:docs/runs/{run.branch.removeprefix('factory/')}.md")
-    assert "| test | 1 | check: tests_pass |" in record                       # why it went back
+    assert "| test | 1 | check: tests_pass (the tests fail" in record       # why it went back (FR-141)
     assert "## What changed" in record and "Added a greeting." in record       # the documenter's account, kept
 
 

@@ -13,12 +13,13 @@ from pathlib import PurePath
 
 KINDS = ("agent", "code")                               # of step
 CAPABILITIES = ("read", "read+edit")
-SCOPES = ("nothing", "tests", "not_tests", "docs", "spec", "checkout")      # what a step may change in the checkout
+SCOPES = ("nothing", "tests", "not_tests", "docs", "docs_but_backlog", "spec", "checkout")   # what a step may change
 GRADES = ("light", "middle", "standard", "strongest")    # how strong a model an agent step is given, weakest first (FR-088)
 CLIMBS_TO = "standard"      # a retry climbs a grade at a time, never past this one unless the step starts above it (FR-109)
 FOUND = ("answered", "inconclusive")       # how a spike ends, and only a spike (FR-116)
 OUTCOMES = ("accepted", "rejected", "needs-me", *FOUND)
 FAILURES = ("timeout", "error", "guard", "malformed", "check", "question")     # how a step can fail
+ANSWERERS = ("operator", "orchestrator")   # who may answer through `factory answer`; the lead answers inside (FR-139)
 ACCEPT = "accept"               # the verdict that passes a judging step; every other verdict is a route
 WAIT = "WAIT"                   # as an on_pass: stop and wait for the operator
 END_ACCEPTED = "END_ACCEPTED"   # as an on_pass: the run is finished and accepted
@@ -38,6 +39,8 @@ class CheckResult:
     name: str = ""
     smell: bool = False             # run as a smell: what it found is reported and never fails the step (FR-107)
     measured: dict | None = None    # what a test run measured beside passing: {"coverage": %, "files": {name: %}}
+    failing: dict | None = None     # what its test report names as failing (FR-141): {"count": n, "tests":
+                                    # [{"test": id, "message": text}, ...]}, the first checks.FAILING_KEPT of them
 
 
 @dataclass

@@ -15,6 +15,7 @@ Everything here is done through the gateway's five plain operations.
 import datetime
 
 from factory.store import gt, is_null, ne, not_null, now
+from factory.workflow import ANSWERERS
 from factory.workspace import slug
 
 MOVING = ("current_step", "driver_pid", "driver_started", "child_pgid")    # what changes as a run is carried on
@@ -178,18 +179,18 @@ def attempts_climbed(gw, run_id, name) -> int:
 
 def attempts_counted(gw, run_id, name) -> int:
     """How many of this step's runs count toward its attempt limit: its own failures and successes since the
-    operator last sent the work back, leaving out a run that asked a question the operator answered (FR-105).
-    A question the lead answered still counts, so a step that only ever asks still ends."""
+    operator last sent the work back, leaving out a run that asked a question the operator or the orchestrator
+    answered (FR-105, FR-140). A question the lead answered still counts, so a step that only ever asks still ends."""
     since = sent_back_at(gw, run_id)
-    answered_by_operator = [q for q in gw.query("questions", {"run_id": run_id, "step": name})
-                            if q.answered_by == "operator"]
+    answered_from_outside = [q for q in gw.query("questions", {"run_id": run_id, "step": name})
+                             if q.answered_by in ANSWERERS]
     counted = 0
     for step in gw.query("steps", {"run_id": run_id, "name": name}):
         if step.started_at < since:
             continue                                        # before the operator's latest send-back
         asked_and_answered = step.failure == "question" and any(
             q.asked_at >= step.started_at and (step.ended_at is None or q.asked_at <= step.ended_at)
-            for q in answered_by_operator)
+            for q in answered_from_outside)
         if not asked_and_answered:
             counted += 1
     return counted

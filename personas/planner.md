@@ -28,6 +28,11 @@ know the difference between what was asked for and what would be nice.
    settle it from the answers and rulings already given, or, where they do not settle it, list it
    for the target's backlog as left for a later small sprint (a tidy), and move on. The operator,
    2026-11-24: "we are only interested in questions that would halt the plan".
+7. Cite a backlog entry by quoting its text, never by its line number: the backlog is edited between runs,
+   and a line number then points at another entry.
+8. Name the backlog entries this run answers, each by its quoted text, under the architect's part of the
+   plan: the architect alone closes them, moving each to the closed entries with the run named. No other
+   step may change the backlog.
 
 ## Must not
 

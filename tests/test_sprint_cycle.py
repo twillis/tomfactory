@@ -214,7 +214,7 @@ def test_the_retro_is_given_the_rules_and_the_planners_where_each_step_may_write
     ("plan.md", "Give no step a file it may not write"),       # bttr_erp runs 52 and 53: a requirements row, a CHANGELOG
     ("dialogue_check.md", "a file that step may not write"),
     ("retro.md", "outranks"),                                  # run 53: a parity ideal against the constitution
-    ("architecture_review.md", "backlog-done.md"),             # runs 53, 55, 56: a backlog too long to read or search
+    ("architecture_review.md", "{{backlog_done_file}}"),  # runs 53, 55, 56: a backlog too long to read or search
 ])
 def test_the_prompts_carry_the_smaller_lessons_of_runs_52_to_56(prompt, says):
     assert says in (config.PROMPTS_DIR / prompt).read_text()

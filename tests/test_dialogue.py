@@ -184,7 +184,8 @@ def test_a_batch_is_written_with_a_place_for_each_answer_and_read_back(home, spr
     batch = operations.questions(run.id)
     assert batch.text.count("\nanswer:\n") == 3 and all(f"[Q{q.id}]" in batch.text for q in batch.questions)
     text = filled(run.id, {WHO: "a", HOW_LOUD: "no\n# a note to myself", "Which file?": "a"})
-    assert dialogue.parse_batch(text, batch.questions) == dict(zip([q.id for q in batch.questions], ["a", "no", "a"]))
+    answers = dialogue.parse_batch(text, batch.questions)
+    assert {n: a.text for n, a in answers.items()} == dict(zip([q.id for q in batch.questions], ["a", "no", "a"]))
 
 
 @pytest.mark.fr("FR-121")

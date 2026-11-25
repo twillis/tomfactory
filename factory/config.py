@@ -37,6 +37,9 @@ class TargetConfig:
     no_tests_exit_code: int = _setting(5, "the test command's exit code for \"no tests found\"")
     test_paths: tuple = _setting(("tests/",), "where tests live; only the test writer may change these")
     docs_paths: tuple = _setting(("docs/", "CHANGELOG.md"), "where the documenter may write")
+    backlog_file: str = _setting("docs/backlog.md", "the architect's backlog; only the architect may change it")
+    backlog_done_file: str = _setting("docs/backlog-done.md", "the backlog's closed entries; only the architect"
+                                      " may change it")
     step_timeout_seconds: int = _setting(900, "the time limit for any one step")
     test_budget_lines: int = _setting(300, "the most lines of tests one run may add; 0 means no limit")
     test_network: bool = _setting(False, "true lets its tests reach the network; they are contained either way")
@@ -47,6 +50,8 @@ class TargetConfig:
                                            "fails if new tests cannot even be read as code; \"\" for none")
     line_length: int = _setting(0, "the longest line a step may add to code or tests; 0 means no limit")
     coverage_report: str = _setting("", "the coverage.py JSON report its test command writes; \"\" if not measured")
+    test_report: str = _setting("", "the JUnit XML report its test command writes (pytest: --junitxml=<path>);"
+                                " \"\" if none")
     coverage_floor: float = _setting(0.0, "a smell when coverage after a run is below this percent; 0 for none")
     coverage_drop: float = _setting(0.0, "a smell when a run lowers coverage by more than this many points; 0 for none")
     probe_command: str = _setting("", "how a spike's probe is run, contained, {path} its file; \"\" means no spikes")

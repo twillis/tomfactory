@@ -57,6 +57,10 @@ its record shows it. What stays with an orchestrator is what genuinely needs one
    the record and the prior art); the run record and the retro print every one as "operator answered". Raised by the
    orchestrator on 2026-11-24 during run 91 (its own send-back was filed as the operator's comment) and not built. A
    record that puts the orchestrator's words under the operator's name is the one thing a record must not do.
+   **Built 2026-11-25** (change record `2026-11-25-who-answered.md`, FR-139 and FR-140): `factory answer --by
+   orchestrator`, `answer (orchestrator):` in a batch, and every text made from an answer names who gave it; the
+   retro's `operator_feedback` takes only his. A send-back by `factory revise` is still recorded as his; that part of
+   run 91's case is not built.
 
 **Evidence added 2026-11-25, from run 97**
 

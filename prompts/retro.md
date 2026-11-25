@@ -13,6 +13,10 @@ These figures come from the factory's own records, not from any agent.
 
 {{run_facts}}
 
+What the factory measured of the tests, among them what the tests after the build said:
+
+{{measured}}
+
 ## What each agent said made its step harder
 
 {{friction}}
