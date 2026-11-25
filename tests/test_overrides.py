@@ -24,7 +24,7 @@ def test_each_overridable_field_is_applied_and_smells_are_added_never_removed():
         "build": {"smells": ["tests_within_budget", "lines_within_length"]},
         "converge": {"rework_at_most": 1}})
     assert (entry(table, "document").model, entry(table, "document").timeout) == ("middle", 600)
-    assert entry(table, "build").smells == ("lines_within_length", "tests_within_budget")
+    assert entry(table, "build").smells == ("lines_within_length", "readable", "tests_within_budget")
     assert entry(table, "converge").routes["rework"] == Rework("build", at_most=1, then="retro")
     assert entry(table, "dialogue_planner") == entry(tables.SPRINT_STEPS, "dialogue_planner")    # untouched: the same
 

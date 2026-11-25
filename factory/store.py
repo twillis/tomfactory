@@ -236,17 +236,35 @@ def conditions(where) -> list[Condition]:
 # ---- the gateway ----
 
 class Gateway:
-    def __init__(self, home):
+    def __init__(self, home, read_only=False):
+        """The home's database. Read-only (FR-146), it is opened so that nothing can be written, and a home this
+        version would have to make or bring up to date is refused instead."""
         self.home = pathlib.Path(home)
-        self.home.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.home / "factory.db", timeout=10, isolation_level=None,
-                                  check_same_thread=False)
+        path = self.home / "factory.db"
+        if read_only:
+            if not path.is_file():
+                raise RuntimeError(f"there is no factory database in {self.home} to read")
+            self.db = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=10,
+                                      isolation_level=None, check_same_thread=False)
+        else:
+            self.home.mkdir(parents=True, exist_ok=True)
+            self.db = sqlite3.connect(path, timeout=10, isolation_level=None, check_same_thread=False)
+            self.db.execute("PRAGMA journal_mode = WAL")
         self.db.row_factory = sqlite3.Row
-        self.db.execute("PRAGMA journal_mode = WAL")
         self.files = Files(self.home)
         self._catalog: dict = {}
         self._depth = 0
-        self._bring_up_to_date()
+        if read_only:
+            self._check_up_to_date()
+        else:
+            self._bring_up_to_date()
+
+    def _check_up_to_date(self) -> None:
+        version = self.db.execute("PRAGMA user_version").fetchone()[0]
+        if version != VERSION:
+            raise RuntimeError(f"{self.home / 'factory.db'} is at version {version}, and this factory reads version"
+                               f" {VERSION}; read-only, it is not brought up to date. Any other factory command"
+                               " brings it up to date.")
 
     def _bring_up_to_date(self) -> None:
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
@@ -417,5 +435,5 @@ class Files:
         return folder / f"{step_id}.{extension}"
 
 
-def open_store(home) -> Gateway:
-    return Gateway(home)
+def open_store(home, read_only=False) -> Gateway:
+    return Gateway(home, read_only)

@@ -433,6 +433,60 @@ def tests_pass(ctx) -> CheckResult:
     return _tests_judged(ctx, lambda code: (code == 0, "" if code == 0 else "the tests fail"))
 
 
+# ---- readability: a flag on functions hard to follow (FR-148) ----
+
+SCORE_KEYS = ("path", "function_name", "complexity", "line_start", "line_end")
+
+
+def readability_scores(report) -> list[dict] | None:
+    """Each function's cognitive complexity, as the readability report at `report` gives it: complexipy's JSON, a
+    list of functions, each with its file's path, its name, its score and its first and last lines. None where the
+    report is not there or is not that."""
+    try:
+        functions = json.loads(report.read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(functions, list) or not all(isinstance(f, dict) and set(SCORE_KEYS) <= f.keys()
+                                                  for f in functions):
+        return None
+    return [{key: function[key] for key in SCORE_KEYS} for function in functions]
+
+
+def changed_over(scores, added, limit) -> list[dict]:
+    """The functions scoring over `limit` that hold a line the step added: `added` maps a file to those lines."""
+    return [score for score in scores if score["complexity"] > limit
+            and any(score["line_start"] <= line <= score["line_end"] for line in added.get(score["path"], ()))]
+
+
+def scored(score) -> str:
+    return f"{score['path']}:{score['function_name']} ({score['complexity']})"
+
+
+@register("readable")
+def readable(ctx) -> CheckResult:
+    """The functions the step added or changed whose cognitive complexity is over the codebase's limit (FR-148).
+    The codebase's `readability_command`, run contained as its tests are, writes `readability_report`; the factory
+    reads it and removes it, so it is never committed. A smell: a flag for the architect to judge, never a gate."""
+    settings = ctx.target_config
+    if not (settings.readability_command and settings.readability_report):
+        return CheckResult(True, "readability is not measured on this codebase")
+    report = ctx.checkout.path / settings.readability_report
+    report.unlink(missing_ok=True)      # a report left by an earlier step must not pass for this one's
+    done, output = _contained(ctx, config.readability_argv(settings), False)
+    scores = None if done.timed_out else readability_scores(report)
+    report.unlink(missing_ok=True)
+    if scores is None:
+        return CheckResult(False, _said("the readability command wrote no report the factory can read", output),
+                           output=output, timed_out=done.timed_out, contained={"network": False})
+    added = {name: ctx.checkout.added_lines(name) for name in ctx.changed}
+    high = changed_over(scores, added, settings.readability_limit)
+    if not high:
+        return CheckResult(True, f"no function this step changed has a cognitive complexity over "
+                                 f"{settings.readability_limit}")
+    return CheckResult(False, f"cognitive complexity over this codebase's {settings.readability_limit} in functions"
+                              " this step changed: " + ", ".join(scored(score) for score in high))
+
+
 # ---- a spike: its probe, run by the factory, and its findings (FR-114, FR-115) ----
 
 def probe_runs(store, run_id) -> list[dict]:

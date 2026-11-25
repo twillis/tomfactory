@@ -32,6 +32,18 @@ names as answered among them, or one an earlier change answered and nobody close
 whole to `{{backlog_done_file}}`, with the run that answered it (this run is `{{run_name}}`); an
 entry answered in part stays, saying what is left. No later step will close one you leave.
 
+## Functions this change made that may be hard to follow
+
+The factory measured the cognitive complexity of each function this run added or changed, and
+these score over the codebase's limit:
+
+{{readability}}
+
+A score is a flag, not a verdict: judge whether each one reads poorly. A flat dispatch can score
+high and read fine; a dense one-liner can score low and read badly. One you find hard to follow
+is a backlog entry: the file, the function, and what makes it hard to read, for a later tidy. Say
+in your reply which you looked at and why you left any you did not add.
+
 ## What to produce
 
 Your suggestions and warnings, each as one plain sentence, added to the backlog.

@@ -219,7 +219,7 @@ brackets.
 Then, from this directory:
 
 ```bash
-uv sync                             # pytest, for the factory's own tests; the factory itself needs nothing else
+uv sync                             # pytest and complexipy, for the factory's own tests; the factory needs nothing else
 uv run python -m factory doctor     # checks git, the agent, notifications, its home and containment
 ```
 
@@ -289,6 +289,45 @@ not settle it.
 
 Every command that takes a run works on the most recent run unless you give its number:
 `factory show 3`. `factory plan`, `factory status` and `factory show` take `--json`.
+
+`factory status` and `factory show` take `--read-only`, for a reader such as the viewer (FR-146). Every other command
+first tidies the home: a run whose driver has died is ended as needs-me, "interrupted", and an older database is
+brought up to date. With `--read-only` nothing is changed: the database is opened read-only, no run is ended and no
+process stopped, and a home with no database, or one of another version than this factory reads, is refused, saying
+so. (SQLite may still keep its own `factory.db-shm` beside the database.)
+
+`factory status --brief` prints, as JSON, what a board needs of each recent run and nothing more (FR-147):
+
+```json
+{"id": 99, "state": "planning", "outcome": null, "request_words": "Ask (from the operator, ... first twenty words …",
+ "current_step": "dialogue_planner", "stages": [...]}
+```
+
+No step's prompt or what it produced is in it, so it does not grow with them; `factory status --json` has them all.
+`factory status --limit 30` gives the 30 most recent runs, in either form (10 by default).
+
+`factory show --json`, and each run in `factory status --json`, carries `stages`: the run's progress, for a reader
+such as the viewer to draw without a copy of the tables (FR-145). It is the main path of the run's own table, left to
+right: from its first step, each step's next on passing, and past a wait to where approval leads. Your waits are
+stages too, after the step that waits: `answers`, `agreement` and `approval` in a planning dialogue, `approval`
+elsewhere; a spike has none. A step off the main path that the run took (`mend_tests`, `recheck_plan`) is shown
+before the step it leads to. Each stage is:
+
+```json
+{"name": "build", "by": "code_writer", "group": "building", "state": "done", "tries": 2}
+```
+
+- `by`: the step's persona, `code` for a code step, `operator` for one of your waits.
+- `group`: `planning`, `waiting`, `building` or `reviewing` (`tables.STAGE_GROUPS`; the waits are `waiting`).
+- `state`: `done`; `current`, the step it is on or the wait it waits at (a step whose question waits for your
+  answer is current); `to-come`; `failed`, where an ended run stopped short (rejected, abandoned, stopped, boxed), or
+  an advisory step whose latest attempt failed and which the run carried on past; `skipped`, what an ended run never
+  reached, a step it never ran, or a dialogue's `answers` when no question was asked.
+- `tries`: how many times the step ran; 0 for a wait. A done stage with more than one was sent back and done again.
+
+A dialogue goes round: in its second round its speakers before the current one are done and the rest, your answers
+among them, are to come again. A run whose codebase can no longer be read at its starting commit, or that took a step
+its table no longer has (it ran before the table changed), has `"stages": []`.
 
 ### When it has finished
 
@@ -611,12 +650,42 @@ documentation is not: prose and tables run long.
 
 ### Smells: measured and reported, never a reason to stop
 
-The longest line and the test budget are **smells**. A step entry names them under `smells=`,
+The longest line, the test budget, coverage and readability are **smells**. A step entry names them under `smells=`,
 beside its `checks=`: they are measured after the step's own checks pass, and what they find is
 kept with the step and listed under "Smells" in the run's record, for the operator to tidy at
 merge or in a later tidy. A smell never sends work back, never ends a run, and the final review
 is told it is no reason to reject. On bttr_erp the line check had sent work back seven times and
 once ended a run as needs-me for one line; the budget had never fired.
+
+### Readability: functions hard to follow, flagged for the architect
+
+A codebase may name a command that scores how hard each of its functions is to follow, and the
+factory reports the functions a step added or changed that score over a limit. The measure is
+**cognitive complexity** (SonarSource's: nesting and breaks in the flow cost more than length);
+for Python, [complexipy](https://github.com/rohaquinlop/complexipy) computes it and writes JSON:
+
+```toml
+readability_command = ".venv/bin/complexipy src --isolated -q --output-format json --output readability.json"
+readability_report = "readability.json"     # each function: path, function_name, complexity, line_start, line_end
+readability_limit = 15                      # a smell over this; 15 is where SonarSource starts
+```
+
+After the builder and the code tidy, the factory runs the command contained, as it runs the tests
+(it may use the codebase's `tools`, never the network), reads the report and removes it. Only a
+function holding a line the step added is reported, as `file:function (score)`, so old code does
+not shout every run. It is a smell: listed under "Smells" in the run's record and in what the
+documenter and the retro are told was measured; it never sends work back. Any language's tool
+will do whose output is put in that JSON shape; with no command, nothing is measured.
+
+The score is a flag, not a verdict, and **a low score does not mean readable**: a dense one-liner
+scores low and can read badly, and a flat dispatch can score high and read fine. So the architect
+is given the flagged functions and judges them; one it finds hard to follow becomes a backlog
+entry, a tidy-code run's natural source.
+
+The factory measures its own code the same way. `tests/test_own_code.py` scores `factory/` with
+complexipy (in the dev group) and reports, as a warning in pytest's summary, its non-blank lines
+and its functions over 15. It never fails for them: a line limit raised four times in two days
+stopped nothing, and the operator's first ideal is code a newcomer can follow, not less of it.
 
 ### A project's own settings for its steps
 
@@ -816,7 +885,8 @@ The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `
 `test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, for a dialogue `round`,
 `dialogue`, `draft`, `similar_runs`, `standing`, `to_merge` and `codebase_moved`, for the documenter `measured`
 (what the factory measured of the tests, budget, smells and coverage, the only figures it may state; the retro is
-given it too), and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
+given it too), for the architect `readability` (the functions the readability smell flagged, to judge),
+and for a spike `branch`, `probe_command`, `probe_output` and `spike_answer`. Each is one entry in `INPUTS` in
 `factory/driver.py`; a new input is one entry there.
 
 ## Adding a persona
