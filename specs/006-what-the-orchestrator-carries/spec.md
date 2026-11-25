@@ -50,7 +50,7 @@ its record shows it. What stays with an orchestrator is what genuinely needs one
    reason to stop. Asked for by the operator (above).
 6. **Deleting a file.** Run 95's builder built everything else and stopped, three attempts in a row, because "I have no tool that can delete a file"; the plan said to delete `bttr_erp/repo/named_form.py`. The orchestrator ran `git rm` in the run's checkout, committed it, and resumed. An agent can create and edit a file but cannot remove one, so a plan that deletes always needs a hand.
 7. **Answering what the record already settles.** In run 95's dialogue most questions were answered from the operator's
-   earlier answers and the prior art in `knowledge/`; that is the dialogue agents' own job (spec 005's tuning).
+   earlier answers and the prior art in `knowledge/`; that is the dialogue agents' own job (spec 005's tuning). Run 97 (2026-11-24): round 2 was spent on one question (the gaps key's default) that the record settled (docs/backlog.md, run 67's architect warning: a new key's default is what earlier tables already do). The operator: a whole round for an easily answered question. A question the record answers should be answered by the agent that finds the answer, and one that only the orchestrator answers from the record should not hold a round alone.
 
 **Belongs with the operator; the orchestrator only relays it**
 
