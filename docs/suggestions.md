@@ -182,13 +182,14 @@ the relevant factory teams." Specification: `specs/003-fitness-and-feedback/spec
   timestamptz in that format"), could only repeat it until its attempts ran out and the run ended needs-me. A repeat
   report on the same tests stays unchased. The builder now names the tests in `defective_tests`; two mends at most.
 
-- **Open, from runs 99 to 101 (2026-11-25, the orchestrator's reading at merge):** narrow the `red` step to the run's new
-  tests (each of baseline, red and test runs the whole suite, about 5.5 minutes; test stays the gate; runs 100 and 101);
-  give `write_tests` and `build` the line length and the test budget up front, not only as smells after (#71; runs 100,
-  101); quote the one ruling row in the ask, since run-order.md is over 45,000 tokens and the planner missed a row (run
-  99; the orchestrator's request practice); the analyst confirms each path the ask names in the code (run 101: the ask
-  named the one-table save, which never removes); write each run's prior-art reading into the target's `knowledge/` (#73;
-  run 101); the planner's search reaching `.factory-main/` (run 99). Declined as a misreading: run 101's "the operator
+- **Open, from runs 99 to 101 (2026-11-25, the orchestrator's reading at merge):** narrow the `red` step to the run's
+  new tests (each of baseline, red and test runs the whole suite, about 5.5 minutes; test stays the gate; runs 100 and
+  101) (**TAKEN**: FR-152, a codebase's `red_command`); give `write_tests` and `build` the line length and the test
+  budget up front, not only as smells after (#71; runs 100, 101) (**TAKEN**: FR-153, the `limits` input); quote the one
+  ruling row in the ask, since run-order.md is over 45,000 tokens and the planner missed a row (run 99; the
+  orchestrator's request practice); the analyst confirms each path the ask names in the code (run 101: the ask named the
+  one-table save, which never removes); write each run's prior-art reading into the target's `knowledge/` (#73; run
+  101); the planner's search reaching `.factory-main/` (run 99). Declined as a misreading: run 101's "the operator
   answered one rule twice" (its batch held no duplicate after FR-151). Taken already: FR-150 and FR-151 (runs 99, 100).
 
 # Retro suggestions for the factory and the orchestrator, and what became of them

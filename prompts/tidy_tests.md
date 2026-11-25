@@ -26,6 +26,12 @@ A codebase's `test_budget_lines` limits the *new* tests a normal run may add. It
 apply to a tidy. Write whatever parametrised tables and shared helpers the tidy needs; what
 matters is that the file ends up smaller and nothing that was protected is left unprotected.
 
+## Limits to write within
+
+{{limits}}
+
+The longest line applies to a tidy; the budget, as said above, does not.
+
 ## How to tidy
 
 - Bring the tests to what your priorities ask: each behaviour once, at its lowest level, with

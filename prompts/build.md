@@ -17,6 +17,12 @@ the tests yourself; the factory runs them when you finish.
 
 Read them. Do not change them, and do not change anything else under the test paths.
 
+## Limits to write within
+
+{{limits}}
+
+The budget is the test writer's; the longest line is yours too.
+
 ## If the tests failed after your last attempt
 
 What failed, if anything:

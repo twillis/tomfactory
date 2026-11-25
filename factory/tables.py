@@ -24,7 +24,7 @@ STEPS: list[Step] = [
     Step("write_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
          on_pass="red", checks=("tests_added", "edge_cases_stated"), smells=("tests_within_budget", "lines_within_length"),
          on_fail=Rework("write_tests"),
-         inputs=("request", "plan", "test_paths", "failure"),
+         inputs=("request", "plan", "test_paths", "limits", "failure"),
          envelope={"summary": "text", "test_files": "list", "edge_cases": "list"}),
 
     Step("red", "code", on_pass="build", checks=("tests_fail_first",), on_fail=Rework("write_tests"),
@@ -36,7 +36,7 @@ STEPS: list[Step] = [
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
          on_pass="test", routes={"test_defect": Rework("mend_tests", at_most=2, then="test", once_per_test=True)},
          smells=("lines_within_length", "readable"), on_fail=Rework("build"),
-         inputs=("request", "plan", "constitution", "ideals", "test_files", "failure"),
+         inputs=("request", "plan", "constitution", "ideals", "test_files", "limits", "failure"),
          envelope={"summary": "text", "files_changed": "list", "verdict": "verdict", "reasons": "list",
                    DEFECTIVE_TESTS: "list"}),
 
@@ -44,7 +44,7 @@ STEPS: list[Step] = [
     # so a mended test is expected to pass.
     Step("mend_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
          on_pass="test", smells=("tests_within_budget", "lines_within_length"), on_fail=Rework("mend_tests"),
-         inputs=("request", "plan", "test_paths", "failure", "defective_tests", "failing_tests"),
+         inputs=("request", "plan", "test_paths", "limits", "failure", "defective_tests", "failing_tests"),
          envelope={"summary": "text", "mended": "list"}),
 
     Step("test", "code", on_pass="architecture_review", checks=("tests_pass",), smells=("coverage_holds",),
@@ -214,11 +214,11 @@ def _tidy(step: Step, planning=(_plain["plan"],)) -> list[Step]:
 
 _tidy_tests = Step("tidy_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
                    on_pass="test", smells=("lines_within_length",),
-                   inputs=("request", "plan", "test_paths", "failure"),
+                   inputs=("request", "plan", "test_paths", "limits", "failure"),
                    envelope={"summary": "text", "removed": "list", "kept": "list"})
 _tidy_code = Step("tidy_code", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
                   on_pass="test", smells=("lines_within_length", "readable"),
-                  inputs=("request", "plan", "constitution", "ideals", "failure"),
+                  inputs=("request", "plan", "constitution", "ideals", "limits", "failure"),
                   envelope={"summary": "text", "files_changed": "list"})
 TIDY_TESTS, TIDY_CODE = _tidy(_tidy_tests), _tidy(_tidy_code)
 # On a sprint codebase a tidy is planned in the dialogue too; the agents say how little it needs (FR-126).
