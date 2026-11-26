@@ -11,7 +11,7 @@ import shlex
 import shutil
 import sys
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from factory import (agent, config, dialogue, driver, own_files, proc, records, run_record, sandbox, speckit, tables,
                      workflow, workspace)
@@ -180,13 +180,14 @@ def resolved_table(target, commit, run_kind="change") -> list:
 
 
 def table(target, run_kind="change") -> list:
-    """The table a run on `target` would use now (`factory table`)."""
+    """The table a run on `target` would use now (`factory table`), each agent step showing the effort it starts at."""
     target = pathlib.Path(target).resolve()
     try:
         commit = workspace.head_of(target)
     except workspace.WorkspaceError as problem:
         raise Refused(str(problem)) from None
-    return resolved_table(target, commit, run_kind)
+    return [replace(step, effort=step.effort or workflow.EFFORT) if step.kind == "agent" else step
+            for step in resolved_table(target, commit, run_kind)]
 
 
 def request(text, target, attempts=3, run_kind="change") -> dict:

@@ -22,6 +22,18 @@ def test_a_retry_climbs_one_grade_and_never_past_the_standard_one(own, tries, gr
     assert workflow.grade_for(step, tries) == grade
 
 
+@pytest.mark.fr("FR-158")
+@pytest.mark.parametrize("own, tries, climbs_to, effort", [
+    (None, 0, "high", "medium"), (None, 1, "high", "high"), (None, 3, "high", "high"),   # medium, then one up, no further
+    ("low", 1, "high", "medium"), ("low", 4, "high", "high"),
+    ("xhigh", 0, "high", "xhigh"), ("xhigh", 2, "high", "xhigh"),     # a step set above the ceiling stays where it was set
+    (None, 2, "max", "xhigh"), (None, 1, "medium", "medium"),
+])
+def test_a_step_starts_at_medium_effort_and_a_retry_climbs_one_effort(own, tries, climbs_to, effort):
+    step = replace(tables.LEAD, effort=own)
+    assert workflow.effort_for(step, tries, climbs_to) == effort
+
+
 @pytest.mark.fr("FR-109")
 def test_every_grade_names_a_model():
     assert set(agent.MODELS) == set(workflow.GRADES)
@@ -35,6 +47,7 @@ def test_a_documenter_that_fails_runs_again_on_a_stronger_model_and_the_record_s
     run = operations.approve(run.id)
     assert run.outcome == "accepted", run.reason
     assert [call["model"] for call in fake.calls] == ["standard", "standard", "standard", "standard", "light", "middle", "standard"]
+    assert [call["effort"] for call in fake.calls][4:6] == ["medium", "high"]       # and thinks harder (FR-158)
     table = "\n".join(facts(open_store(home), run))
     assert "| Model |" in table and "| document | 1 | light |" in table and "| document | 2 | middle |" in table
 

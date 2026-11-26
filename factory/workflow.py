@@ -17,6 +17,8 @@ SCOPES = ("nothing", "tests", "not_tests", "docs", "docs_but_backlog", "spec", "
 GRADES = ("light", "middle", "standard", "strongest")    # how strong a model an agent step is given, weakest first (FR-088)
 EFFORTS = ("low", "medium", "high", "xhigh", "max")    # how hard an agent step thinks, least first (FR-158)
 CLIMBS_TO = "standard"      # a retry climbs a grade at a time, never past this one unless the step starts above it (FR-109)
+EFFORT = "medium"           # the effort an agent step starts at unless its codebase sets one (FR-158)
+EFFORT_CLIMBS_TO = "high"   # a retry climbs an effort at a time, never past this one unless the step starts above it
 FOUND = ("answered", "inconclusive")       # how a spike ends, and only a spike (FR-116)
 OUTCOMES = ("accepted", "rejected", "needs-me", *FOUND)
 FAILURES = ("timeout", "error", "guard", "malformed", "check", "question")     # how a step can fail
@@ -146,7 +148,7 @@ class Step:
     timeout: int | None = None          # seconds; None means the target's step_timeout_seconds
     ideals_stop: bool = True            # a judging step: a broken ideal stops the run; False reports it only
     model: str = "standard"             # agent steps: one of GRADES; which model that is, only agent.py knows
-    effort: str | None = None           # agent steps: one of EFFORTS; None leaves it to the agent program (FR-158)
+    effort: str | None = None           # agent steps: one of EFFORTS; None starts at EFFORT (FR-158)
     dialogue: bool = False              # agent steps: it speaks in a planning dialogue, its reply a batch (FR-120)
     on_moved: str | None = None         # a dialogue's waiting step: where approval leads when the codebase has
                                         # moved since the dialogue read it (FR-125)
@@ -239,6 +241,15 @@ def grade_for(step, tries, climbs_to=CLIMBS_TO) -> str:
     own = GRADES.index(step.model)
     ceiling = max(own, GRADES.index(climbs_to))
     return GRADES[min(own + tries, ceiling)]
+
+
+def effort_for(step, tries, climbs_to=EFFORT_CLIMBS_TO) -> str:
+    """The effort this attempt of `step` runs at: its own (medium unless set), one higher for each earlier attempt
+    whose work was found wanting, as `grade_for` climbs grades (FR-158). The operator: "default should be medium
+    effort and then escalate if theres a retry"."""
+    own = EFFORTS.index(step.effort or EFFORT)
+    ceiling = max(own, EFFORTS.index(climbs_to))
+    return EFFORTS[min(own + tries, ceiling)]
 
 
 # ---- what happens next ----

@@ -75,12 +75,12 @@ def test_a_run_uses_the_projects_model_and_climb_ceiling(home, target, fake_noti
 
 
 @pytest.mark.fr("FR-158")
-def test_a_run_gives_a_step_the_projects_effort_and_others_none(home, target, fake_notify):
+def test_a_run_gives_a_step_the_projects_effort_and_others_medium(home, target, fake_notify):
     commit_files(target, settings('\n[steps.build]\neffort = "low"\n'))
     fake = drive_with(FakeAgent([{"envelope": PLAN}, WRITE_TESTS, BUILD, ARCHITECT, DOCUMENT, REVIEW]))
     run = operations.approve(operations.request("Add a greeting", target).id)
     assert run.outcome == "accepted", run.reason
-    assert [call["effort"] for call in fake.calls] == [None, None, "low", None, None, None]
+    assert [call["effort"] for call in fake.calls] == ["medium", "medium", "low", "medium", "medium", "medium"]
 
 
 @pytest.mark.fr("FR-112")
@@ -102,3 +102,11 @@ def test_the_table_command_shows_the_steps_with_the_projects_overrides(target, c
 @pytest.mark.fr("FR-112")
 def test_a_new_codebases_settings_file_has_no_step_overrides():
     assert "steps" not in config.DEFAULT_FACTORY_TOML.split("climbs_to")[1]
+
+
+@pytest.mark.fr("FR-158")
+def test_effort_climbs_to_must_be_an_effort(home, target, fake_notify):
+    commit_files(target, {".factory.toml": config.DEFAULT_FACTORY_TOML.replace('effort_climbs_to = "high"',
+                                                                               'effort_climbs_to = "huge"')})
+    with pytest.raises(Refused, match="effort_climbs_to must be low, medium, high, xhigh or max"):
+        operations.request("Add a greeting", target)
