@@ -5,8 +5,8 @@ change what the factory does, change a table. Nothing here reads or writes anyth
 """
 from dataclasses import replace
 
-from factory.workflow import (DEFECTIVE_TESTS, END_ACCEPTED, END_AS_FOUND, FOUND, GRADES, End, Replan, Rework, Step,
-                              WAIT)
+from factory.workflow import (DEFECTIVE_TESTS, EFFORTS, END_ACCEPTED, END_AS_FOUND, FOUND, GRADES, End, Replan, Rework,
+                              Step, WAIT)
 
 # ---- the plain table: a change, test first ----
 
@@ -300,7 +300,7 @@ def group_of(name) -> str:
 
 # What a project's [steps.<name>] may set (FR-112). Nothing here changes what passing means: not the checks, the
 # persona, the prompt, the inputs, where a step may write, its capabilities or where it leads.
-OVERRIDABLE = ("model", "timeout", "smells", "rework_at_most")
+OVERRIDABLE = ("model", "effort", "timeout", "smells", "rework_at_most")
 
 
 def overridden(table, overrides) -> list[Step]:
@@ -320,6 +320,11 @@ def overridden(table, overrides) -> list[Step]:
                 problems.append(f"[steps.{step.name}]: model must be one of {', '.join(GRADES)}, on an agent step")
             else:
                 changes["model"] = given["model"]
+        if "effort" in given:
+            if given["effort"] not in EFFORTS or step.kind != "agent":
+                problems.append(f"[steps.{step.name}]: effort must be one of {', '.join(EFFORTS)}, on an agent step")
+            else:
+                changes["effort"] = given["effort"]
         if "timeout" in given:
             if not isinstance(given["timeout"], int) or isinstance(given["timeout"], bool) or given["timeout"] < 1:
                 problems.append(f"[steps.{step.name}]: timeout must be a whole number of seconds")

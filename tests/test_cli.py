@@ -190,7 +190,7 @@ def test_json_output_carries_the_same_fields(capsys, done):
 # ---- doctor ----
 
 def healthy_agent(persona, prompt, cwd, capabilities, timeout, on_event, raw_sink, stderr_file,
-                  on_child=None, model=None):
+                  on_child=None, model=None, effort=None):
     from factory.agent import AgentResult
     return AgentResult(True, "ready", None, False, [], 0.1, None, None, None)
 

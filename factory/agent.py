@@ -52,7 +52,7 @@ class AgentResult:
 
 
 def run_agent(persona, prompt, cwd, capabilities, timeout, on_event, raw_sink, stderr_file,
-              on_child=None, model=None) -> AgentResult:
+              on_child=None, model=None, effort=None) -> AgentResult:
     """Run the agent program once and return when it, and everything it started, has ended.
 
     It never raises for an agent's failure, and it decides nothing about what happens next.
@@ -63,6 +63,8 @@ def run_agent(persona, prompt, cwd, capabilities, timeout, on_event, raw_sink, s
                "--append-system-prompt", persona, *CAPABILITIES[capabilities]]
     if model:       # a grade, or for a one-off call the program's own name for a model
         command += ["--model", MODELS.get(model, model)]
+    if effort:      # how hard it thinks (FR-158); None leaves the agent program's own default
+        command += ["--effort", effort]
 
     reader = _Reader(cwd, on_event, raw_sink)
     with tempfile.TemporaryFile("w+") as task:

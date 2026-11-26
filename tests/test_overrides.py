@@ -18,25 +18,32 @@ def entry(table, name):
 
 
 @pytest.mark.fr("FR-112")
+@pytest.mark.fr("FR-158")
 def test_each_overridable_field_is_applied_and_smells_are_added_never_removed():
     table = tables.overridden(tables.SPRINT_STEPS, {
         "document": {"model": "middle", "timeout": 600},
+        "dialogue_planner": {"effort": "high"},
         "build": {"smells": ["tests_within_budget", "lines_within_length"]},
         "converge": {"rework_at_most": 1}})
     assert (entry(table, "document").model, entry(table, "document").timeout) == ("middle", 600)
     assert entry(table, "build").smells == ("lines_within_length", "readable", "tests_within_budget")
     assert entry(table, "converge").routes["rework"] == Rework("build", at_most=1, then="retro")
-    assert entry(table, "dialogue_planner") == entry(tables.SPRINT_STEPS, "dialogue_planner")    # untouched: the same
+    assert entry(table, "dialogue_planner").effort == "high" and entry(table, "dialogue_planner").model == "standard"
+    assert entry(table, "dialogue_analyst") == entry(tables.SPRINT_STEPS, "dialogue_analyst")    # untouched: the same
+    assert entry(tables.SPRINT_STEPS, "dialogue_planner").effort is None    # the agent program's default unless set
 
 
 @pytest.mark.fr("FR-112")
+@pytest.mark.fr("FR-158")
 @pytest.mark.parametrize("overrides, says", [
     ({"nosuch": {"model": "light"}}, "[steps.nosuch]: there is no step nosuch in this run's table"),
-    ({"build": {"checks": []}}, "[steps.build]: checks cannot be set; a project may set model, timeout, smells, rework_at_most"),
+    ({"build": {"checks": []}}, "[steps.build]: checks cannot be set; a project may set model, effort, timeout, smells, rework_at_most"),
     ({"build": {"persona": "x"}}, "[steps.build]: persona cannot be set"),
     ({"build": {"may_change": "anything"}}, "[steps.build]: may_change cannot be set"),
     ({"build": {"model": "fable"}}, "[steps.build]: model must be one of light, middle, standard, strongest"),
     ({"test": {"model": "light"}}, "[steps.test]: model must be one of light, middle, standard, strongest, on an agent step"),
+    ({"build": {"effort": "huge"}}, "[steps.build]: effort must be one of low, medium, high, xhigh, max"),
+    ({"test": {"effort": "low"}}, "[steps.test]: effort must be one of low, medium, high, xhigh, max, on an agent step"),
     ({"build": {"timeout": True}}, "[steps.build]: timeout must be a whole number of seconds"),
     ({"build": {"smells": "lines_within_length"}}, "[steps.build]: smells must be a list of check names"),
     ({"dialogue_planner": {"rework_at_most": 2}},
@@ -65,6 +72,15 @@ def test_a_run_uses_the_projects_model_and_climb_ceiling(home, target, fake_noti
     run = operations.approve(operations.request("Add a greeting", target).id)
     assert run.outcome == "accepted", run.reason
     assert [call["model"] for call in fake.calls][2:5] == ["light", "middle", "middle"]    # climbs, then stops
+
+
+@pytest.mark.fr("FR-158")
+def test_a_run_gives_a_step_the_projects_effort_and_others_none(home, target, fake_notify):
+    commit_files(target, settings('\n[steps.build]\neffort = "low"\n'))
+    fake = drive_with(FakeAgent([{"envelope": PLAN}, WRITE_TESTS, BUILD, ARCHITECT, DOCUMENT, REVIEW]))
+    run = operations.approve(operations.request("Add a greeting", target).id)
+    assert run.outcome == "accepted", run.reason
+    assert [call["effort"] for call in fake.calls] == [None, None, "low", None, None, None]
 
 
 @pytest.mark.fr("FR-112")

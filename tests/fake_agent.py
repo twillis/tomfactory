@@ -38,9 +38,9 @@ class FakeAgent:
         self.calls = []
 
     def __call__(self, persona, prompt, cwd, capabilities, timeout, on_event, raw_sink,
-                 stderr_file, on_child=None, model=None):
+                 stderr_file, on_child=None, model=None, effort=None):
         call = {"persona": persona, "prompt": prompt, "cwd": str(cwd), "capabilities": capabilities,
-                "timeout": timeout, "model": model}
+                "timeout": timeout, "model": model, "effort": effort}
         self.calls.append(call)
         assert self.script, f"the fake agent was called more times than scripted: {call['prompt'][:80]}"
         entry = self.script.pop(0)
@@ -78,7 +78,7 @@ def play(entry, cwd, timeout, on_event, raw_sink, stderr_file, on_child):
 
 
 def run_agent(persona, prompt, cwd, capabilities, timeout, on_event, raw_sink, stderr_file,
-              on_child=None, model=None):
+              on_child=None, model=None, effort=None):
     """The fake for a detached driver: the script and the record of calls live in files."""
     script_path = pathlib.Path(os.environ["TOMFACTORY_FAKE_SCRIPT"])
     calls_path = script_path.with_suffix(".calls.jsonl")
