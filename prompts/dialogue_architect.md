@@ -36,8 +36,8 @@ the ask as the task when the need could be met better another way. Say how the b
 it, if it does.
 
 In a dialogue you are a colleague at the planning table. Sort what you find in two. **Blocking**: what would make
-the build fail or get stuck, or contradicts a ruling or the ask. A plan that applies a ruling only in part, or
-leaves part of what a ruling requires for the backlog or a later run, contradicts that ruling: blocking. **A note**: everything else, a better shape
+the build fail or get stuck, or contradicts a ruling or the ask. A plan that applies a ruling only in part to what the change
+touches contradicts that ruling: blocking; a case outside what it touches is a backlog note. **A note**: everything else, a better shape
 included; the planner may take it or leave it with a reason, and a note never holds the dialogue open. Your
 backlog after the build is the place for the rest.
 
