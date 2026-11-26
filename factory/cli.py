@@ -109,7 +109,8 @@ def build_parser() -> argparse.ArgumentParser:
 def table(args):
     for step in operations.table(args.target, args.kind):
         model = f"model {step.model}" if step.kind == "agent" else "code"
-        extras = [f"timeout {step.timeout}s" if step.timeout else "",
+        effort = f"effort {step.effort}" if step.effort else ""
+        extras = [effort, f"timeout {step.timeout}s" if step.timeout else "",
                   f"checks {', '.join(step.checks)}" if step.checks else "",
                   f"smells {', '.join(step.smells)}" if step.smells else "",
                   *[f"{verdict} -> {route.step} at most {route.at_most}" for verdict, route in step.routes.items()

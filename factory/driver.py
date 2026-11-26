@@ -149,7 +149,8 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     doing.grade = workflow.grade_for(step, records.attempts_climbed(store, run.id, step.name), settings.climbs_to) \
         if step.kind == "agent" else None
     doing.emit("step_start", step.name, {"attempt": doing.record.attempt, "persona": step.persona,
-                                         "head": head, "dirty_before": dirty_before, "model": doing.grade})
+                                         "head": head, "dirty_before": dirty_before, "model": doing.grade,
+                                         "effort": step.effort})
     with store.files.stderr_file(run.id, doing.record.id) as errors:
         doing.errors = errors
         reply = execute(doing, asked, adapter, personas_dir) if step.kind == "agent" else None
@@ -264,7 +265,8 @@ def execute(doing, asked, adapter, personas_dir):
     reply = adapter(persona=(personas_dir / f"{doing.step.persona}.md").read_text(), prompt=asked,
                     cwd=doing.checkout.path, capabilities=doing.step.capabilities, timeout=doing.timeout,
                     on_event=doing.emit, raw_sink=doing.store.files.raw_sink(doing.run.id, doing.record.id),
-                    stderr_file=doing.errors, on_child=doing.on_child, model=doing.grade)
+                    stderr_file=doing.errors, on_child=doing.on_child, model=doing.grade,
+                    effort=doing.step.effort)
     for denial in reply.denials:
         doing.emit("denied", f"{denial.get('action')}: {denial.get('path')}", denial)
     return reply

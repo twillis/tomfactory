@@ -48,7 +48,7 @@ def stub(tmp_path, monkeypatch):
     work = tmp_path / "work"
     work.mkdir()
 
-    def call(stream=None, capabilities="read", timeout=10.0, model=None, **env):
+    def call(stream=None, capabilities="read", timeout=10.0, model=None, effort=None, **env):
         if stream:
             monkeypatch.setenv("STUB_STREAM", str(STREAMS / stream))
         for name, value in env.items():
@@ -60,7 +60,7 @@ def stub(tmp_path, monkeypatch):
                 capabilities=capabilities, timeout=timeout,
                 on_event=lambda kind, summary, payload: events.append((kind, summary, payload, time.monotonic())),
                 raw_sink=lambda line: raw.append((line, time.monotonic())),
-                stderr_file=err, on_child=groups.append, model=model)
+                stderr_file=err, on_child=groups.append, model=model, effort=effort)
         record = json.loads((tmp_path / "record.json").read_text())
         return result, events, raw, groups, record
 
@@ -153,7 +153,7 @@ def test_persona_prompt_and_capabilities_reach_the_program(stub):
     assert argv[argv.index("--tools") + 1] == "Read,Glob,Grep"
     assert "--permission-mode" not in argv and "Bash" not in " ".join(argv)
     assert argv[argv.index("--setting-sources") + 1] == "" and "--strict-mcp-config" in argv
-    assert "--model" not in argv
+    assert "--model" not in argv and "--effort" not in argv          # the program's own effort unless a step sets one
 
 
 @pytest.mark.fr("FR-041")
@@ -217,3 +217,11 @@ def test_a_usage_warning_is_not_a_refusal(stub, tmp_path):
     assert warned.ok and warned.error is None and warned.envelope["verdict"] == "accept"
     refused, _, _, _, _ = stub(stream_with_limit_status(tmp_path, "rejected"))
     assert not refused.ok and "usage limit" in refused.error and "rejected" in refused.error
+
+
+@pytest.mark.fr("FR-158")
+def test_a_steps_effort_is_passed_to_the_agent_program(stub):
+    from factory import workflow
+    for effort in workflow.EFFORTS:
+        argv = stub("structured.jsonl", model="standard", effort=effort)[4]["argv"]
+        assert argv[argv.index("--effort") + 1] == effort

@@ -15,6 +15,7 @@ KINDS = ("agent", "code")                               # of step
 CAPABILITIES = ("read", "read+edit")
 SCOPES = ("nothing", "tests", "not_tests", "docs", "docs_but_backlog", "spec", "checkout")   # what a step may change
 GRADES = ("light", "middle", "standard", "strongest")    # how strong a model an agent step is given, weakest first (FR-088)
+EFFORTS = ("low", "medium", "high", "xhigh", "max")    # how hard an agent step thinks, least first (FR-158)
 CLIMBS_TO = "standard"      # a retry climbs a grade at a time, never past this one unless the step starts above it (FR-109)
 FOUND = ("answered", "inconclusive")       # how a spike ends, and only a spike (FR-116)
 OUTCOMES = ("accepted", "rejected", "needs-me", *FOUND)
@@ -145,6 +146,7 @@ class Step:
     timeout: int | None = None          # seconds; None means the target's step_timeout_seconds
     ideals_stop: bool = True            # a judging step: a broken ideal stops the run; False reports it only
     model: str = "standard"             # agent steps: one of GRADES; which model that is, only agent.py knows
+    effort: str | None = None           # agent steps: one of EFFORTS; None leaves it to the agent program (FR-158)
     dialogue: bool = False              # agent steps: it speaks in a planning dialogue, its reply a batch (FR-120)
     on_moved: str | None = None         # a dialogue's waiting step: where approval leads when the codebase has
                                         # moved since the dialogue read it (FR-125)
@@ -162,6 +164,8 @@ class Step:
             wrong(f"may_change must be one of {SCOPES}")
         if self.model not in GRADES:
             wrong(f"model must be one of {GRADES}")
+        if self.effort is not None and (self.effort not in EFFORTS or self.kind != "agent"):
+            wrong(f"effort must be one of {EFFORTS}, on an agent step")
         if (self.on_pass == WAIT) != bool(self.on_approve):
             wrong("a waiting step, and only a waiting step, says where approval leads (on_approve)")
         if self.on_moved and self.on_pass != WAIT:
