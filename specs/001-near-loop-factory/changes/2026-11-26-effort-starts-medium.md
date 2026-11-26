@@ -9,4 +9,6 @@ escalate if theres a retry".
 default `high`) unless the step was set above it. The step's start event records the effort it ran at; `factory
 table` shows each agent step's starting effort. A retry climbs model and effort together.
 
-**Note.** A planning speaker's later rounds count as earlier attempts, so rounds after the first run at `high`.
+**Note.** The count restarts when the work is sent back (`records.sent_back_at`: a plan revised, or a dialogue's
+questions answered), so a planning round after answers starts again at `medium`; a round that follows without
+answers counts the speaker's earlier round and runs at `high`.
