@@ -128,6 +128,7 @@ class Doing:
     record: object = None
     errors: object = None
     grade: str | None = None       # the grade this attempt runs on (FR-109)
+    effort: str | None = None      # the effort this attempt runs at (FR-158)
     standing: tuple | None = None  # a dialogue's speaker: the head of main now, and the files copied from it (FR-134)
 
     def emit(self, kind, summary, payload=None):
@@ -146,11 +147,12 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
         doing.standing = checkout.mirror_main(STANDING)
     asked = prompt(doing, prompts_dir) if step.kind == "agent" else ""
     doing.record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)
-    doing.grade = workflow.grade_for(step, records.attempts_climbed(store, run.id, step.name), settings.climbs_to) \
-        if step.kind == "agent" else None
+    climbed = records.attempts_climbed(store, run.id, step.name) if step.kind == "agent" else 0
+    doing.grade = workflow.grade_for(step, climbed, settings.climbs_to) if step.kind == "agent" else None
+    doing.effort = workflow.effort_for(step, climbed, settings.effort_climbs_to) if step.kind == "agent" else None
     doing.emit("step_start", step.name, {"attempt": doing.record.attempt, "persona": step.persona,
                                          "head": head, "dirty_before": dirty_before, "model": doing.grade,
-                                         "effort": step.effort})
+                                         "effort": doing.effort})
     with store.files.stderr_file(run.id, doing.record.id) as errors:
         doing.errors = errors
         reply = execute(doing, asked, adapter, personas_dir) if step.kind == "agent" else None
@@ -266,7 +268,7 @@ def execute(doing, asked, adapter, personas_dir):
                     cwd=doing.checkout.path, capabilities=doing.step.capabilities, timeout=doing.timeout,
                     on_event=doing.emit, raw_sink=doing.store.files.raw_sink(doing.run.id, doing.record.id),
                     stderr_file=doing.errors, on_child=doing.on_child, model=doing.grade,
-                    effort=doing.step.effort)
+                    effort=doing.effort)
     for denial in reply.denials:
         doing.emit("denied", f"{denial.get('action')}: {denial.get('path')}", denial)
     return reply

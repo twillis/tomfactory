@@ -69,6 +69,7 @@ class TargetConfig:
     dialogue_budget_dollars: float = _setting(10.0, "a dialogue asks whether to spend more each time it has cost"
                                               " this much; 0 for never")
     climbs_to: str = _setting("standard", "the highest grade a retried step climbs to (FR-109)")
+    effort_climbs_to: str = _setting("high", "the highest effort a retried step climbs to (FR-158)")
     # [steps.<name>] tables: per-step overrides (FR-112). Not written into a new codebase's file: none are needed.
     steps: dict = field(default_factory=dict, metadata={"says": "", "unlisted": True})
 
@@ -108,6 +109,8 @@ def read_target_config(target, commit) -> TargetConfig:
             known[name] = tuple(known[name])
     if known.get("climbs_to", "standard") not in ("light", "middle", "standard", "strongest"):
         raise ConfigError(f"{target}/.factory.toml: climbs_to must be light, middle, standard or strongest")
+    if known.get("effort_climbs_to", "high") not in ("low", "medium", "high", "xhigh", "max"):
+        raise ConfigError(f"{target}/.factory.toml: effort_climbs_to must be low, medium, high, xhigh or max")
     if known.get("red_command"):
         _check_red_command(target, known["red_command"], known.get("test_report"))
     return TargetConfig(**known)

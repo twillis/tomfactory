@@ -736,9 +736,10 @@ stopped nothing, and the operator's first ideal is code a newcomer can follow, n
 A codebase may tune the steps it already has, in its `.factory.toml`, without changing the
 factory. Each `[steps.<name>]` table may set only `model` (a grade), `effort` (how hard an
 agent step thinks: `low`, `medium`, `high`, `xhigh` or `max`, passed to the agent program as
-`--effort`; with none set, the program's own default), `timeout` (seconds), `smells` (added to
+`--effort`; with none set, `medium`), `timeout` (seconds), `smells` (added to
 the step's own, never removed) and `rework_at_most` (the cap on a step's capped rework route);
-`climbs_to` sets how high a retried step climbs. Raising a step's effort is the cheaper way to
+`climbs_to` sets how high a retried step's model climbs, and `effort_climbs_to` (default `high`)
+how high its effort climbs: a retry thinks one effort harder, as it runs one grade stronger. Raising a step's effort is the cheaper way to
 ask it to think harder than moving it to a bigger model. Nothing that decides
 what passing means can be set: not a step's checks, persona, prompt, inputs, where it may
 write or where it leads. A setting that is not allowed is refused, naming it, when the
