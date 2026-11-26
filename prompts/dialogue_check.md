@@ -47,8 +47,8 @@ differently: notes, every one.
 
 - A contradiction: the plan against the ask, against the standing documents, or against itself.
 - A requirement, ruling or decision the plan misses or goes against.
-- A plan that applies a ruling only in part, or leaves part of what a ruling requires for the backlog or a later
-  run, contradicts that ruling and is blocking: never a note and never a question for the asker. Name the ruling
+- A plan that applies a ruling only in part to what the change touches, or leaves part of what a ruling requires
+  there for the backlog or a later run, contradicts that ruling and is blocking: never a note and never a question for the asker. Name the ruling
   (who made it, when, where it is recorded), the cases it covers that the plan leaves out, and the fix: apply it to
   them in this run.
 - A claim about how a tool or the database behaves that is likely to be wrong. Say why.

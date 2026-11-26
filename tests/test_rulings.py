@@ -190,3 +190,21 @@ def test_an_index_of_rulings_among_the_standing_documents_is_named_to_be_read_fi
 def test_the_speakers_are_told_to_read_an_index_of_rulings_first_where_there_is_one():
     assert "an index of rulings" in text_of("prompts/fragments/dialogue.md")
     assert "bttr" not in text_of("prompts/fragments/dialogue.md")
+
+
+# ---- FR-159: plan for what the change touches, and presume the rest works ----
+
+@pytest.mark.fr("FR-159")
+@pytest.mark.parametrize("phrase", [
+    "architecture overview", "presumed to work", "only when the change cannot be planned without it",
+    "a backlog note, never a blocking point", "to the cases this change touches", "what changed in the draft",
+])
+def test_every_speaker_is_told_to_plan_for_what_the_change_touches(phrase):
+    assert phrase in text_of("prompts/fragments/dialogue.md")
+
+
+@pytest.mark.fr("FR-159")
+@pytest.mark.parametrize("file", ["prompts/dialogue_planner.md", "prompts/dialogue_check.md",
+                                  "prompts/dialogue_architect.md"])
+def test_a_ruling_is_applied_whole_to_what_the_change_touches(file):
+    assert "the change touches" in text_of(file)
