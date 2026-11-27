@@ -7,7 +7,7 @@ rendered from the factory's own records of the run; this module decides nothing.
 import datetime
 import re
 
-from factory import config, dialogue, records
+from factory import config, dialogue, records, workspace
 from factory.tables import SPIKE
 
 
@@ -334,3 +334,60 @@ def _took(started, ended) -> str:
         return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
     seconds = int((at(ended) - at(started)).total_seconds())
     return f"{seconds // 60}m {seconds % 60:02d}s"
+
+
+# ---- FR-165: how much a run changed, the unit its cost is divided by ----
+
+SIZE_KINDS = ("code", "tests", "docs", "other")
+
+
+def change_size(target, base, branch, settings) -> dict | None:
+    """How much a run changed, from the codebase's own git: its branch against the commit it started from, each file
+    counted under one kind (FR-165). Tests are the codebase's `test_paths`; docs, its `docs_paths` and everything
+    under `docs/`; other, a lock file (a name ending `.lock`), which a tool writes; code, everything else. A binary
+    file counts as a file and no lines. None where the branch or the commit is gone."""
+    code, out = workspace.diff_numstat(target, base, branch)
+    if code != 0:
+        return None
+    size = {kind: {"added": 0, "removed": 0, "files": 0} for kind in SIZE_KINDS}
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        plus, minus, name = parts
+        counted = size[_kind_of(name, settings)]
+        counted["files"] += 1
+        counted["added"] += int(plus) if plus.isdigit() else 0
+        counted["removed"] += int(minus) if minus.isdigit() else 0
+    return size
+
+
+def _kind_of(name, settings) -> str:
+    if config.under(name, settings.test_paths):
+        return "tests"
+    if config.under(name, settings.docs_paths) or name.startswith("docs/"):
+        return "docs"
+    if name.endswith(".lock"):
+        return "other"
+    return "code"
+
+
+def size_words(size) -> str:
+    """One line for the event's summary: each kind's lines added and removed, and its files."""
+    return "; ".join(f"{kind} +{size[kind]['added']} -{size[kind]['removed']} in {size[kind]['files']} files"
+                     for kind in SIZE_KINDS if size[kind]["files"]) or "no change"
+
+
+def record_change_size(store, run) -> None:
+    """Record how much a run changed, as a `change_size` event (FR-165). A run with no branch or no starting commit
+    has none; one whose settings or git cannot be read gets an error event saying why, and the run ends either way."""
+    if not run.branch or not run.base_commit:
+        return
+    try:
+        settings = config.read_target_config(run.target, run.base_commit)
+        size = change_size(run.target, run.base_commit, run.branch, settings)
+    except Exception as problem:                    # measuring must never stop a run from ending
+        records.event(store, run.id, "error", f"the run's change size could not be measured: {problem}")
+        return
+    if size is not None:
+        records.event(store, run.id, "change_size", size_words(size), size)

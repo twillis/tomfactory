@@ -266,6 +266,12 @@ def _mirror(source, folder, names, keep_out=True) -> tuple[str, list[str]]:
     return head, copied
 
 
+def diff_numstat(target, base, branch) -> tuple[int, str]:
+    """`git diff --numstat` of `branch` against `base` in the codebase `target`: (exit code, output); a code other
+    than 0 where either is gone (FR-165)."""
+    return _git(target, "diff", "--numstat", "--no-renames", base, branch, ok=(0, 128))
+
+
 def head_of(target) -> str:
     """The commit a codebase is at now."""
     if not pathlib.Path(target).is_dir():

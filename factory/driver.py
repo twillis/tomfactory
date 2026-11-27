@@ -718,6 +718,7 @@ def end_run(store, run_id, outcome, reason):
         return run
     proc.stop_group(run.child_pgid)
     ended = records.end(store, run_id, outcome, reason)
+    run_record.record_change_size(store, ended)         # what its cost is divided by (FR-165)
     tell(store, run_id, f"Run {run_id}: {outcome}", reason)
     if pathlib.Path(ended.workspace).is_dir():          # the record travels with the work, whatever the outcome
         try:
