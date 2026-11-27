@@ -11,7 +11,7 @@ import pytest
 from factory import cli, config, dialogue, operations, records, run_record, tables, workflow
 from factory.operations import Refused
 from factory.store import open_store
-from tests.conftest import (ARCHITECT, BUILD, CODE, DOCUMENT, PLAN, REVIEW, TEST, WRITE_TESTS, aligned_round,
+from tests.conftest import (ARCHITECT, merged, BUILD, CODE, DOCUMENT, PLAN, REVIEW, TEST, WRITE_TESTS, aligned_round,
                             commit_files, drive_with, git, merges, planner_says, speaks, sprint_settings,
                             to_the_end)
 from tests.fake_agent import FakeAgent
@@ -374,6 +374,7 @@ def test_a_home_made_before_the_dialogue_keeps_its_plans_and_gains_agreement_and
 @pytest.mark.fr("FR-123")
 def test_the_estimate_is_shown_beside_the_last_accepted_runs_of_its_kind_on_its_codebase(home, sprint, fake_notify):
     first, _ = to_the_end(sprint, FakeAgent([*aligned_round(), *BUILD_TO_THE_END]))
+    merged(sprint, first)
     run, fake = start(sprint, [speaks(), planner_says(estimate="half an hour, about $6"), speaks(blocking=()),
                                speaks(blocking=())])
     shown = operations.plan(run.id).text

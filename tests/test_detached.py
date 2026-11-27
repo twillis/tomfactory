@@ -117,6 +117,7 @@ def test_stop_applies_while_planning_and_is_refused_while_waiting(detached):
     assert stopped.outcome == "needs-me" and stopped.reason == "stopped by operator"
     assert not proc._signal_group(child_group, 0)
 
+    operations.abandon(run.id)          # set aside, so the next request is not held behind it (FR-161)
     detached([{"envelope": PLAN}])
     (detached.home.parent / "script.calls.jsonl").unlink()
     waiting = operations.request("Another", detached.target)

@@ -70,6 +70,7 @@ def _open(read_only=False):
         raise Refused(str(problem)) from None
     if not read_only:
         reconcile(store)
+        start_next(store)
     return store
 
 
@@ -210,25 +211,69 @@ def request(text, target, attempts=3, run_kind="change", ref=None) -> dict:
         settings = config.read_target_config(target, base)
     except (workspace.WorkspaceError, config.ConfigError) as problem:
         raise Refused(str(problem)) from None
-    open_run = records.open_run(store)
-    if open_run:    # one run at a time (FR-033)
-        raise Refused(f"run {open_run.id} has not ended ({records.described(open_run)});"
-                      " let it finish, or stop or abandon it, before making another request")
     if run_kind not in tables.RUN_KINDS:
         raise Refused(f"a run is one of: {', '.join(tables.RUN_KINDS)}; not {run_kind!r}")
     if run_kind == tables.SPIKE:
         _can_spike(settings)
     resolved_table(target, base, run_kind)          # a project's overrides are checked before anything is paid for
 
+    waits = held_by(store) or records.queued(store)     # one run at a time; the rest wait their turn (FR-033, FR-161)
     run = records.new_run(store, text.strip(), target, base, ideals=config.ideals_for(target, base),
-                          attempt_limit=attempts, run_kind=run_kind, ref=ref)
+                          attempt_limit=attempts, run_kind=run_kind, ref=ref, queued=bool(waits))
+    if waits:
+        return run
+    return _begin(store, run)
+
+
+def _begin(store, run) -> dict:
+    """Make the run's checkout and hand it to a driver at its first step."""
     try:
-        Workspace.create(target, run.workspace, run.branch, base)
+        Workspace.create(run.target, run.workspace, run.branch, run.base_commit)
         own_files.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))
     except Exception as problem:
         driver.end_run(store, run.id, "needs-me", f"the run's checkout could not be created: {problem}")
         raise Refused(f"the run's checkout could not be created: {problem}") from None
     return _launch_at(store, run, driver.table_of(run)[0].name)    # the table of its own checkout
+
+
+def held_by(store) -> str:
+    """What keeps the next request from starting, said in a few words; "" when one may start (FR-161). A run that has
+    not ended holds the line; so does an accepted run not yet merged into its codebase, since the next would plan on
+    code without it; and a run that ended needing the operator, until it is resumed or abandoned."""
+    open_run = records.open_run(store)
+    if open_run:
+        return f"run {open_run.id} has not ended ({records.described(open_run)})"
+    last = records.last_ended(store)
+    if last and last.outcome == "needs-me":
+        return f"run {last.id} ended needing you; resume it, or abandon it"
+    if last and last.outcome == "accepted" and not workspace.is_merged(last.target, last.branch):
+        return f"run {last.id} is accepted but not yet merged into {last.target}"
+    return ""
+
+
+def place_in_queue(run_id) -> tuple[int, str]:
+    """Where a queued request stands (1 is next), and what holds the line, for `factory request` to say (FR-161)."""
+    store = _open(read_only=True)
+    line = [run.id for run in records.queued(store)]
+    return line.index(run_id) + 1, held_by(store) or "the run before it is starting"
+
+
+def start_next(store) -> dict | None:
+    """Start the first queued request, if nothing holds the line (FR-161). Called at the start of every operation and
+    when a driver finishes, so the next starts by itself once the one before is merged or ended. A queued request
+    that can no longer start (its codebase's settings changed, say) ends needing the operator, and holds the line."""
+    waiting = records.queued(store)
+    if not waiting or held_by(store):
+        return None
+    run = waiting[0]
+    try:
+        base = workspace.head_of(run.target)
+        config.read_target_config(run.target, base)
+        resolved_table(run.target, base, run.run_kind)
+    except (workspace.WorkspaceError, config.ConfigError, Refused) as problem:
+        driver.end_run(store, run.id, "needs-me", f"the queued request could not start: {problem}")
+        return None
+    return _begin(store, records.start_queued(store, run.id, base))
 
 
 def _can_spike(settings) -> None:
@@ -344,15 +389,27 @@ def revise(run_id=None, comment="") -> dict:
 
 
 def abandon(run_id=None) -> dict:
-    """Give up on a request whose plan is waiting. Nothing in the target was changed."""
+    """Give up on a request whose plan is waiting, or one still queued, or a run that ended needing you so the queue
+    can go on (FR-161). Nothing in the target was changed."""
     store = _open()
+    run = _find(store, run_id)
+    if run.state == "queued":
+        ended = driver.end_run(store, run.id, "rejected", "abandoned before it started")
+        start_next(store)
+        return ended
+    if run.state == "ended" and run.outcome == "needs-me":
+        records.set_aside(store, run.id)
+        start_next(store)
+        return store.get("runs", run.id)
     run = _waiting(store, run_id, with_question=True)
     if records.current_plan(store, run.id):
         records.decide(store, run.id, "abandoned")
     steps = driver.table_of(run)
     then = workflow.after_wait("abandon", workflow.get(run.current_step, steps), steps)
     Workspace.of(run).remove()
-    return driver.end_run(store, run.id, then.outcome, then.reason)
+    ended = driver.end_run(store, run.id, then.outcome, then.reason)
+    start_next(store)
+    return ended
 
 def stop(run_id=None) -> dict:
     """Stop a run that is being worked. Nothing it started is left running; its record is kept."""
@@ -577,6 +634,11 @@ def stages(store, run) -> list[Stage]:
         table = driver.table_of(run)
     except (config.ConfigError, workspace.WorkspaceError, ValueError, OSError):
         return []
+    if run.current_step is None:            # queued, or ended before it started (FR-161): every stage still ahead
+        shown = _pipeline(table, set())
+        for stage in shown:
+            stage.state, stage.tries = ("to-come" if run.state == "queued" else "skipped"), 0
+        return shown
     taken = store.query("steps", {"run_id": run.id})
     if {s.name for s in taken} - {entry.name for entry in (*table, tables.LEAD, tables.MERGE)}:
         return []
@@ -682,4 +744,6 @@ def doctor() -> list[Health]:
 
 def drive(run_id) -> None:
     """What a detached driver process runs. Not something the operator calls."""
-    driver.drive(open_store(config.home()), run_id)
+    store = open_store(config.home())
+    driver.drive(store, run_id)
+    start_next(store)       # the next queued request, if this run's end lets it start (FR-161)

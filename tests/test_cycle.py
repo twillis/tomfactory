@@ -497,8 +497,7 @@ def _accepted(cycle):
 
 def _another_run_open(cycle):
     stopped, _, _, target = cycle(STOPPED)
-    drive_with(FakeAgent([{"envelope": PLAN}]))
-    operations.request("Something else", target)
+    records.new_run(open_store(config.home()), "Something else", target, "abc")    # open, as a run begun elsewhere
     return stopped
 
 

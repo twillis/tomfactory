@@ -234,6 +234,8 @@ def test_an_older_home_is_brought_up_to_date_and_keeps_its_runs(home, left_by):
     gw.insert("steps", {"run_id": 1, "name": "build", "kind": "agent", "attempt": 1, "asked": "",
                         "failure": "question", "started_at": "now"})          # a question is now a failure kind
     assert open_store(home).get("runs", 1).request == "r"                   # opening again changes nothing
+    gw.insert("runs", {"request": "q", "target": "/t", "base_commit": "c", "state": "queued", "created_at": "now"})
+    assert [r.state for r in gw.query("runs", order="id")] == ["planning", "queued"]    # a queued run beside the open one (FR-161)
 
 
 @pytest.mark.fr("FR-061")

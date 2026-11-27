@@ -21,6 +21,7 @@ The schema is the contract with the observability app: contracts/run-store.md.
 """
 import json
 import pathlib
+import re
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -166,8 +167,22 @@ def _v7_who_answered(db) -> None:
     db.execute("ALTER TABLE questions_widened RENAME TO questions")
 
 
+def _v8_a_request_may_wait_its_turn(db) -> None:
+    """A request may wait in the queue as a run that has not started (FR-161): runs is remade to widen its state's
+    CHECK, and the one open run is one that is neither ended nor queued."""
+    made = db.execute("SELECT sql FROM sqlite_master WHERE name = 'runs'").fetchone()["sql"]
+    widened = made.replace("'working','ended')", "'working','ended','queued')")
+    widened = re.sub(r'^CREATE TABLE "?runs"?', "CREATE TABLE runs_widened", widened)     # quoted once renamed
+    db.execute(widened)
+    db.execute("INSERT INTO runs_widened SELECT * FROM runs")
+    db.execute("DROP TABLE runs")
+    db.execute("ALTER TABLE runs_widened RENAME TO runs")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_open_run ON runs ((state NOT IN ('ended','queued')))"
+               " WHERE state NOT IN ('ended','queued')")
+
+
 MIGRATIONS = [_v3_kind_of_run, _v4_question_is_a_failure, _v5_a_spike_ends_answered_or_inconclusive,
-              _v6_planning_is_a_dialogue, _v7_who_answered]   # each one up
+              _v6_planning_is_a_dialogue, _v7_who_answered, _v8_a_request_may_wait_its_turn]   # each one up
 VERSION = OLDEST + len(MIGRATIONS)
 
 

@@ -127,6 +127,11 @@ def init_target(args):
 
 def request(args):
     run = operations.request(args.text, args.target, attempts=args.attempts, run_kind=args.kind, ref=args.ref)
+    if run.state == "queued":
+        place, held = operations.place_in_queue(run.id)
+        print(f"Run {run.id} is queued, number {place} in line: {held}. It starts by itself when its turn comes;"
+              f" take it out with:  {PROG} abandon {run.id}")
+        return
     if operations.is_dialogue(run):
         print(f"Run {run.id} started: the agents are reading your ask. You will be notified when they have"
               " questions for you, or a plan to agree.")

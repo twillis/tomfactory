@@ -8,7 +8,7 @@ import pytest
 from factory import operations, records
 from factory.operations import Refused
 from factory.store import open_store
-from tests.conftest import drive_with, git, PLAN, script, tree
+from tests.conftest import drive_with, git, merged, PLAN, script, tree
 from tests.fake_agent import FakeAgent
 
 
@@ -63,17 +63,6 @@ def test_a_request_is_refused_with_a_reason_when_it_cannot_start(home, target, t
     with pytest.raises(Refused, match=refused):
         operations.request(text, where(target, tmp_path), **kw)
     assert open_store(home).query("runs") == []          # nothing was recorded
-
-
-@pytest.mark.fr("FR-033")
-def test_a_second_request_is_declined_while_a_run_is_open(home, target, fake_notify):
-    first, _ = planned(target, fake_notify)
-    with pytest.raises(Refused, match=f"run {first.id}"):
-        drive_with(FakeAgent([]))
-        operations.request("Another thing", target)
-    store = open_store(home)
-    assert [r.id for r in store.query("runs", order="-id", limit=20)] == [first.id]
-    assert store.get("runs", first.id) == first  # untouched
 
 
 @pytest.mark.fr("FR-010")
@@ -267,6 +256,7 @@ def test_follow_returns_only_what_came_after(home, target, fake_notify):
 @pytest.mark.fr("FR-027")
 def test_status_lists_recent_runs_newest_first_with_their_last_step(home, target, fake_notify):
     first = finished(target, fake_notify)
+    merged(target, first)
     second, _ = planned(target, fake_notify)
     views = operations.status()
     assert [v.run.id for v in views] == [second.id, first.id]

@@ -251,6 +251,16 @@ def head_of(target) -> str:
     return out.strip()
 
 
+def is_merged(target, branch) -> bool:
+    """Whether `branch` is in the codebase's current commit (FR-161): merged into the branch it is on now. A branch
+    that no longer exists counts as dealt with, since only its owner removes it."""
+    code, _ = _git(target, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", ok=(0, 1))
+    if code != 0:
+        return True
+    code, _ = _git(target, "merge-base", "--is-ancestor", branch, "HEAD", ok=(0, 1))
+    return code == 0
+
+
 def committed(target, commit, name) -> str | None:
     """A file's text as committed at `commit`, or None if it was not there."""
     code, out = _git(target, "show", f"{commit}:{name}", ok=(0, 128))
