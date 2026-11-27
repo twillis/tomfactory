@@ -19,7 +19,7 @@ from tests.fake_agent import FakeAgent
 SPEAKERS = ["dialogue_analyst", "dialogue_planner", "dialogue_architect", "dialogue_check"]
 CONVERGE = {"envelope": {"verdict": "accept", "unbuilt": [], "details": [], "requirement_changes": [],
                          "reasons": ["it matches the plan"], "ideals_broken": []}}
-RETRO = {"envelope": {"summary": "fine", "worked": [], "did_not": [], "opportunities": [], "threats": []}}
+RETRO = {"envelope": {"summary": "fine", "worked": [], "did_not": [], "refinement": [], "opportunities": [], "threats": []}}
 BUILD_TO_THE_END = [WRITE_TESTS, BUILD, ARCHITECT, DOCUMENT, CONVERGE, RETRO]
 
 WHO = "Who is greeted first? a) you  b) a visitor"
@@ -174,6 +174,21 @@ def test_a_measurement_is_part_of_the_batch_and_answered_with_it(home, sprint, f
     operations.answer(run.id, filled(run.id, {WHO: "a", MEASURE: "Python 3.13.1, measured"}))
     assert "Python 3.13.1, measured" in fake.calls[6]["prompt"]
 
+
+
+@pytest.mark.fr("FR-162")
+def test_the_retro_is_given_every_question_the_dialogue_asked_and_grades_the_refinement(home, sprint, fake_notify):
+    run, fake = start(sprint, [speaks([WHO]), planner_says(measure=[MEASURE]), speaks(blocking=()),
+                               speaks(blocking=()), merges(), *aligned_round(), *BUILD_TO_THE_END])
+    operations.answer(run.id, filled(run.id, {WHO: "a", MEASURE: "Python 3.13.1, measured"}))
+    run = operations.agree(run.id)
+    run = operations.approve(run.id)
+    assert run.outcome == "accepted", run.reason
+    retro = next(call["prompt"] for call in fake.calls if "# Task: the sprint's retro" in call["prompt"])
+    assert "## What the planning dialogue asked" in retro and "**The refinement**" in retro
+    assert f"Round 1, dialogue_analyst, a question, answered by operator: {' '.join(WHO.split())}" in retro
+    assert f"Round 1, dialogue_planner, a measurement, answered by operator: {MEASURE}" in retro
+    assert workflow.get("retro", tables.SPEC_KIT_STEPS).envelope["refinement"] == "list"
 
 # ---- FR-121: answering a batch, in the editor or from a file or stdin ----
 

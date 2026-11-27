@@ -139,10 +139,10 @@ SPEC_KIT_STEPS: list[Step] = [
     # Advice, like the architect's: the team's retro, about the factory, never a gate (FR-091).
     Step("retro", "agent", persona="facilitator", capabilities="read+edit", may_change="docs",
          on_pass="finish", commit_after=True, advisory=True, model="light",
-         inputs=("request", "run_facts", "measured", "friction", "operator_feedback", "findings", "docs_paths",
-                 "run_name", "constitution", "ideals"),
-         envelope={"summary": "text", "worked": "list", "did_not": "list", "opportunities": "list",
-                   "threats": "list"}),
+         inputs=("request", "run_facts", "measured", "friction", "operator_feedback", "asked", "findings",
+                 "docs_paths", "run_name", "constitution", "ideals"),
+         envelope={"summary": "text", "worked": "list", "did_not": "list", "refinement": "list",
+                   "opportunities": "list", "threats": "list"}),
 
     _plain["finish"],
 ]

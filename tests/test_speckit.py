@@ -32,7 +32,7 @@ def kit_target(tmp_path):
     return operations.init_target(tmp_path / "kit-target", spec_kit=True)
 
 
-RETRO = {"envelope": {"summary": "a clean sprint", "worked": ["one approval"], "did_not": [],
+RETRO = {"envelope": {"summary": "a clean sprint", "worked": ["one approval"], "did_not": [], "refinement": [],
                       "opportunities": [], "threats": []}}
 ACCEPT = {"verdict": "accept", "unbuilt": [], "details": ["a dict was used where the plan said a list"],
           "requirement_changes": [], "reasons": ["it matches the approved documents"], "ideals_broken": []}

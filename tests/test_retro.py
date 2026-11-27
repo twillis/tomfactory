@@ -19,7 +19,7 @@ def retro_entry(stem, fails=False):
     """What the facilitator "does": write the retro note, or fail."""
     if fails:
         return {"error": "the agent program fell over"}
-    return {"envelope": {"summary": "a clean sprint", "worked": ["one approval"], "did_not": ["a long plan"],
+    return {"envelope": {"summary": "a clean sprint", "worked": ["one approval"], "did_not": ["a long plan"], "refinement": [],
                          "opportunities": ["a shorter spec"], "threats": ["the test budget"]},
             "files": {RETRO_FILE.format(stem=stem): "---\nkind: retro\n---\n# Retro\n"}}
 
