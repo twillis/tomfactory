@@ -24,7 +24,7 @@ STEPS: list[Step] = [
     Step("write_tests", "agent", persona="test_writer", capabilities="read+edit", may_change="tests",
          on_pass="red", checks=("tests_added", "edge_cases_stated"), smells=("tests_within_budget", "lines_within_length"),
          on_fail=Rework("write_tests"),
-         inputs=("request", "plan", "test_paths", "limits", "failure"),
+         inputs=("request", "plan", "built_on", "test_paths", "limits", "failure"),
          envelope={"summary": "text", "test_files": "list", "edge_cases": "list"}),
 
     Step("red", "code", on_pass="build", checks=("tests_fail_first",), on_fail=Rework("write_tests"),
@@ -36,7 +36,7 @@ STEPS: list[Step] = [
     Step("build", "agent", persona="code_writer", capabilities="read+edit", may_change="not_tests",
          on_pass="test", routes={"test_defect": Rework("mend_tests", at_most=2, then="test", once_per_test=True)},
          smells=("lines_within_length", "readable"), on_fail=Rework("build"),
-         inputs=("request", "plan", "constitution", "ideals", "test_files", "limits", "failure"),
+         inputs=("request", "plan", "built_on", "constitution", "ideals", "test_files", "limits", "failure"),
          envelope={"summary": "text", "files_changed": "list", "verdict": "verdict", "reasons": "list",
                    DEFECTIVE_TESTS: "list"}),
 
@@ -161,7 +161,8 @@ _retro = next(entry for entry in SPEC_KIT_STEPS if entry.name == "retro")
 # Each question goes with why no ruling in the standing documents settles it, which the asker sees (FR-156).
 _SPEAKS = {"questions": "list", "measure": "list", "rulings_checked": "list"}
 _POINTS = {"blocking": "list", "notes": "list"}
-_HEARS = ("request", "run_kind", "round", "dialogue", "standing", "constitution", "ideals", "failure")
+_HEARS = ("request", "run_kind", "round", "dialogue", "standing", "built_on", "constitution", "ideals",
+          "failure")
 
 
 def _speaker(name, persona, on_pass, inputs=(), envelope=None, checks=(), **entry) -> Step:

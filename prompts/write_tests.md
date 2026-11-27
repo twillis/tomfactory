@@ -16,6 +16,10 @@ every table, file or row its setup relies on exists.
 
 {{plan}}
 
+## What this codebase is built on
+
+{{built_on}}
+
 ## Where tests go
 
 You may create or change files only under: {{test_paths}}

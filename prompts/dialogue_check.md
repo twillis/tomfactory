@@ -23,6 +23,10 @@ the specification.
 
 {{standing}}
 
+## What this codebase is built on
+
+{{built_on}}
+
 ## The dialogue so far
 
 Every question asked and its answer are here, with who asked. A measurement was taken on a running system by

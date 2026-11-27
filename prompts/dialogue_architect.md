@@ -20,6 +20,10 @@ as you need to. Change no file.
 
 {{standing}}
 
+## What this codebase is built on
+
+{{built_on}}
+
 ## The dialogue so far
 
 {{dialogue}}

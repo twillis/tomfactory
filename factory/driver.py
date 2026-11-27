@@ -130,6 +130,7 @@ class Doing:
     grade: str | None = None       # the grade this attempt runs on (FR-109)
     effort: str | None = None      # the effort this attempt runs at (FR-158)
     standing: tuple | None = None  # a dialogue's speaker: the head of main now, and the files copied from it (FR-134)
+    built_on: list | None = None   # an agent step's: the docs of the codebases this one is built on (FR-164)
 
     def emit(self, kind, summary, payload=None):
         records.event(self.store, self.run.id, kind, summary, payload, step_id=self.record.id)
@@ -145,6 +146,8 @@ def run_step(store, run, step, checkout, settings, adapter, personas_dir, prompt
     doing = Doing(store, run, step, checkout, settings, step.timeout or settings.step_timeout_seconds)
     if step.dialogue:       # the standing documents as on main now: rulings made mid-dialogue reach it (FR-134)
         doing.standing = checkout.mirror_main(STANDING)
+    if step.kind == "agent" and settings.readable_docs:     # the docs of what it is built on, never its source
+        doing.built_on = checkout.mirror_built_on(settings.readable_docs)
     asked = prompt(doing, prompts_dir) if step.kind == "agent" else ""
     doing.record = records.start_step(store, run.id, step.name, step.kind, step.persona, asked)
     climbed = records.attempts_climbed(store, run.id, step.name) if step.kind == "agent" else 0
@@ -225,7 +228,8 @@ def prompt(doing, prompts_dir) -> str:
     the codebase uses spec kit), how to ask a question, and the shape of the reply.
     """
     step, run = doing.step, doing.run
-    sources = Sources(doing.store, run, doing.checkout, doing.settings, prompts_dir, doing.standing)
+    sources = Sources(doing.store, run, doing.checkout, doing.settings, prompts_dir, doing.standing,
+                      doing.built_on)
     inputs = {name: INPUTS[name](sources) for name in step.inputs}
     parts = [fill((prompts_dir / f"{step.name}.md").read_text(), inputs)]
     if {"constitution", "ideals"} <= set(step.inputs):
@@ -362,6 +366,7 @@ class Sources:
     settings: object
     prompts_dir: pathlib.Path
     standing: tuple | None = None
+    built_on: list | None = None
 
     @functools.cached_property
     def plans(self):
@@ -544,6 +549,22 @@ def _standing(src):
                                                                                 if n not in index)]))
 
 
+def _built_on(src):
+    """Where an agent finds the developer docs of the codebases this one is built on (FR-164): their docs only, so
+    what the docs do not say is asked, and the asking grades them."""
+    if not src.built_on:
+        return "This codebase names no other codebase it is built on."
+    lines = []
+    for name, head, copied in src.built_on:
+        lines.append(f"This codebase is built on `{name}`. Its developer docs, as committed at {head[:10]}, are copied"
+                     f" read-only into `{workspace.BUILT_ON}/{name}/` in the current directory:")
+        lines += [f"- `{workspace.BUILT_ON}/{name}/{file}`" for file in copied]
+    lines.append("\nLearn what it offers from these docs alone, never from its source, wherever that is installed."
+                 " Where they do not say what you need (a name, a call, what it returns or refuses), ask it as a"
+                 " measurement: each such question is a gap in its docs, and is recorded as one.")
+    return "\n".join(lines)
+
+
 def _probe_output(src):
     """How each run of a spike's probe went, as the factory ran it, the latest last: how it exited, and what it
     printed (FR-114)."""
@@ -595,6 +616,7 @@ INPUTS = {
                                 or "No run of this kind on this codebase has been accepted yet.",
     "codebase_moved": _codebase_moved,
     "standing": _standing,
+    "built_on": _built_on,
     "to_merge": lambda src: dialogue.merge_input(src.store, src.run.id),
     "measured": lambda src: "\n".join(run_record.measured(src.store, src.run, src.checkout, src.settings)),
     "run_name": lambda src: run_record.stem(src.run),

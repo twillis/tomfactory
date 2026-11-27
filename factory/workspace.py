@@ -12,6 +12,7 @@ from factory import proc
 
 AUTHOR = ["-c", "user.name=tomfactory", "-c", "user.email=tomfactory@localhost"]
 MAIN_NOW = ".factory-main"      # in a checkout: standing documents as on the codebase's main line now (FR-134)
+BUILT_ON = ".factory-built-on"  # in a checkout: the docs of the codebases it is built on, as committed now (FR-164)
 
 
 class WorkspaceError(Exception):
@@ -125,20 +126,24 @@ class Workspace:
         """Copy these files and folders, as committed at the codebase's head now, into MAIN_NOW in the checkout,
         read-only, in place of any copy made before (FR-134). A .gitignore of `*` inside keeps the folder out of
         git, so no step's change, commit or undo includes it. Returns the head and the files copied."""
-        head = head_of(self.target)
-        folder = self.path / MAIN_NOW
+        return _mirror(self.target, self.path / MAIN_NOW, names)
+
+    def mirror_built_on(self, entries) -> list[tuple[str, str, list[str]]]:
+        """Copy another codebase's docs, as committed at its head now, into BUILT_ON/<its folder's name> in the
+        checkout, read-only and out of git as MAIN_NOW is (FR-164). `entries` are "<codebase path>:<file or folder>",
+        the path from this codebase's folder or whole. Returns, for each codebase, its name, its head and the files
+        copied. Only what is committed is copied: its source is never named here unless an entry names it."""
+        folder = self.path / BUILT_ON
         shutil.rmtree(folder, ignore_errors=True)
-        listed = _git(self.target, "ls-tree", "-r", "-z", "--name-only", head, "--", *names)[1].split("\0")
-        copied = [name for name in listed if name]
-        for name in copied:
-            file = folder / name
-            file.parent.mkdir(parents=True, exist_ok=True)
-            text = _git(self.target, "show", f"{head}:{name}")[1]
-            file.write_text(text + "\n" if text else "")         # what git printed, line by line
-            file.chmod(0o444)
+        wanted = {}
+        for entry in entries:
+            codebase, name = entry.rsplit(":", 1)
+            wanted.setdefault((pathlib.Path(self.target) / codebase).resolve(), []).append(name)
+        copied = [(codebase.name, *_mirror(codebase, folder / codebase.name, names, keep_out=False))
+                  for codebase, names in wanted.items()]
         folder.mkdir(exist_ok=True)
         (folder / ".gitignore").write_text("*\n")
-        return head, copied
+        return copied
 
     def lines_since_base(self, paths) -> tuple[int, int, list[str]]:
         """What the run has done under these paths since it started: lines added, lines removed, files deleted."""
@@ -240,6 +245,26 @@ def changed(before: dict[str, str], after: dict[str, str]) -> set[str]:
 
 
 # ---- a codebase, outside any run's checkout ----
+
+def _mirror(source, folder, names, keep_out=True) -> tuple[str, list[str]]:
+    """Copy `names` (files and folders), as committed at `source`'s head now, into `folder`, read-only, in place of
+    any copy made before; with `keep_out`, a .gitignore of `*` inside keeps the folder out of git. Returns the head
+    and the files copied."""
+    head = head_of(source)
+    shutil.rmtree(folder, ignore_errors=True)
+    listed = _git(source, "ls-tree", "-r", "-z", "--name-only", head, "--", *names)[1].split("\0")
+    copied = [name for name in listed if name]
+    for name in copied:
+        file = folder / name
+        file.parent.mkdir(parents=True, exist_ok=True)
+        text = _git(source, "show", f"{head}:{name}")[1]
+        file.write_text(text + "\n" if text else "")         # what git printed, line by line
+        file.chmod(0o444)
+    folder.mkdir(parents=True, exist_ok=True)
+    if keep_out:
+        (folder / ".gitignore").write_text("*\n")
+    return head, copied
+
 
 def head_of(target) -> str:
     """The commit a codebase is at now."""

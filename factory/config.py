@@ -47,6 +47,8 @@ class TargetConfig:
     setup_command: str = _setting("", "run before its tests, contained, with the network: installs what it needs")
     tools: tuple = _setting((), "programs on your PATH its commands may use, by name")
     readable: tuple = _setting((), "other codebases its commands may read, never change: paths, from this one or whole")
+    readable_docs: tuple = _setting((), "another codebase's docs its agents read, never its source:"
+                                    " \"<codebase path>:<file or folder>\"")
     cycle: str = _setting("auto", "auto: spec kit where set up, else plain; sprint: a dialogue, then build to the end")
     tests_readable_command: str = _setting("python -m compileall -q tests",
                                            "fails if new tests cannot even be read as code; \"\" for none")
@@ -105,13 +107,17 @@ def read_target_config(target, commit) -> TargetConfig:
     except tomllib.TOMLDecodeError as error:
         raise ConfigError(f"{target}/.factory.toml is not valid TOML: {error}") from error
     known = {name: values[name] for name in TargetConfig.__dataclass_fields__ if name in values}
-    for name in ("test_paths", "docs_paths", "tools", "readable", "probe_cannot_run_exit_codes"):
+    for name in ("test_paths", "docs_paths", "tools", "readable", "readable_docs", "probe_cannot_run_exit_codes"):
         if name in known:
             known[name] = tuple(known[name])
     if known.get("climbs_to", "standard") not in ("light", "middle", "standard", "strongest"):
         raise ConfigError(f"{target}/.factory.toml: climbs_to must be light, middle, standard or strongest")
     if known.get("effort_climbs_to", "high") not in ("low", "medium", "high", "xhigh", "max"):
         raise ConfigError(f"{target}/.factory.toml: effort_climbs_to must be low, medium, high, xhigh or max")
+    for entry in known.get("readable_docs", ()):
+        if ":" not in entry:
+            raise ConfigError(f"{target}/.factory.toml: readable_docs takes \"<codebase path>:<file or folder>\";"
+                              f" got {entry!r}")
     if known.get("red_command"):
         _check_red_command(target, known["red_command"], known.get("test_report"))
     return TargetConfig(**known)

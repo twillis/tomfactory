@@ -622,6 +622,13 @@ test_command = ".venv/bin/python -m pytest -q -p no:cacheprovider"
   be a folder with its own git repository, and is let in read-only at its own path, so a path
   dependency written as a whole path works inside. Its build must not write into its own
   tree (setuptools' `egg-info` does; hatchling does not) (FR-163).
+- **`readable_docs`** names another codebase's developer docs, never its source, for the
+  agents that plan and build: `readable_docs = ["../bttr_erp:docs", "../bttr_erp:README.md"]`,
+  each `<codebase path>:<file or folder>`. Before each agent step the factory copies them, as
+  committed at that codebase's head, read-only into `.factory-built-on/<its name>/` in the
+  checkout (kept out of git), and tells the agent to learn the other codebase from them alone
+  (`built_on`). What the docs do not say, the agent asks as a measurement, so every such
+  question is a gap in the docs (FR-164).
 - **The codebase's own home** is a folder the factory keeps for that codebase, under
   `codebases/` in the factory's home. Inside containment it stands in for your home
   directory, so an installer's cache lands there whatever the language, and the second
@@ -946,7 +953,7 @@ step fails as a guard (`deletions_inside`). A deletion is committed with the ste
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
 `ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`, `backlog_file`, `backlog_done_file`,
 `test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `asked`, `findings`, `run_name`, `red_output`, `planning_answers`, for a dialogue `round`,
-`dialogue`, `draft`, `similar_runs`, `standing`, `to_merge` and `codebase_moved`, for the documenter `measured`
+`dialogue`, `draft`, `similar_runs`, `standing`, `built_on`, `to_merge` and `codebase_moved`, for the documenter `measured`
 (what the factory measured of the tests, budget, smells and coverage, the only figures it may state; the retro is
 given it too), for the architect `readability` (the functions the readability smell flagged, to judge), for the
 test writer mending `defective_tests` (the tests the builder's reports named) and `failing_tests` (what the last

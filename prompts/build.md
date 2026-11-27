@@ -11,6 +11,10 @@ the tests yourself; the factory runs them when you finish.
 
 {{plan}}
 
+## What this codebase is built on
+
+{{built_on}}
+
 ## The tests you must satisfy
 
 {{test_files}}
