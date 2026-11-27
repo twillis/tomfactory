@@ -388,11 +388,13 @@ architect's warnings and suggestions. You decide at merge which become the next 
 factory's own code: each step's minutes, cost and outcome, the totals, and the time spent
 waiting for you. Every agent may add `friction` to its reply: what made its step harder. Then
 a facilitator writes `docs/retros/<run>.md`, an atomic note with front matter for an
-Obsidian vault: what worked, what did not, the opportunities and the threats, for the factory
-and not the product, quoting your comments in your own words. It is advice, like the
-architect's, and never stops a run. Its inputs are `run_facts`, `measured` (among them what the tests
-after the build said), `friction`, `operator_feedback` (the operator's own words only, never the
-orchestrator's answers), `findings` and `run_name`.
+Obsidian vault: what worked, what did not, the refinement, the opportunities and the threats,
+for the factory and not the product, quoting your comments in your own words. It is advice, like
+the architect's, and never stops a run. Its inputs are `run_facts`, `measured` (among them what the
+tests after the build said), `friction`, `operator_feedback` (the operator's own words only, never the
+orchestrator's answers), `asked` (every question the planning dialogue asked, with who answered, by
+which it grades the refinement done before the run: questions it could have settled, and whether the
+request's list of what the change depends on was complete), `findings` and `run_name`.
 
 **Whose rules win.** Where they disagree, the order is: the codebase's own constitution
 (`.specify/memory/constitution.md` in it) first, then your ideals, then spec kit's generic
@@ -937,7 +939,7 @@ step fails as a guard (`deletions_inside`). A deletion is committed with the ste
 
 The inputs a prompt can use, written `{{name}}` in the prompt file: `request`, `run_kind`,
 `ideals`, `constitution`, `plan`, `previous_plan`, `comment`, `test_paths`, `docs_paths`, `backlog_file`, `backlog_done_file`,
-`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `findings`, `run_name`, `red_output`, `planning_answers`, for a dialogue `round`,
+`test_files`, `failure`, `question`, `diff`, `test_output`, `run_facts`, `friction`, `operator_feedback`, `asked`, `findings`, `run_name`, `red_output`, `planning_answers`, for a dialogue `round`,
 `dialogue`, `draft`, `similar_runs`, `standing`, `to_merge` and `codebase_moved`, for the documenter `measured`
 (what the factory measured of the tests, budget, smells and coverage, the only figures it may state; the retro is
 given it too), for the architect `readability` (the functions the readability smell flagged, to judge), for the

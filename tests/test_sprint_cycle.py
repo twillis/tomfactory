@@ -12,7 +12,7 @@ from tests.fake_agent import FakeAgent
 
 ACCEPT = {"envelope": {"verdict": "accept", "unbuilt": [], "details": ["named it hello.py"], "requirement_changes": [],
                        "reasons": ["it matches the plan"], "ideals_broken": ["two modules say the same thing"]}}
-RETRO = {"envelope": {"summary": "fine", "worked": ["one approval"], "did_not": [], "opportunities": [], "threats": []}}
+RETRO = {"envelope": {"summary": "fine", "worked": ["one approval"], "did_not": [], "refinement": [], "opportunities": [], "threats": []}}
 
 
 def sprint(**changes):

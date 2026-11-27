@@ -486,6 +486,21 @@ def _operator_feedback(src):
     return "\n".join(said) or "The operator approved without comment."
 
 
+def _asked(src):
+    """Every question the run's planning dialogue asked, in order, with who answered: the evidence the retro grades
+    the refinement by (FR-162)."""
+    asked = [q for q in src.store.query("questions", {"run_id": src.run.id}) if q.round is not None]
+    if not asked:
+        had_dialogue = any(s.name.startswith("dialogue_") for s in src.finished)
+        return "The planning dialogue asked nothing." if had_dialogue else "This run had no planning dialogue."
+    lines = []
+    for q in asked:
+        kind = "a measurement" if q.measure else "a question"
+        who = q.answered_by or "nobody yet"
+        lines.append(f"- Round {q.round}, {q.step}, {kind}, answered by {who}: {' '.join(q.question.split())}")
+    return "\n".join(lines)
+
+
 def _findings(src):
     """The final review's and the architect's findings, as they recorded them."""
     keep = {"converge": ("unbuilt", "details", "requirement_changes", "ideals_broken", "reasons"),
@@ -569,6 +584,7 @@ INPUTS = {
     "run_facts": lambda src: "\n".join(run_record.facts(src.store, src.run)),
     "friction": _friction,
     "operator_feedback": _operator_feedback,
+    "asked": _asked,
     "readability": _readability,
     "findings": _findings,
     "planning_answers": _planning_answers,
