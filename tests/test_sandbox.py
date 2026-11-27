@@ -342,6 +342,7 @@ def test_what_setup_fetched_is_kept_for_the_next_step_and_is_the_codebases_alone
     ({"setup_command": "python -c 'import sys; print(\"no such package\"); sys.exit(3)'"}, "no such package"),
     ({"tools": ["a-program-nobody-has"]}, "a-program-nobody-has"),
     ({"tools": ["/usr/bin/env"]}, "by name"),
+    ({"readable": ["/etc"]}, "not a codebase"),
 ])
 def test_a_codebase_whose_needs_cannot_be_met_fails_the_step_and_says_why(probe, home, tmp_path, settings, says):
     try:
@@ -351,6 +352,46 @@ def test_a_codebase_whose_needs_cannot_be_met_fails_the_step_and_says_why(probe,
         failed, why = True, str(problem)
     assert failed and says in why
     assert not list(tmp_path.rglob("probe-report.json"))                      # and its tests were not run
+
+
+READS_ANOTHER = '''import pathlib
+
+def test_reads_the_codebase_it_is_built_on_and_cannot_change_it():
+    other = pathlib.Path("@OTHER@")
+    assert (other / "library.txt").read_text() == "built on"
+    try:
+        (other / "library.txt").write_text("changed")
+    except OSError:
+        return
+    raise AssertionError("a test changed another codebase")
+'''
+
+
+@pytest.fixture
+def another_codebase(tmp_path):
+    """A codebase beside the target's, as bttr_library sits beside bttr_erp."""
+    other = tmp_path / "other"
+    other.mkdir()
+    git(other, "init", "-q")
+    (other / "library.txt").write_text("built on")
+    return other
+
+
+@pytest.mark.fr("FR-163")
+@pytest.mark.parametrize("named", ["whole", "from the target"])
+def test_another_codebase_named_readable_is_read_and_never_changed(probe, another_codebase, named):
+    path = str(another_codebase) if named == "whole" else "../other"      # the probe's targets sit beside it
+    ran = probe({"tests/test_reads.py": READS_ANOTHER.replace("@OTHER@", str(another_codebase))},
+                settings={"readable": [path]})
+    assert ran["code"] == 0 and "2 passed" in ran["output"], ran["output"]
+    assert holes(ran["report"]) == []                                         # nothing else of the operator's
+    assert (another_codebase / "library.txt").read_text() == "built on"
+
+
+@pytest.mark.fr("FR-163")
+def test_another_codebase_is_hidden_unless_named(probe, another_codebase):
+    ran = probe({"tests/test_reads.py": READS_ANOTHER.replace("@OTHER@", str(another_codebase))})
+    assert ran["code"] != 0 and "FileNotFoundError" in ran["output"], ran["output"]
 
 
 @pytest.mark.fr("FR-078")

@@ -6,6 +6,7 @@ acceptable. A new check is a function with `@register("name")` above it; the reg
 stamps the name on what it returns. Which checks a step gets is a rule: workflow.checks_for.
 """
 import functools
+import pathlib
 import json
 import re
 import xml.etree.ElementTree as ElementTree
@@ -293,7 +294,8 @@ def _contained(ctx, argv, network, home_writable=False):
     """Run one of the codebase's commands in the checkout, contained. Returns (how it ended, its output)."""
     settings, lines = ctx.target_config, []
     home = config.codebase_home(ctx.checkout.target) if settings.setup_command else None
-    wrapped = sandbox.command(argv, ctx.checkout.path, network, settings.tools, home, home_writable)
+    readable = [pathlib.Path(ctx.checkout.target) / path for path in settings.readable]    # a whole path stays whole
+    wrapped = sandbox.command(argv, ctx.checkout.path, network, settings.tools, home, home_writable, readable)
     done = proc.run(wrapped, ctx.checkout.path, ctx.timeout, lines.append, ctx.stderr_file, on_child=ctx.on_child)
     return done, kept_output(lines)
 

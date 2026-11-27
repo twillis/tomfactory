@@ -616,6 +616,12 @@ test_command = ".venv/bin/python -m pytest -q -p no:cacheprovider"
 - **`setup_command`** runs before the tests, every time the factory runs them. It is
   contained like the tests, with two differences: it has the network, because downloading is
   its job, and it can write to the codebase's own home.
+- **`readable`** names other codebases its commands may read and never change, for one
+  codebase built on another (an app on its framework, as an editable path dependency):
+  `readable = ["../bttr_erp"]`, a path from this codebase's folder or a whole one. Each must
+  be a folder with its own git repository, and is let in read-only at its own path, so a path
+  dependency written as a whole path works inside. Its build must not write into its own
+  tree (setuptools' `egg-info` does; hatchling does not) (FR-163).
 - **The codebase's own home** is a folder the factory keeps for that codebase, under
   `codebases/` in the factory's home. Inside containment it stands in for your home
   directory, so an installer's cache lands there whatever the language, and the second
