@@ -855,7 +855,10 @@ may change the file.
 
 ### Things worth knowing
 
-- **One run at a time.** A second `factory request` is declined until the first has ended.
+- **One run at a time, and a queue.** A `factory request` made while another run holds the line waits its turn,
+  and says its place. It starts by itself once the run before it has ended and, if accepted, been merged into its
+  codebase (or its branch deleted); a run that ended needs-me holds the line until you resume or abandon it.
+  `factory abandon <run>` takes a queued request out of the line.
 - **Do not edit the factory while a run is in progress.** The factory checks after every
   step that its own code, personas, prompts and your ideals have not changed, and puts them
   back if they have. If you were the one who changed them, the run stops as needs-me and

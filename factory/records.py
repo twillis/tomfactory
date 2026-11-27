@@ -30,13 +30,14 @@ def stamp(moment) -> str:
 
 
 def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, current_step=None, run_kind="change",
-            ref=None):
+            ref=None, queued=False):
     """Start a run's record: planning, on its own branch, with its own checkout path. The branch is named by the
     run's `ref` (FR-160): the one given, else one made from the request's first line. Its record and retro take the
-    same name."""
+    same name. A `queued` run waits its turn (FR-161): its base commit is set again when it starts."""
+    state = "queued" if queued else "planning"
     with gw.transaction():
         run = gw.insert("runs", {
-            "request": request, "target": str(target), "base_commit": base_commit, "state": "planning",
+            "request": request, "target": str(target), "base_commit": base_commit, "state": state,
             "current_step": current_step, "ideals": ideals, "attempt_limit": attempt_limit,
             "run_kind": run_kind, "created_at": now()})
         branch = f"factory/{stamp(run.created_at)}-{ref or made_ref(request)}"
@@ -45,7 +46,7 @@ def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, curren
         run = gw.update("runs", {"id": run.id}, {
             "branch": branch,
             "workspace": str(gw.files.workspace_path(run.id))})[0]
-        event(gw, run.id, "run_state", "planning", {"state": "planning"})
+        event(gw, run.id, "run_state", state, {"state": state})
     return run
 
 
@@ -58,8 +59,19 @@ def made_ref(request) -> str:
 
 def open_run(gw):
     """The run that has not ended, if there is one. There is never more than one."""
-    found = gw.query("runs", [ne("state", "ended")])
+    found = gw.query("runs", [ne("state", "ended"), ne("state", "queued")])
     return found[0] if found else None
+
+
+def queued(gw) -> list:
+    """The requests waiting their turn, first in first (FR-161)."""
+    return gw.query("runs", {"state": "queued"}, order="id")
+
+
+def last_ended(gw):
+    """The run that ended most recently, if any."""
+    ended = gw.query("runs", {"state": "ended"}, order="-ended_at", limit=1)
+    return ended[0] if ended else None
 
 
 def move(gw, run_id, **fields):
@@ -100,6 +112,25 @@ def end(gw, run_id, outcome, reason):
             "state": "ended", "outcome": outcome, "reason": reason, "ended_at": now(), **NOT_RUNNING})[0]
         event(gw, run_id, "run_state", f"ended: {outcome}",
               {"state": "ended", "outcome": outcome, "reason": reason})
+    return run
+
+
+def start_queued(gw, run_id, commit):
+    """A queued request's turn has come (FR-161): it starts from the codebase as it is now, not as it was when it
+    was queued."""
+    with gw.transaction():
+        run = gw.update("runs", {"id": run_id}, {"base_commit": commit})[0]
+        event(gw, run_id, "started_from_queue", f"its turn came; it starts from {commit[:10]}", {"commit": commit})
+    return run
+
+
+def set_aside(gw, run_id):
+    """A run that ended needing the operator, abandoned so the queue can go on (FR-161): rejected, its reason kept."""
+    with gw.transaction():
+        run = gw.get("runs", run_id)
+        reason = f"abandoned after it ended needing you: {run.reason}"
+        run = gw.update("runs", {"id": run_id}, {"outcome": "rejected", "reason": reason})[0]
+        event(gw, run_id, "set_aside", reason, {"outcome": "rejected"})
     return run
 
 

@@ -56,6 +56,12 @@ def git(cwd, *args):
     return done.stdout.strip()
 
 
+def merged(target, run):
+    """Merge an accepted run's branch into its codebase, as the operator does; the next queued request waits for it
+    (FR-161)."""
+    git(target, "merge", "-q", "--no-ff", "-m", f"merge run {run.id}", run.branch)
+
+
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     """A temporary factory home directory, set as TOMFACTORY_HOME."""

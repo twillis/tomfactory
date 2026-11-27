@@ -3,7 +3,7 @@ import pytest
 
 from factory import cli, config, operations, records
 from factory.store import open_store
-from tests.conftest import BUILD, drive_with, PLAN, script
+from tests.conftest import BUILD, drive_with, git, PLAN, script
 from tests.fake_agent import FakeAgent
 
 IDEAL = "Well-defined layers with explicit interfaces between them."
@@ -35,6 +35,8 @@ def test_editing_the_ideals_changes_the_next_run_and_nothing_else(cycle, home):
     ideals = home / "ideals.md"
     ideals.write_text("First ideal.\n")
     first, _, _, target = cycle(script())
+    git(target, "worktree", "remove", "--force", first.workspace)      # dealt with, without merging: the operator
+    git(target, "branch", "-q", "-D", first.branch)                     # removed it, so the next is not held (FR-161)
     assert ideals.read_text() == "First ideal.\n"              # a run never changes them
     ideals.write_text("Second ideal.\n")
     second, fake, _, _ = cycle(script(), target=target)
