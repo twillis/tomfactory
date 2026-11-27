@@ -47,11 +47,20 @@ def test_a_new_run_gets_its_branch_and_checkout_and_starts_planning(gw, home):
 @pytest.mark.parametrize("request_text, slug", [
     ("!!!", "run"),                         # no usable words: the branch is still named
     ("Fix   the\tBUG now", "fix-the-bug-now"),
-    ("one two three four five six seven", "one-two-three-four-five"),
+    ("one two three four five six seven", "one-two-three-four-five-six"),     # a made ref: six words (FR-160)
     ("x" * 200, "x" * 40),
 ])
 def test_a_runs_branch_is_named_from_when_it_was_requested_and_its_request(gw, request_text, slug):
     assert new_run(gw, request=request_text).branch == f"factory/{STAMP}-{slug}"
+
+
+@pytest.mark.fr("FR-160")
+def test_a_runs_ref_names_its_branch_and_without_one_the_requests_first_line_does(gw):
+    titled = "Run 10a, sign-in: the membership table\nAsk (from the operator, through the orchestrator): ..."
+    first = new_run(gw, request=titled)
+    assert first.branch == f"factory/{STAMP}-run-10a-sign-in-the-membership-table"
+    records.end(gw, first.id, "rejected", "test")       # one open run at a time
+    assert new_run(gw, request="Anything at all", ref="sc-123").branch == f"factory/{STAMP}-sc-123"
 
 
 @pytest.mark.fr("FR-081")

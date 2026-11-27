@@ -29,14 +29,17 @@ def stamp(moment) -> str:
     return moment[:19].replace("-", "").replace(":", "").replace("T", "-")
 
 
-def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, current_step=None, run_kind="change"):
-    """Start a run's record: planning, on its own branch, with its own checkout path."""
+def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, current_step=None, run_kind="change",
+            ref=None):
+    """Start a run's record: planning, on its own branch, with its own checkout path. The branch is named by the
+    run's `ref` (FR-160): the one given, else one made from the request's first line. Its record and retro take the
+    same name."""
     with gw.transaction():
         run = gw.insert("runs", {
             "request": request, "target": str(target), "base_commit": base_commit, "state": "planning",
             "current_step": current_step, "ideals": ideals, "attempt_limit": attempt_limit,
             "run_kind": run_kind, "created_at": now()})
-        branch = f"factory/{stamp(run.created_at)}-{slug(request) or 'run'}"
+        branch = f"factory/{stamp(run.created_at)}-{ref or made_ref(request)}"
         if gw.query("runs", {"branch": branch}):        # the same request twice in one second, on this machine
             branch += f"-{run.id}"
         run = gw.update("runs", {"id": run.id}, {
@@ -44,6 +47,13 @@ def new_run(gw, request, target, base_commit, ideals="", attempt_limit=3, curren
             "workspace": str(gw.files.workspace_path(run.id))})[0]
         event(gw, run.id, "run_state", "planning", {"state": "planning"})
     return run
+
+
+def made_ref(request) -> str:
+    """A ref made from the request when none is given (FR-160): its first line, as a slug, so a request that opens
+    with a title ("Run 10a, sign-in: ...") names its run by that title. "run" if nothing in it is usable."""
+    first = request.strip().splitlines()[0] if request.strip() else ""
+    return slug(first, words=6) or "run"
 
 
 def open_run(gw):

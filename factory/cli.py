@@ -51,6 +51,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("text")
     sub.add_argument("--target", required=True, help="the codebase to change")
     sub.add_argument("--attempts", type=int, default=3, help="how many times any one step may run (default 3)")
+    sub.add_argument("--ref", help="the run's name: a short slug (a card's id, say) naming its branch, record and"
+                     " retro; without one, the request's first line names it")
     sub.add_argument("--kind", choices=operations.run_kinds(), default="change",
                      help="change (the default, tests first), or a tidy that must not alter behaviour:"
                           " tidy-tests holds the code still, tidy-code holds the tests still; or a spike,"
@@ -124,7 +126,7 @@ def init_target(args):
 
 
 def request(args):
-    run = operations.request(args.text, args.target, attempts=args.attempts, run_kind=args.kind)
+    run = operations.request(args.text, args.target, attempts=args.attempts, run_kind=args.kind, ref=args.ref)
     if operations.is_dialogue(run):
         print(f"Run {run.id} started: the agents are reading your ask. You will be notified when they have"
               " questions for you, or a plan to agree.")

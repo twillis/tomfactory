@@ -53,6 +53,9 @@ def _no_settings(target, tmp_path):
     (_no_settings, "Do something", {}, ".factory.toml"),
     (lambda target, tmp_path: target, "Do something", {"attempts": 0}, "at least 1"),
     (lambda target, tmp_path: target, "Do something", {"run_kind": "rewrite"}, "tidy-tests"),
+    (lambda target, tmp_path: target, "Do something", {"ref": "SC 123"}, "a ref is a short slug"),     # FR-160
+    (lambda target, tmp_path: target, "Do something", {"ref": "-x"}, "a ref is a short slug"),
+    (lambda target, tmp_path: target, "Do something", {"ref": "a" * 49}, "a ref is a short slug"),
 ])
 def test_a_request_is_refused_with_a_reason_when_it_cannot_start(home, target, tmp_path, fake_notify,
                                                                where, text, kw, refused):

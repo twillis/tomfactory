@@ -7,6 +7,7 @@ When an operation cannot go ahead it raises `Refused` with a reason the operator
 """
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import sys
@@ -189,14 +190,20 @@ def table(target, run_kind="change") -> list:
     return [replace(step, effort=step.effort or workflow.EFFORT) if step.kind == "agent" else step
             for step in resolved_table(target, commit, run_kind)]
 
+REF = re.compile(r"[a-z0-9][a-z0-9-]{0,47}")     # what a run's ref may be (FR-160): safe in a branch and a file name
 
-def request(text, target, attempts=3, run_kind="change") -> dict:
-    """Hand the factory a request. A plan is written in the background; then the run waits."""
+
+def request(text, target, attempts=3, run_kind="change", ref=None) -> dict:
+    """Hand the factory a request. A plan is written in the background; then the run waits. `ref` names the run
+    (FR-160): its branch, its record and its retro; a card's id, say. Without one, the request's first line names it."""
     store = _open()
     if not text.strip():
         raise Refused("the request is empty; say what you want changed")
     if attempts < 1:
         raise Refused("the attempt limit must be at least 1")
+    if ref is not None and not REF.fullmatch(ref):
+        raise Refused(f"a ref is a short slug: lower-case letters, digits and hyphens, 1 to 48 of them, starting"
+                      f" with a letter or digit (as sc-123 or 10a-sign-in); not {ref!r}")
     target = pathlib.Path(target).resolve()
     try:
         base = workspace.head_of(target)
@@ -214,7 +221,7 @@ def request(text, target, attempts=3, run_kind="change") -> dict:
     resolved_table(target, base, run_kind)          # a project's overrides are checked before anything is paid for
 
     run = records.new_run(store, text.strip(), target, base, ideals=config.ideals_for(target, base),
-                          attempt_limit=attempts, run_kind=run_kind)
+                          attempt_limit=attempts, run_kind=run_kind, ref=ref)
     try:
         Workspace.create(target, run.workspace, run.branch, base)
         own_files.snapshot(config.factory_paths(), store.files.snapshot_dir(run.id))

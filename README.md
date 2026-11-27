@@ -253,6 +253,10 @@ one `init-target` writes is the example to copy.
 factory request "Add a page that says hello." --target ../my-app
 ```
 
+A run is named by its ref, which names its branch, its record and its retro: `--ref sc-123` gives a card's id, say
+(a short slug of lower-case letters, digits and hyphens). Without one, the request's first line names it, so a
+request that opens with a title ("Run 10a, sign-in: ...") is named `<stamp>-run-10a-sign-in`.
+
 On a sprint codebase this starts a dialogue, not a plan: the agents ask before they plan, and you answer, agree to
 the plan they propose, and then approve it, as "Planning is a dialogue" below describes:
 
